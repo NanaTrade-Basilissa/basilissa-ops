@@ -305,13 +305,16 @@ export function InvitePanel({
               Resend sends a new link and withdraws the old one. The two are not the same link.
             </p>
           )}
-          <ul className="divide-y divide-border text-sm">
+          <ul className="space-y-1.5 text-sm">
           {invitations.map((invitation) => {
             const progress = progressOf(invitation);
             const response = invitation.response;
 
             return (
-              <li key={invitation.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
+              <li
+                key={invitation.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2.5"
+              >
                 <span className="font-medium">{invitation.inviteeName}</span>
                 <Badge variant={progress.tone === "done" ? "default" : "outline"} className="text-xs">
                   {progress.label}

@@ -1,7 +1,16 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { Check, CheckSquare, Circle, Loader2, Plus, Trash2 } from "lucide-react";
+import { useActionState, useEffect, useState } from "react";
+import {
+  AlignLeft,
+  Check,
+  CheckSquare,
+  Circle,
+  Loader2,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { AssessmentQuestionKind } from "@prisma/client";
 import type { AssessmentFormState } from "@/lib/modules/assessments/actions";
 import { QUESTION_KIND_LABEL, MAX_OPTIONS_PER_QUESTION } from "@/lib/modules/assessments/constants";
@@ -13,6 +22,13 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+
+/** A quick visual anchor for the question type, next to the (still native) select. */
+const KIND_ICON: Record<AssessmentQuestionKind, typeof Circle> = {
+  SINGLE_CHOICE: Circle,
+  MULTI_CHOICE: CheckSquare,
+  FREE_TEXT: AlignLeft,
+};
 
 type Section = {
   id: string;
@@ -33,12 +49,14 @@ export function AssessmentBuilder({
   sections,
   addSectionAction,
   addQuestionAction,
+  deleteQuestionAction,
 }: {
   assessmentId: string;
   editable: boolean;
   sections: Section[];
   addSectionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   addQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
+  deleteQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
 }) {
   const [sectionState, addSection, addingSection] = useActionState<AssessmentFormState, FormData>(
     addSectionAction,
@@ -72,25 +90,33 @@ export function AssessmentBuilder({
               <p className="text-sm text-muted-foreground">No questions in this section yet.</p>
             ) : (
               <ol className="space-y-3">
-                {section.questions.map((question, qIndex) => (
+                {section.questions.map((question, qIndex) => {
+                  const KindIcon = KIND_ICON[question.kind];
+                  return (
                   <li
                     key={question.id}
                     className="rounded-lg border border-border bg-background p-4 text-sm shadow-sm"
                   >
-                    <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-medium text-foreground">
-                        {qIndex + 1}. {question.text}
-                      </span>
-                      <Badge variant="secondary" className="text-xs font-normal">
-                        {QUESTION_KIND_LABEL[question.kind]}
-                      </Badge>
-                      {question.kind !== "FREE_TEXT" && (
-                        <span className="text-xs text-muted-foreground">
-                          {question.points} {question.points === 1 ? "point" : "points"}
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <span className="font-medium text-foreground">
+                          {qIndex + 1}. {question.text}
                         </span>
-                      )}
-                      {!question.required && (
-                        <span className="text-xs text-muted-foreground">optional</span>
+                        <Badge variant="secondary" className="gap-1 text-xs font-normal">
+                          <KindIcon className="size-3" />
+                          {QUESTION_KIND_LABEL[question.kind]}
+                        </Badge>
+                        {question.kind !== "FREE_TEXT" && (
+                          <span className="text-xs text-muted-foreground">
+                            {question.points} {question.points === 1 ? "point" : "points"}
+                          </span>
+                        )}
+                        <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                          {question.required ? "required" : "optional"}
+                        </Badge>
+                      </div>
+                      {editable && (
+                        <DeleteQuestionButton questionId={question.id} action={deleteQuestionAction} />
                       )}
                     </div>
 
@@ -122,7 +148,8 @@ export function AssessmentBuilder({
                       </ul>
                     )}
                   </li>
-                ))}
+                  );
+                })}
               </ol>
             )}
 
@@ -179,6 +206,35 @@ export function AssessmentBuilder({
   );
 }
 
+function DeleteQuestionButton({
+  questionId,
+  action,
+}: {
+  questionId: string;
+  action: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
+}) {
+  const [state, formAction, isPending] = useActionState<AssessmentFormState, FormData>(
+    action,
+    undefined,
+  );
+
+  return (
+    <form action={formAction} className="shrink-0">
+      <input type="hidden" name="questionId" value={questionId} />
+      <Button
+        type="submit"
+        variant="ghost"
+        size="icon-sm"
+        disabled={isPending}
+        aria-label="Delete question"
+        title={state?.error ?? "Delete question"}
+      >
+        {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
+      </Button>
+    </form>
+  );
+}
+
 function QuestionForm({
   sectionId,
   action,
@@ -196,10 +252,15 @@ function QuestionForm({
   const [optionCount, setOptionCount] = useState(3);
 
   // Closing on success rather than leaving a filled form that looks unsaved.
-  if (state?.saved) {
-    onDone();
-    return null;
-  }
+  // In an effect, not inline during render: calling the parent's setState
+  // (`onDone` closes over `setOpenFor`) while this component is still
+  // rendering is exactly what React's "Cannot update a component while
+  // rendering a different component" warning is about.
+  useEffect(() => {
+    if (state?.saved) onDone();
+  }, [state?.saved, onDone]);
+
+  if (state?.saved) return null;
 
   return (
     <form

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Link2, Lock, Users } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import {
@@ -15,6 +15,7 @@ import {
   addSectionAction,
   closeAssessmentAction,
   deleteAssessmentAction,
+  deleteQuestionAction,
   inviteManyToAssessmentAction,
   inviteToAssessmentAction,
   publishAssessmentAction,
@@ -23,14 +24,9 @@ import {
   updateAssessmentAction,
   updatePublicLinkAction,
 } from "@/lib/modules/assessments/actions";
-import { AssessmentDetailsForm } from "@/components/admin/assessment-details-form";
-import { AssessmentBuilder } from "@/components/admin/assessment-builder";
 import { AssessmentLifecycle } from "@/components/admin/assessment-lifecycle";
-import { InvitePanel } from "@/components/admin/invite-panel";
-import { PublicLinkPanel } from "@/components/admin/public-link-panel";
+import { AssessmentWorkspace } from "@/components/admin/assessment-workspace";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getEnv } from "@/lib/platform/env";
 
 export const metadata: Metadata = { title: "Assessment" };
@@ -91,118 +87,47 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
         )}
       </div>
 
-      {!isDraft && (
-        <Alert>
-          <Lock className="size-4" />
-          <AlertTitle>Questions and scoring are frozen</AlertTitle>
-          <AlertDescription>
-            Two people who sat the same assessment must have sat the same assessment, so
-            structure cannot change once published. The title and introduction can still be
-            corrected.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {assessment.status === "PUBLISHED" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="size-4" />
-              Who has it
-            </CardTitle>
-            <CardDescription>
-              {summary.invited} invited · {summary.submitted} completed
-              {summary.averagePercent !== null && ` · average ${summary.averagePercent}%`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <InvitePanel
-              assessmentId={assessment.id}
-              canWrite={canWrite}
-              employees={employees.map((e) => ({
-                id: e.id,
-                label: `${e.firstName} ${e.lastName} (${e.employeeCode})`,
-              }))}
-              invitations={invitations}
-              inviteAction={inviteToAssessmentAction.bind(null, assessment.id)}
-              inviteManyAction={inviteManyToAssessmentAction.bind(null, assessment.id)}
-              resendAction={resendInvitationAction.bind(null, assessment.id)}
-              revokeAction={revokeInvitationAction.bind(null, assessment.id)}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {canWrite && assessment.status === "PUBLISHED" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Link2 className="size-4" />
-              Public link
-            </CardTitle>
-            <CardDescription>
-              An alternative to sending one invitation per person.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PublicLinkPanel
-              action={updatePublicLinkAction.bind(null, assessment.id)}
-              linkUrl={
-                assessment.publicLinkToken
-                  ? `${getEnv().NEXT_PUBLIC_APP_URL}/assessment/public/${assessment.publicLinkToken}`
-                  : null
-              }
-              values={{
-                enabled: assessment.publicLinkEnabled,
-                nameMode: assessment.publicLinkNameMode,
-                emailMode: assessment.publicLinkEmailMode,
-              }}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Sections and questions</CardTitle>
-          <CardDescription>
-            {isDraft
-              ? "Add a section, then questions inside it. The order shown here is the order people see."
-              : "Frozen. This is what everybody sat."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AssessmentBuilder
-            assessmentId={assessment.id}
-            editable={canWrite && isDraft}
-            sections={assessment.sections}
-            addSectionAction={addSectionAction.bind(null, assessment.id)}
-            addQuestionAction={addQuestionAction.bind(null, assessment.id)}
-          />
-        </CardContent>
-      </Card>
-
-      {canWrite && assessment.status !== "CLOSED" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <AssessmentDetailsForm
-              action={updateAssessmentAction.bind(null, assessment.id)}
-              submitLabel="Save details"
-              values={{
-                title: assessment.title,
-                description: assessment.description,
-                showScoreToTaker: assessment.showScoreToTaker,
-                passMarkPercent: assessment.passMarkPercent,
-                invitationsExpire: assessment.invitationsExpire,
-                invitationTtlHours: assessment.invitationTtlHours,
-              }}
-            />
-          </CardContent>
-        </Card>
-      )}
+      <AssessmentWorkspace
+        isDraft={isDraft}
+        isClosed={assessment.status === "CLOSED"}
+        isPublished={assessment.status === "PUBLISHED"}
+        canWrite={canWrite}
+        assessmentId={assessment.id}
+        sections={assessment.sections}
+        addSectionAction={addSectionAction.bind(null, assessment.id)}
+        addQuestionAction={addQuestionAction.bind(null, assessment.id)}
+        deleteQuestionAction={deleteQuestionAction.bind(null, assessment.id)}
+        summary={summary}
+        invitations={invitations}
+        employees={employees.map((e) => ({
+          id: e.id,
+          label: `${e.firstName} ${e.lastName} (${e.employeeCode})`,
+        }))}
+        inviteAction={inviteToAssessmentAction.bind(null, assessment.id)}
+        inviteManyAction={inviteManyToAssessmentAction.bind(null, assessment.id)}
+        resendAction={resendInvitationAction.bind(null, assessment.id)}
+        revokeAction={revokeInvitationAction.bind(null, assessment.id)}
+        publicLinkAction={updatePublicLinkAction.bind(null, assessment.id)}
+        publicLinkUrl={
+          assessment.publicLinkToken
+            ? `${getEnv().NEXT_PUBLIC_APP_URL}/assessment/public/${assessment.publicLinkToken}`
+            : null
+        }
+        publicLinkValues={{
+          enabled: assessment.publicLinkEnabled,
+          nameMode: assessment.publicLinkNameMode,
+          emailMode: assessment.publicLinkEmailMode,
+        }}
+        detailsAction={updateAssessmentAction.bind(null, assessment.id)}
+        detailsValues={{
+          title: assessment.title,
+          description: assessment.description,
+          showScoreToTaker: assessment.showScoreToTaker,
+          passMarkPercent: assessment.passMarkPercent,
+          invitationsExpire: assessment.invitationsExpire,
+          invitationTtlHours: assessment.invitationTtlHours,
+        }}
+      />
     </div>
   );
 }

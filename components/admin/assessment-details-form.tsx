@@ -10,6 +10,27 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+/** A labeled group of fields, styled like a card, without its own `<form>` — this whole page is one submission. */
+function SettingsGroup({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="mb-4">
+        <h3 className="font-heading text-sm font-semibold text-foreground">{title}</h3>
+        {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+      </div>
+      <div className="space-y-4">{children}</div>
+    </div>
+  );
+}
+
 export function AssessmentDetailsForm({
   action,
   submitLabel,
@@ -34,7 +55,7 @@ export function AssessmentDetailsForm({
   const [invitationsExpire, setInvitationsExpire] = useState(values?.invitationsExpire ?? true);
 
   return (
-    <form action={formAction} className="space-y-5" noValidate>
+    <form action={formAction} className="space-y-4" noValidate>
       {state?.error && (
         <Alert variant="destructive">
           <AlertDescription>{state.error}</AlertDescription>
@@ -47,92 +68,96 @@ export function AssessmentDetailsForm({
         </Alert>
       )}
 
-      <div className="space-y-1.5">
-        <Label htmlFor="title">Title</Label>
-        <Input
-          id="title"
-          name="title"
-          required
-          defaultValue={values?.title}
-          placeholder="Food safety refresher"
-        />
-        {errors.title && <p className="text-xs text-destructive">{errors.title}</p>}
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="description">
-          Introduction <span className="text-muted-foreground">(optional)</span>
-        </Label>
-        <Textarea
-          id="description"
-          name="description"
-          rows={3}
-          defaultValue={values?.description ?? ""}
-          aria-describedby="description-hint"
-        />
-        <p id="description-hint" className="text-xs text-muted-foreground">
-          Shown at the top of the assessment, before the first question.
-        </p>
-      </div>
-
-      <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4">
-        <Switch
-          id="showScoreToTaker"
-          name="showScoreToTaker"
-          defaultChecked={values?.showScoreToTaker ?? false}
-        />
-        <div className="space-y-1">
-          <Label htmlFor="showScoreToTaker" className="font-medium">
-            Show the score to the person taking it
-          </Label>
-          {/*
-            Off by default and worth explaining, because the reflex is to turn
-            it on.
-          */}
-          <p className="text-xs text-muted-foreground">
-            Off by default. A visible score turns a diagnostic into an exam. People compare
-            results, and the honest answers you wanted stop arriving. Leave it off unless the
-            score itself is the point.
-          </p>
-        </div>
-      </div>
-
-      {/*
-        Not offered on the create form (`values` is only passed when editing):
-        a threshold is meaningless before the points it is a threshold OF
-        exist, and there are none until questions are added.
-      */}
-      {values && (
+      <SettingsGroup title="General">
         <div className="space-y-1.5">
-          <Label htmlFor="passMarkPercent">
-            Pass mark <span className="text-muted-foreground">(optional)</span>
-          </Label>
+          <Label htmlFor="title">Title</Label>
           <Input
-            id="passMarkPercent"
-            name="passMarkPercent"
-            type="number"
-            min={0}
-            max={100}
-            inputMode="numeric"
-            defaultValue={values.passMarkPercent ?? ""}
-            placeholder="No pass mark"
-            className="max-w-[10rem]"
-            aria-describedby="passMarkPercent-hint"
+            id="title"
+            name="title"
+            required
+            defaultValue={values?.title}
+            placeholder="Food safety refresher"
           />
-          {errors.passMarkPercent && (
-            <p className="text-xs text-destructive">{errors.passMarkPercent}</p>
-          )}
-          <p id="passMarkPercent-hint" className="text-xs text-muted-foreground">
-            Percent of points needed to pass. Leave blank if this is a diagnostic rather than a
-            test: nothing will be marked pass or fail. Shown to the taker only alongside the
-            score, so it stays hidden whenever the score does.
+          {errors.title && <p className="text-xs text-destructive">{errors.title}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="description">
+            Introduction <span className="text-muted-foreground">(optional)</span>
+          </Label>
+          <Textarea
+            id="description"
+            name="description"
+            rows={3}
+            defaultValue={values?.description ?? ""}
+            aria-describedby="description-hint"
+          />
+          <p id="description-hint" className="text-xs text-muted-foreground">
+            Shown at the top of the assessment, before the first question.
           </p>
         </div>
-      )}
+      </SettingsGroup>
+
+      <SettingsGroup title="Scoring">
+        <div className="flex items-start gap-3">
+          <Switch
+            id="showScoreToTaker"
+            name="showScoreToTaker"
+            defaultChecked={values?.showScoreToTaker ?? false}
+          />
+          <div className="space-y-1">
+            <Label htmlFor="showScoreToTaker" className="font-medium">
+              Show the score to the person taking it
+            </Label>
+            {/*
+              Off by default and worth explaining, because the reflex is to turn
+              it on.
+            */}
+            <p className="text-xs text-muted-foreground">
+              Off by default. A visible score turns a diagnostic into an exam. People compare
+              results, and the honest answers you wanted stop arriving. Leave it off unless the
+              score itself is the point.
+            </p>
+          </div>
+        </div>
+
+        {/*
+          Not offered on the create form (`values` is only passed when editing):
+          a threshold is meaningless before the points it is a threshold OF
+          exist, and there are none until questions are added.
+        */}
+        {values && (
+          <div className="space-y-1.5">
+            <Label htmlFor="passMarkPercent">
+              Pass mark <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id="passMarkPercent"
+              name="passMarkPercent"
+              type="number"
+              min={0}
+              max={100}
+              inputMode="numeric"
+              defaultValue={values.passMarkPercent ?? ""}
+              placeholder="No pass mark"
+              className="max-w-[10rem]"
+              aria-describedby="passMarkPercent-hint"
+            />
+            {errors.passMarkPercent && (
+              <p className="text-xs text-destructive">{errors.passMarkPercent}</p>
+            )}
+            <p id="passMarkPercent-hint" className="text-xs text-muted-foreground">
+              Percent of points needed to pass. Leave blank if this is a diagnostic rather than a
+              test: nothing will be marked pass or fail. Shown to the taker only alongside the
+              score, so it stays hidden whenever the score does.
+            </p>
+          </div>
+        )}
+      </SettingsGroup>
 
       {/* Same reasoning as pass mark: nothing to expire before a link exists. */}
       {values && (
-        <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+        <SettingsGroup title="Access" description="Controls how long an issued link stays usable.">
           <div className="flex items-start gap-3">
             <Switch
               id="invitationsExpire"
@@ -173,7 +198,7 @@ export function AssessmentDetailsForm({
               </p>
             </div>
           )}
-        </div>
+        </SettingsGroup>
       )}
 
       <Button type="submit" disabled={isPending}>
