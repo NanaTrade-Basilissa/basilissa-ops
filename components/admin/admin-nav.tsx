@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Brain,
   CalendarClock,
   CalendarRange,
   ClipboardCheck,
@@ -16,6 +17,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import type { FeatureName } from "@/lib/platform/features";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -23,7 +25,7 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   exact: boolean;
-  feature?: "attendance";
+  feature?: FeatureName;
 };
 
 type NavGroup = {
@@ -59,7 +61,10 @@ const NAV_GROUPS: readonly NavGroup[] = [
     // from day-to-day branch operations, and this is where the next one of
     // them lands.
     label: "HR",
-    items: [{ href: "/admin/assessments", label: "Assessments", icon: ClipboardCheck, exact: false }],
+    items: [
+      { href: "/admin/assessments", label: "Assessments", icon: ClipboardCheck, exact: false },
+      { href: "/admin/aptitude-tests", label: "Aptitude Tests", icon: Brain, exact: false, feature: "aptitude" },
+    ],
   },
   {
     label: "Operations",
@@ -97,13 +102,22 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 }
 
 /**
- * `attendanceEnabled` arrives as a prop rather than being read here.
+ * Feature flags arrive as props rather than being read here.
  *
  * This is a Client Component, and a flag readable in the browser would have to
  * be `NEXT_PUBLIC_`, which ships it to everyone and makes it look like a
  * client concern. The server already knows; it just tells us.
+ *
+ * Each item is filtered against its OWN flag, not a single hardcoded one — an
+ * item's `feature` names which entry of `enabledFeatures` decides its
+ * visibility. A second flagged item silently gated on the first flag's state
+ * was a latent bug this shape is what prevents.
  */
-export function AdminNav({ attendanceEnabled }: { attendanceEnabled: boolean }) {
+export function AdminNav({
+  enabledFeatures,
+}: {
+  enabledFeatures: Partial<Record<FeatureName, boolean>>;
+}) {
   const pathname = usePathname();
   const isActive = (item: NavItem) => (item.exact ? pathname === item.href : pathname.startsWith(item.href));
 
@@ -112,7 +126,7 @@ export function AdminNav({ attendanceEnabled }: { attendanceEnabled: boolean }) 
       <NavLink item={DASHBOARD_ITEM} active={isActive(DASHBOARD_ITEM)} />
 
       {NAV_GROUPS.map((group) => {
-        const items = group.items.filter((item) => !item.feature || attendanceEnabled);
+        const items = group.items.filter((item) => !item.feature || enabledFeatures[item.feature]);
         if (items.length === 0) return null;
 
         return (

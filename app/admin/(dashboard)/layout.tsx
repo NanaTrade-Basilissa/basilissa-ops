@@ -11,13 +11,13 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
   // enrolment page too, so gating it on MFA would redirect that page to
   // itself. Each page below applies its own permission and MFA check.
   const session = await requireAdminShell();
-  const attendanceEnabled = isFeatureEnabled("attendance");
+  const enabledFeatures = { attendance: isFeatureEnabled("attendance"), aptitude: isFeatureEnabled("aptitude") };
 
   return (
     <div className="min-h-screen bg-white lg:grid lg:grid-cols-[240px_1fr]">
       <aside className="hidden border-r border-sidebar-border bg-sidebar lg:flex lg:flex-col lg:gap-6 lg:p-5">
         <Logo />
-        <AdminNav attendanceEnabled={attendanceEnabled} />
+        <AdminNav enabledFeatures={enabledFeatures} />
       </aside>
 
       <div className="flex min-h-screen flex-col bg-white">
@@ -37,7 +37,7 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
         </header>
 
         <div className="border-b border-border bg-sidebar px-4 py-2 lg:hidden">
-          <AdminNav attendanceEnabled={attendanceEnabled} />
+          <AdminNav enabledFeatures={enabledFeatures} />
         </div>
 
         <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>

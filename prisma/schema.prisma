@@ -1371,3 +1371,232 @@ model AssessmentAnswer {
   @@unique([responseId, questionId])
   @@map("assessment_answers")
 }
+
+// -----------------------------------------------------------------------------
+// Aptitude tests — timed screening for job CANDIDATES, not staff. A separate
+// module from Assessments on purpose: different audience (nobody here is an
+// Employee row), different purpose (screening before hire, not evaluating
+// somebody already on payroll), and a mechanism Assessments has never needed —
+// a server-enforced deadline. Field-for-field the same shape as Assessment*
+// wherever nothing about that difference applies; see
+// docs/architecture/open-decisions.md for why the schemas are kept independent
+// rather than shared.
+// -----------------------------------------------------------------------------
+
+enum AptitudeQuestionKind {
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  /// Unscored, recorded for a human to read, excluded from the total.
+  FREE_TEXT
+}
+
+enum AptitudeTestStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+model AptitudeTest {
+  id          String             @id @default(cuid())
+  title       String
+  description String?
+  status      AptitudeTestStatus @default(DRAFT)
+
+  showScoreToCandidate Boolean @default(false)
+  passMarkPercent      Int?
+
+  /// Minutes for the WHOLE test, one countdown, not per-question. Null means
+  /// untimed — HR's choice per test. Snapshotted onto each attempt's
+  /// `deadlineAt` at start, so changing this later never moves the goalposts
+  /// for someone already partway through.
+  timeLimitMinutes Int?
+
+  invitationsExpire  Boolean @default(true)
+  invitationTtlHours Int     @default(168)
+
+  /// The primary way candidates reach a test: HR copies this one link and
+  /// shares it however they like (job posting, email, WhatsApp) — no
+  /// per-candidate setup needed. Both fields default REQUIRED, not OPTIONAL
+  /// like Assessments' public link — a candidate result HR can't follow up
+  /// on by email isn't useful for hiring, so email is asked for by default
+  /// here even though it stays reconfigurable.
+  publicLinkEnabled   Boolean           @default(false)
+  publicLinkToken     String?           @unique
+  publicLinkNameMode  IdentityFieldMode @default(REQUIRED)
+  publicLinkEmailMode IdentityFieldMode @default(REQUIRED)
+
+  createdBy   String?
+  publishedAt DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  /// Soft delete, same reasoning as Assessment.deletedAt: invitations and
+  /// attempts point at this row regardless, so a deleted test cannot take a
+  /// candidate's already-recorded result down with it.
+  deletedAt DateTime?
+
+  sections    AptitudeSection[]
+  invitations AptitudeInvitation[]
+
+  @@index([status, createdAt])
+  @@index([deletedAt])
+  @@map("aptitude_tests")
+}
+
+model AptitudeSection {
+  id          String  @id @default(cuid())
+  testId      String
+  title       String
+  description String?
+  order       Int
+
+  test      AptitudeTest       @relation(fields: [testId], references: [id], onDelete: Cascade)
+  questions AptitudeQuestion[]
+
+  @@unique([testId, order])
+  @@map("aptitude_sections")
+}
+
+model AptitudeQuestion {
+  id        String               @id @default(cuid())
+  sectionId String
+  kind      AptitudeQuestionKind @default(SINGLE_CHOICE)
+  text      String
+  /// Ordering within its section.
+  order     Int
+  /// Points for a correct answer. FREE_TEXT questions score nothing and are
+  /// excluded from the maximum, so a hidden score is never out of a total
+  /// that includes unscorable questions.
+  points    Int                  @default(1)
+  required  Boolean              @default(true)
+
+  section AptitudeSection  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  options AptitudeOption[]
+  answers AptitudeAnswer[]
+
+  @@unique([sectionId, order])
+  @@map("aptitude_questions")
+}
+
+model AptitudeOption {
+  id         String  @id @default(cuid())
+  questionId String
+  text       String
+  order      Int
+  /// THE ANSWER KEY. Never selected by any query that serves the taking
+  /// pages — it would be readable in the page payload.
+  isCorrect  Boolean @default(false)
+
+  question AptitudeQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, order])
+  @@map("aptitude_options")
+}
+
+/// One candidate's tokenised link to one test. No employeeId — candidates are
+/// never Employee rows here, unlike Assessments, which supports both a known
+/// member of staff and a nameless public respondent. HR reaches a candidate
+/// two ways: issuing a personal invitation by email (freeform name/email,
+/// below) or sharing the test's public link (see AptitudeTest.publicLink*).
+model AptitudeInvitation {
+  id     String @id @default(cuid())
+  testId String
+
+  candidateName  String
+  candidateEmail String?
+
+  /// Minted from the test's public link rather than issued by HR to a named
+  /// person. Changes what the identity-declaration step asks for
+  /// (AptitudeTest.publicLinkNameMode/publicLinkEmailMode), nothing else.
+  isPublic Boolean @default(false)
+
+  tokenHash String    @unique
+  /// Null means the link never expires on its own — see
+  /// AptitudeTest.invitationsExpire. Submission (or revocation) is then the
+  /// only thing that ends it. Distinct from AptitudeAttempt.deadlineAt, which
+  /// is the CANDIDATE'S clock once they've started, not the link's shelf life.
+  expiresAt DateTime?
+  /// First time the link was opened. Distinct from submission: HR wants to
+  /// know the difference between not started and started-and-abandoned.
+  openedAt  DateTime?
+  revokedAt DateTime?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  test    AptitudeTest     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  attempt AptitudeAttempt?
+
+  @@index([testId, createdAt])
+  @@map("aptitude_invitations")
+}
+
+/// One attempt. At most one per invitation, which is what makes the
+/// invitation the unit of "who sat this".
+model AptitudeAttempt {
+  id           String @id @default(cuid())
+  invitationId String @unique
+
+  /// What the candidate typed to identify themselves. The token already says
+  /// who they are for a personal invitation; this is a declaration, compared
+  /// against it and recorded either way, same as Assessments.
+  declaredName     String?
+  declaredEmail    String?
+  identityMismatch Boolean @default(false)
+
+  startedAt   DateTime  @default(now())
+  /// Computed ONCE, when the attempt is first created: startedAt +
+  /// test.timeLimitMinutes. Null if the test is untimed. An ABSOLUTE
+  /// timestamp — the server enforces against this directly; the client only
+  /// displays a countdown derived from it, never computes its own deadline.
+  deadlineAt  DateTime?
+  /// Null while in progress. Answers are saved as they are chosen, so an
+  /// abandoned attempt keeps whatever was answered.
+  submittedAt DateTime?
+
+  /// True when the worker sweep (or the opportunistic check in
+  /// loadForTaking) force-submitted this past its deadline, rather than the
+  /// candidate submitting manually. Lets HR tell "ran out of time" apart
+  /// from "finished".
+  autoSubmitted Boolean @default(false)
+
+  /// Computed at submission from the answers, then stored. Recomputing later
+  /// against an edited test would silently restate somebody's result.
+  scoredPoints Int?
+  maxPoints    Int?
+
+  invitation AptitudeInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  answers    AptitudeAnswer[]
+
+  @@index([submittedAt])
+  @@index([deadlineAt])
+  @@map("aptitude_attempts")
+}
+
+model AptitudeAnswer {
+  id         String @id @default(cuid())
+  attemptId  String
+  questionId String
+
+  /// Chosen option ids. An array rather than a join table: answers are
+  /// always read as a whole answer, never queried across, and MULTI_CHOICE
+  /// needs several.
+  selectedOptionIds String[] @default([])
+  /// FREE_TEXT only.
+  text              String?
+
+  /// Snapshotted at submission. A published test cannot have its scoring
+  /// changed, but text edits are allowed for typos, and a result should read
+  /// the same in a year regardless.
+  awardedPoints  Int?
+  possiblePoints Int?
+
+  answeredAt DateTime @updatedAt
+
+  attempt  AptitudeAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question AptitudeQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@map("aptitude_answers")
+}

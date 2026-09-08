@@ -286,6 +286,24 @@ actually appearing.
 **Trigger:** wanting different questions per branch. Becomes
 `UNIQUE(branchId, order)` with a nullable `branchId`.
 
+### 🟢 B11 — Aptitude tests have no dedicated `Candidate` table
+
+**Where:** `lib/modules/aptitude/`, `aptitude_invitations`
+
+`AptitudeInvitation` holds `candidateName`/`candidateEmail` as freeform
+fields, the same pattern `AssessmentInvitation` already uses for a
+non-employee invitee, rather than a `Candidate` model with its own identity.
+Deliberate for v1: nothing today needs to search or de-duplicate candidates
+across tests or postings, and inventing that table speculatively risks
+guessing its shape wrong.
+
+**Trigger:** HR wanting to ask "has this person taken any aptitude test
+before", de-duplicate applicants across postings, or attach anything to a
+candidate that outlives one invitation (notes, a hiring stage, a résumé).
+Adding a `Candidate` model then and pointing `AptitudeInvitation.candidateId`
+at it is a straightforward additive migration — nothing about the current
+shape blocks it.
+
 ---
 
 ## C. Built but not finished

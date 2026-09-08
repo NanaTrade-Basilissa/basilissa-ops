@@ -1,6 +1,7 @@
 import { FEEDBACK_NOTIFY, handleFeedbackNotify } from "@/lib/modules/feedback/jobs";
 import { PASSWORD_RESET_SEND, handlePasswordResetSend } from "@/lib/modules/identity/jobs";
 import { ASSESSMENT_INVITATION_SEND, handleAssessmentInvitationSend } from "@/lib/modules/assessments/jobs";
+import { APTITUDE_INVITATION_SEND, handleAptitudeInvitationSend } from "@/lib/modules/aptitude/jobs";
 
 /**
  * Job type -> handler.
@@ -21,6 +22,7 @@ export const HANDLERS: Record<string, JobHandler> = {
   [FEEDBACK_NOTIFY]: handleFeedbackNotify,
   [PASSWORD_RESET_SEND]: handlePasswordResetSend,
   [ASSESSMENT_INVITATION_SEND]: handleAssessmentInvitationSend,
+  [APTITUDE_INVITATION_SEND]: handleAptitudeInvitationSend,
 };
 
 export function resolveHandler(type: string): JobHandler | undefined {

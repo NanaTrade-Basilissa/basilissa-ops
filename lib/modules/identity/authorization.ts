@@ -51,6 +51,14 @@ export type Permission =
   | "assessment:read"
   /// Authoring, publishing and inviting.
   | "assessment:write"
+  // Aptitude tests — timed screening sent to job CANDIDATES, not staff.
+  // Deliberately its own permission rather than reusing assessment:*: the
+  // module is separate (see prisma/schema.prisma's Aptitude* models), and
+  // this is what actually gates it — HR owns hiring, same as it owns the
+  // employment relationship assessment:* is scoped to.
+  | "aptitude:read"
+  /// Authoring, publishing and inviting.
+  | "aptitude:write"
   // Identity
   | "user:read"
   | "user:write"
@@ -146,6 +154,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "user:write",
     "assessment:read",
     "assessment:write",
+    "aptitude:read",
+    "aptitude:write",
     "branch:read",
     "feedback:read",
     "policy:read",
@@ -198,6 +208,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "schedule:write",
     "assessment:read",
     "assessment:write",
+    "aptitude:read",
+    "aptitude:write",
   ],
 };
 

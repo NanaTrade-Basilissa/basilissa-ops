@@ -8,6 +8,7 @@ import { logger, setBaseFields } from "@/lib/platform/logger";
 import { autoCloseStaleDays } from "@/lib/modules/attendance/jobs";
 import { purgeExpiredPasswordResets } from "@/lib/modules/identity/jobs";
 import { purgeSentInvitationJobs } from "@/lib/modules/assessments/jobs";
+import { autoSubmitExpiredAttempts, purgeSentInvitationJobs as purgeSentAptitudeInvitationJobs } from "@/lib/modules/aptitude/jobs";
 import { featureSnapshot, isFeatureEnabled } from "@/lib/platform/features";
 import { resolveHandler } from "./registry";
 
@@ -159,6 +160,29 @@ async function runPeriodic(now: number): Promise<void> {
     await purgeSentInvitationJobs(new Date());
   } catch (error) {
     logger.error("invitation send purge failed", { error });
+  }
+
+  /*
+    Aptitude tests: gated the same way attendance is — no rows to find when
+    the module is off, and a polling worker already keeps Neon's compute
+    awake permanently (ADR 0001), so a query that cannot return anything is
+    pure cost. `loadForTaking` already force-submits opportunistically when
+    a candidate reopens an expired link; this is the backstop for someone
+    who never comes back at all.
+  */
+  if (isFeatureEnabled("aptitude")) {
+    try {
+      const summary = await autoSubmitExpiredAttempts(new Date());
+      if (summary.submitted > 0) logger.info("aptitude auto-submit sweep", summary);
+    } catch (error) {
+      logger.error("aptitude auto-submit sweep failed", { error });
+    }
+
+    try {
+      await purgeSentAptitudeInvitationJobs(new Date());
+    } catch (error) {
+      logger.error("aptitude invitation send purge failed", { error });
+    }
   }
 }
 

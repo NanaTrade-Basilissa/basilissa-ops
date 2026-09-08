@@ -30,6 +30,16 @@ export const FEATURES = {
    * deliberate.
    */
   attendance: "FEATURE_ATTENDANCE",
+
+  /**
+   * Timed aptitude tests for job candidates. Off in production until real
+   * timed tests have gone through the server-side deadline enforcement and
+   * the worker's auto-submit sweep successfully — both are new, unproven
+   * mechanisms on a brand-new public-facing surface, and a flag is a
+   * rollback lever with no deploy while that's validated. Same rationale as
+   * `attendance`: unfinished capture paths are worse absent than exposed.
+   */
+  aptitude: "FEATURE_APTITUDE_TESTS",
 } as const satisfies Record<string, `FEATURE_${string}`>;
 
 export type FeatureName = keyof typeof FEATURES;
