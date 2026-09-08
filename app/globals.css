@@ -1,0 +1,154 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-status-good: var(--status-good);
+  --color-status-warning: var(--status-warning);
+  --color-status-serious: var(--status-serious);
+  --color-status-critical: var(--status-critical);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Basilissa brand theme.
+ *
+ * This is the single place the whole UI's brand colours and fonts are
+ * defined. Every shadcn/ui component (Button, Card, Badge, inputs, the
+ * admin sidebar, …) reads these CSS variables, so dropping in Basilissa's
+ * official colours, wordmark font, or replacing the placeholder monogram
+ * in `components/brand/logo.tsx` never requires touching component code.
+ *
+ * To rebrand: change the values below (and the font import in
+ * app/layout.tsx) — nothing else needs to change.
+ */
+:root {
+  --background: oklch(0.99 0.021 95);
+  --foreground: oklch(0.2 0.015 82);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.015 82);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.015 82);
+  --primary: oklch(0.91 0.189 100);
+  --primary-foreground: oklch(0.17 0.01 89);
+  --secondary: oklch(0.96 0.063 97);
+  --secondary-foreground: oklch(0.2 0.015 82);
+  --muted: oklch(0.95 0.025 92);
+  --muted-foreground: oklch(0.5 0.02 80);
+  --accent: oklch(0.79 0.161 87);
+  --accent-foreground: oklch(0.17 0.01 89);
+  --destructive: oklch(0.55 0.19 25);
+  --border: oklch(0.89 0.09 98);
+  --input: oklch(0.89 0.09 98);
+  --ring: oklch(0.35 0.02 85);
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #c98500;
+  --chart-5: #e87ba4;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+  --radius: 0.75rem;
+  --sidebar: oklch(0.97 0.04 95);
+  --sidebar-foreground: oklch(0.2 0.015 82);
+  --sidebar-primary: oklch(0.91 0.189 100);
+  --sidebar-primary-foreground: oklch(0.17 0.01 89);
+  --sidebar-accent: oklch(0.96 0.063 97);
+  --sidebar-accent-foreground: oklch(0.2 0.015 82);
+  --sidebar-border: oklch(0.89 0.09 98);
+  --sidebar-ring: oklch(0.35 0.02 85);
+}
+
+.dark {
+  --background: oklch(0.19 0.017 84);
+  --foreground: oklch(0.97 0.027 93);
+  --card: oklch(0.22 0.019 89);
+  --card-foreground: oklch(0.97 0.027 93);
+  --popover: oklch(0.22 0.019 89);
+  --popover-foreground: oklch(0.97 0.027 93);
+  --primary: oklch(0.91 0.189 100);
+  --primary-foreground: oklch(0.17 0.01 89);
+  --secondary: oklch(0.27 0.026 87);
+  --secondary-foreground: oklch(0.97 0.027 93);
+  --muted: oklch(0.27 0.026 87);
+  --muted-foreground: oklch(0.7 0.02 85);
+  --accent: oklch(0.41 0.073 87);
+  --accent-foreground: oklch(0.97 0.027 93);
+  --destructive: oklch(0.62 0.19 25);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.8 0.15 95);
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #e66767;
+  --sidebar: oklch(0.21 0.018 87);
+  --sidebar-foreground: oklch(0.97 0.027 93);
+  --sidebar-primary: oklch(0.91 0.189 100);
+  --sidebar-primary-foreground: oklch(0.17 0.01 89);
+  --sidebar-accent: oklch(0.29 0.03 87);
+  --sidebar-accent-foreground: oklch(0.97 0.027 93);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.8 0.15 95);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}

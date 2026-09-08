@@ -1,0 +1,156 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: basilissa-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-basilissa_feedback}
+      POSTGRES_USER: ${POSTGRES_USER:-basilissa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-basilissa_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-basilissa} -d ${POSTGRES_DB:-basilissa_feedback}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    # Not published to the host: only other containers on this network can
+    # reach Postgres, which is the production-safe default. Uncomment for
+    # local debugging with a desktop DB client:
+    ports:
+      - "5432:5432"
+    networks:
+      - basilissa
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: basilissa-app
+    restart: unless-stopped
+    env_file:
+      # Same precedence the app and the Prisma CLI use: .env first, then
+      # .env.local overriding it. Without the second entry `docker compose up`
+      # injects whatever is in .env — which is the production file — into local
+      # containers, handing them the real SESSION_SECRET, RESEND_API_KEY and
+      # SEED_ADMIN_PASSWORD.
+      #
+      # Both are optional so a deployment with no env files at all still starts
+      # on the environment its platform provides.
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      # Always the Docker service hostname, never localhost — this
+      # intentionally overrides any DATABASE_URL set in .env (which is
+      # there for running `pnpm dev` outside Docker instead).
+      DATABASE_URL: postgresql://${POSTGRES_USER:-basilissa}:${POSTGRES_PASSWORD:-basilissa_password}@postgres:5432/${POSTGRES_DB:-basilissa_feedback}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - basilissa
+
+  # Background worker. Same image as `app`, different role — see ADR 0001 and
+  # the PROCESS_ROLE branch in docker/start.sh. Not optional once anything is
+  # enqueued: feedback notification emails go through the job queue, so
+  # without this running they are recorded but never sent. Starting it later
+  # drains the backlog.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: basilissa-worker
+    restart: unless-stopped
+    env_file:
+      # Same precedence the app and the Prisma CLI use: .env first, then
+      # .env.local overriding it. Without the second entry `docker compose up`
+      # injects whatever is in .env — which is the production file — into local
+      # containers, handing them the real SESSION_SECRET, RESEND_API_KEY and
+      # SEED_ADMIN_PASSWORD.
+      #
+      # Both are optional so a deployment with no env files at all still starts
+      # on the environment its platform provides.
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-basilissa}:${POSTGRES_PASSWORD:-basilissa_password}@postgres:5432/${POSTGRES_DB:-basilissa_feedback}
+      PROCESS_ROLE: worker
+      WORKER_NAME: compose
+      # ADR 0001: the poll interval is a cost parameter as well as a latency
+      # one, because a polling worker prevents managed Postgres from
+      # autosuspending. Use the longest interval the work tolerates.
+      WORKER_POLL_INTERVAL_MS: "60000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Migrations run on `app` start; the worker must not race ahead of them.
+      app:
+        condition: service_healthy
+    # The image's HEALTHCHECK probes http://127.0.0.1:3000/api/health, which is
+    # meaningful for `app` and meaningless here — the worker serves no HTTP, so
+    # it would report unhealthy forever while working perfectly. A permanently
+    # red check is worse than none: it teaches you to ignore the column.
+    #
+    # Not replaced with a process-liveness probe either, because Docker already
+    # knows whether the process is running and restarts it. Genuine worker
+    # health is "is the queue being drained", which the worker logs every tick
+    # (queue depth, dead jobs, backlog warnings) and which belongs in whatever
+    # collects those logs, not in a container probe.
+    healthcheck:
+      disable: true
+    networks:
+      - basilissa
+
+  # Optional one-time seed runner. Not started by `docker compose up`
+  # (see the `tools` profile) — run explicitly with:
+  #   docker compose --profile tools run --rm seed
+  # (equivalent to, and interchangeable with: `docker compose exec app pnpm prisma db seed`)
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: basilissa-seed
+    env_file:
+      # Same precedence the app and the Prisma CLI use: .env first, then
+      # .env.local overriding it. Without the second entry `docker compose up`
+      # injects whatever is in .env — which is the production file — into local
+      # containers, handing them the real SESSION_SECRET, RESEND_API_KEY and
+      # SEED_ADMIN_PASSWORD.
+      #
+      # Both are optional so a deployment with no env files at all still starts
+      # on the environment its platform provides.
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-basilissa}:${POSTGRES_PASSWORD:-basilissa_password}@postgres:5432/${POSTGRES_DB:-basilissa_feedback}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["./node_modules/.bin/prisma"]
+    command: ["db", "seed"]
+    profiles: ["tools"]
+    networks:
+      - basilissa
+
+volumes:
+  postgres_data:
+    name: basilissa_postgres_data
+
+networks:
+  basilissa:
+    name: basilissa_network

@@ -1,0 +1,125 @@
+import { describe, expect, it } from "vitest";
+import { Role, ScopeType, UserStatus } from "@prisma/client";
+import {
+  createUserSchema,
+  grantRoleSchema,
+  userStatusSchema,
+} from "@/lib/modules/identity/validation";
+import { permissionsForRole } from "@/lib/modules/identity/authorization";
+import { MFA_REQUIRED_ROLES } from "@/lib/modules/identity/constants";
+
+/**
+ * The lockout guards and the token behaviour are exercised against a real
+ * database in the verification run, because they live in counts and a unique
+ * constraint. What is pure here is the separation of duties and the scope
+ * rules — and those are the ones where a mistake hands somebody the company.
+ */
+
+describe("separation of duties", () => {
+  /*
+    Creating accounts and deciding what they may do are different powers on
+    purpose. HR onboards staff; if HR could also assign roles, the person who
+    onboards could grant themselves anything and there would be no second pair
+    of eyes anywhere in the system.
+  */
+  it("lets HR create accounts but not assign roles", () => {
+    expect(permissionsForRole(Role.HR)).toContain("user:write");
+    expect(permissionsForRole(Role.HR)).not.toContain("role:assign");
+  });
+
+  it("keeps role assignment with the super admin alone", () => {
+    const holders = Object.values(Role).filter((role) =>
+      permissionsForRole(role).includes("role:assign"),
+    );
+    expect(holders).toEqual([Role.SUPER_ADMIN]);
+  });
+
+  // Reading the user list is wider than changing it: a branch manager needs to
+  // see who their people are without being able to alter access.
+  it("lets managers read users without writing them", () => {
+    for (const role of [Role.BRANCH_MANAGER, Role.AREA_MANAGER]) {
+      expect(permissionsForRole(role)).toContain("user:read");
+      expect(permissionsForRole(role)).not.toContain("user:write");
+      expect(permissionsForRole(role)).not.toContain("role:assign");
+    }
+  });
+
+  it("gives an employee no access to accounts at all", () => {
+    for (const p of ["user:read", "user:write", "role:assign"] as const) {
+      expect(permissionsForRole(Role.EMPLOYEE)).not.toContain(p);
+    }
+  });
+});
+
+describe("scope on a grant", () => {
+  const base = { userId: "u1", role: Role.BRANCH_MANAGER, scopeType: ScopeType.BRANCH };
+
+  /*
+    `scopeId` is the resolution key. A branch grant without a branch would
+    normalise to the empty string, which is exactly what a GLOBAL grant looks
+    like — so a missing dropdown would silently hand out company-wide access.
+  */
+  it("refuses a branch-scoped role with no branch", () => {
+    expect(grantRoleSchema.safeParse(base).success).toBe(false);
+    expect(grantRoleSchema.safeParse({ ...base, branchId: "" }).success).toBe(false);
+  });
+
+  it("accepts a branch-scoped role with a branch", () => {
+    expect(grantRoleSchema.safeParse({ ...base, branchId: "branch_a" }).success).toBe(true);
+  });
+
+  it("accepts a global role with no branch", () => {
+    expect(
+      grantRoleSchema.safeParse({ userId: "u1", role: Role.HR, scopeType: ScopeType.GLOBAL })
+        .success,
+    ).toBe(true);
+  });
+
+  it("names the field so the form can point at it", () => {
+    const parsed = grantRoleSchema.safeParse(base);
+    expect(parsed.success === false && parsed.error.issues[0]?.path).toEqual(["branchId"]);
+  });
+
+  it("refuses a role or scope that is not in the enum", () => {
+    expect(grantRoleSchema.safeParse({ ...base, role: "PRESIDENT", branchId: "b" }).success).toBe(
+      false,
+    );
+    expect(
+      grantRoleSchema.safeParse({ userId: "u1", role: Role.HR, scopeType: "REGION" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("the new account form", () => {
+  it("normalises the email, since it is the sign-in identifier", () => {
+    const parsed = createUserSchema.safeParse({ name: "  Ama Mensah ", email: "  AMA@X.GH " });
+    expect(parsed.success && parsed.data).toEqual({ name: "Ama Mensah", email: "ama@x.gh" });
+  });
+
+  it("refuses an address it cannot send to", () => {
+    expect(createUserSchema.safeParse({ name: "Ama Mensah", email: "ama" }).success).toBe(false);
+  });
+
+  it("refuses a name too short to identify anyone", () => {
+    expect(createUserSchema.safeParse({ name: "A", email: "ama@x.gh" }).success).toBe(false);
+  });
+});
+
+describe("status changes", () => {
+  it("accepts only the three real states", () => {
+    for (const status of Object.values(UserStatus)) {
+      expect(userStatusSchema.safeParse({ userId: "u1", status }).success).toBe(true);
+    }
+    expect(userStatusSchema.safeParse({ userId: "u1", status: "DELETED" }).success).toBe(false);
+  });
+});
+
+describe("what a granted role implies", () => {
+  // Granting one of these makes MFA mandatory for that person, so the UI has
+  // to be able to say so at the moment of granting rather than afterwards.
+  it("marks the roles that will demand two-step verification", () => {
+    expect([...MFA_REQUIRED_ROLES].sort()).toEqual(
+      [Role.SUPER_ADMIN, Role.HR, Role.ADMINISTRATOR].sort(),
+    );
+  });
+});

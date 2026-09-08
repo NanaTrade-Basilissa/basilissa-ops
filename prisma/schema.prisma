@@ -1,0 +1,1328 @@
+// Basilissa Ghana — Feedback System
+// Prisma schema
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x", "linux-arm64-openssl-3.0.x", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// DEPRECATED — superseded by `User` + `RoleAssignment`. Every row was copied
+/// into `users` (with a SUPER_ADMIN/GLOBAL assignment) by the
+/// 20260905130000_add_identity_model migration. Retained read-only for one
+/// release so the migration can be verified against production before the
+/// table is dropped. Nothing in the application reads it.
+model AdminUser {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("admin_users")
+}
+
+/// Role names. A role on its own grants nothing — it is always paired with a
+/// scope in `RoleAssignment`, because "branch manager" is meaningless without
+/// "of which branch".
+enum Role {
+  EMPLOYEE
+  SHIFT_SUPERVISOR
+  BRANCH_MANAGER
+  /// Until a `Region` entity exists, an area manager holds one BRANCH-scoped
+  /// assignment per branch they cover. See ScopeType.
+  AREA_MANAGER
+  HR
+  ADMINISTRATOR
+  SUPER_ADMIN
+}
+
+/// REGION is deliberately absent: there is no Region entity yet, and an enum
+/// value that no code can resolve is a silently-denying dead branch. Area
+/// managers use multiple BRANCH assignments until Region is introduced, at
+/// which point adding the value is a one-line migration.
+enum ScopeType {
+  GLOBAL
+  BRANCH
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  /// Terminated users keep their row so attendance and audit history stay
+  /// attributable; `sessionVersion` is bumped so every token dies at once.
+  TERMINATED
+}
+
+/// Anyone who can sign in. Replaces AdminUser. An employee record (added in a
+/// later slice) will point at a User only if that person needs to log in —
+/// staff who only ever punch a terminal do not need one.
+model User {
+  id                String     @id @default(cuid())
+  name              String
+  email             String     @unique
+  passwordHash      String
+  status            UserStatus @default(ACTIVE)
+  /// Bumped to invalidate every existing session at once — password change,
+  /// privilege change, termination. Cheaper and more reliable than finding
+  /// and revoking each session row, and it closes the window where a token
+  /// issued before a demotion still carries the old privileges.
+  sessionVersion    Int        @default(0)
+  lastLoginAt       DateTime?
+  passwordChangedAt DateTime?
+
+  /// TOTP seed, encrypted at rest — a database dump alone must not yield
+  /// working second factors. Null until enrolment completes.
+  mfaSecret    String?
+  /// Set only once a code has been verified. Storing a secret is not the same
+  /// as having working MFA, and treating it as such would lock people out of
+  /// an authenticator they never finished setting up.
+  mfaEnabledAt DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  roleAssignments RoleAssignment[]
+  sessions        Session[]
+  mfaRecoveryCodes MfaRecoveryCode[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([status])
+  @@map("users")
+}
+
+/**
+ * A single-use link for setting a forgotten password.
+ *
+ * Only the hash is stored. The token itself exists in the email and nowhere
+ * else, so a database dump does not hand over working reset links — the same
+ * reasoning as password hashes, for a credential that is briefly just as good
+ * as one.
+ */
+model PasswordResetToken {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the token. Unique so a collision cannot silently authorise
+  /// the wrong account, and indexed because it is the only lookup key.
+  tokenHash String @unique
+
+  expiresAt DateTime
+  /// Set the moment it is spent. Single use: a link that still works after
+  /// the password is set is a second password sitting in an inbox.
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  /// Cleaning up a user's other outstanding tokens when one is used.
+  @@index([userId, usedAt])
+  @@map("password_reset_tokens")
+}
+
+/// Single-use codes for when the authenticator is lost.
+///
+/// Stored hashed, like passwords: they are credentials, and a dump of this
+/// table would otherwise be a complete MFA bypass for everyone. Consumed
+/// rather than deleted, so "a recovery code was used at 03:00" stays visible.
+model MfaRecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@map("mfa_recovery_codes")
+}
+
+/// One grant of one role at one scope. Users may hold several.
+model RoleAssignment {
+  id        String    @id @default(cuid())
+  userId    String
+  role      Role
+  scopeType ScopeType
+  /// Branch id for BRANCH scope. Empty string for GLOBAL — deliberately not
+  /// NULL, because Postgres treats NULLs as distinct in unique constraints,
+  /// which would let the same global role be granted twice.
+  scopeId   String    @default("")
+  validFrom DateTime  @default(now())
+  validTo   DateTime?
+  createdAt DateTime  @default(now())
+  /// Who granted this. Null for rows created by the AdminUser migration.
+  grantedBy String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role, scopeType, scopeId])
+  @@index([userId])
+  @@index([scopeType, scopeId])
+  @@map("role_assignments")
+}
+
+/// A signed-in session. The session cookie is a signed JWT carrying this row's
+/// id; this table is what makes revocation possible, which stateless tokens
+/// alone cannot do. Required so a terminated employee loses access
+/// immediately rather than whenever their token happens to expire.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  /// For "which device is this?" in a session list. No IP is stored: it is not
+  /// needed to operate the product, and collecting it is a decision to make
+  /// deliberately with a retention policy, not by default.
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// A physical Basilissa branch. Customers reach its feedback form via
+/// /feedback?branch={slug}, usually from a printed/table QR code.
+model Branch {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  /// Human-readable address for display. Not used for geofencing — that is
+  /// what latitude/longitude are for.
+  location    String
+  isActive    Boolean  @default(true)
+
+  // --- Geofencing (Phase 5) -------------------------------------------------
+  // Nullable and inert: nothing reads these yet, and geofenceEnabled stays
+  // false until real coordinates are recorded (U10).
+  //
+  // Float rather than Decimal(9,6): these feed Haversine arithmetic on every
+  // clock-in, and double precision carries far more significant digits than
+  // the ~7 a coordinate needs. Decimal would force a Decimal.js conversion
+  // into every distance calculation to buy precision that a 150-metre radius
+  // cannot use.
+  latitude                    Float?
+  longitude                   Float?
+  /// Mall units are large; 50m is too tight for them in practice.
+  geofenceRadiusMeters        Int      @default(150)
+  /// A reading less precise than this cannot decide anything, so it is
+  /// rejected rather than guessed at. See the three-state rule in the
+  /// architecture assessment.
+  maxAcceptableAccuracyMeters Int      @default(100)
+  geofenceEnabled             Boolean  @default(false)
+
+  /// Per-branch rather than global, so the platform is not quietly
+  /// single-country. Every branch is Africa/Accra today (U14).
+  timezone    String   @default("Africa/Accra")
+
+  /// Set during Odoo adoption. Null until then — see ADR-adjacent notes on
+  /// the ownership transfer in the architecture assessment.
+  odooBranchId String? @unique
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  submissions FeedbackSubmission[]
+  employees   EmployeeBranchAssignment[]
+
+  @@index([isActive])
+  @@map("branches")
+}
+
+/// Where the authoritative copy of an employee's master data lives.
+///
+/// This exists because the ownership split cannot hold on day one: Odoo is
+/// meant to own employee master data, but Odoo may not be built yet, so the
+/// platform has to originate records and hand authority over later. Retrofitting
+/// that after employees exist is materially harder than carrying one column.
+enum MasterSource {
+  LOCAL
+  ODOO
+}
+
+/// Employment lifecycle. Deliberately separate from UserStatus: someone can be
+/// terminated as an employee while their User row is retained for audit
+/// attribution, and a suspended login is not the same thing as suspended
+/// employment.
+enum EmploymentStatus {
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+/// A person who works at Basilissa.
+///
+/// Separate from `User` on purpose: most staff will punch a terminal and never
+/// sign in to anything, so they need an Employee record and no User at all.
+/// Conversely an administrator may have a User and no Employee.
+model Employee {
+  id     String  @id @default(cuid())
+  /// Present only for employees who can sign in.
+  userId String? @unique
+
+  /// Basilissa's own identifier, stable regardless of what Odoo later says.
+  employeeCode   String       @unique
+  /// Populated when the record is linked to Odoo during adoption.
+  odooEmployeeId String?      @unique
+  masterSource   MasterSource @default(LOCAL)
+
+  firstName String
+  lastName  String
+  /// Odoo-owned once adoption completes; nullable until then.
+  jobTitle  String?
+  /// A contact address, not a credential — most employees never get a login
+  /// account (`userId` stays null), but still need to receive things like an
+  /// assessment invitation. Not unique: unlike `User.email`, nothing signs in
+  /// with this.
+  email     String?
+  /// Also just contact info, same reasoning as `email`.
+  phone     String?
+
+  hireDate        DateTime?
+  terminationDate DateTime?
+  status          EmploymentStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branchAssignments EmployeeBranchAssignment[]
+
+  deviceIdentities EmployeeDeviceIdentity[]
+
+  assessmentInvitations AssessmentInvitation[]
+
+  @@index([status])
+  @@index([masterSource])
+  @@map("employees")
+}
+
+/// Which branches an employee may work at, and from when.
+///
+/// Many-to-many from the start because relief and cover work is normal in
+/// restaurant operations — someone rostered at Accra Mall covering a shift at
+/// Achimota is an ordinary Tuesday, not an exception. Retrofitting this after
+/// go-live means rewriting every attendance query that assumed one branch.
+///
+/// Effective-dated and never mutated: a transfer closes the old row and opens a
+/// new one, so attendance recorded last month still resolves against the branch
+/// the employee actually worked at.
+model EmployeeBranchAssignment {
+  id         String    @id @default(cuid())
+  employeeId String
+  branchId   String
+  /// The employee's home branch. Exactly one assignment should carry this at
+  /// any moment; enforced in the service layer rather than by a partial unique
+  /// index, so that the schema stays the single description of the database.
+  isPrimary  Boolean   @default(false)
+  validFrom  DateTime  @default(now())
+  validTo    DateTime?
+  createdAt  DateTime  @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  /// Restrict, not Cascade: deleting a branch must not silently erase the
+  /// record of who worked there.
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, branchId, validFrom])
+  @@index([employeeId, validFrom])
+  @@index([branchId, validFrom])
+  @@map("employee_branch_assignments")
+}
+
+/// One of the five fixed rating questions shown to every customer, in order.
+model Question {
+  id        String   @id @default(cuid())
+  text      String
+  order     Int      @unique
+  isActive  Boolean  @default(true)
+  /// The five response labels shown for scores 1-5, in order. Defaults to
+  /// the generic Very Poor..Excellent scale but is editable per question so
+  /// e.g. a likelihood question can use Very Unlikely..Very Likely instead.
+  ratingLabels String[] @default(["Very Poor", "Poor", "Average", "Good", "Excellent"])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  answers FeedbackAnswer[]
+
+  @@index([isActive, order])
+  @@map("questions")
+}
+
+/// One customer's completed feedback for a single branch visit.
+/// No customer-identifying information (name, phone, email, IP) is stored.
+model FeedbackSubmission {
+  id              String   @id @default(cuid())
+  /// Client-generated idempotency key. A unique constraint here is what
+  /// makes resubmitting the same in-flight submission (double click, page
+  /// refresh) a no-op instead of a duplicate row.
+  submissionToken String   @unique
+  branchId        String
+  /// Average of the five answer scores (1-5), kept denormalized for fast
+  /// dashboard aggregation.
+  overallScore    Float
+  submittedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  branch  Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  answers FeedbackAnswer[]
+
+  @@index([branchId])
+  @@index([submittedAt])
+  @@index([branchId, submittedAt])
+  @@map("feedback_submissions")
+}
+
+/// A single question's answer within a submission. Score is an integer 1-5.
+model FeedbackAnswer {
+  id           String   @id @default(cuid())
+  submissionId String
+  questionId   String
+  score        Int
+  createdAt    DateTime @default(now())
+
+  submission FeedbackSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question           @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([submissionId, questionId])
+  @@index([questionId])
+  @@map("feedback_answers")
+}
+
+/// A reusable shift template.
+///
+/// Times are minutes from local midnight, not timestamps: a template has no
+/// date, so it cannot store an instant. They resolve against the branch's
+/// timezone on the day they apply.
+model Shift {
+  id   String  @id @default(cuid())
+  name String
+  /// Null makes the template available to every branch.
+  branchId String?
+
+  /// 0-1439. An end at or before the start means the shift crosses midnight,
+  /// which is derived rather than stored so the two cannot disagree.
+  startMinute Int
+  endMinute   Int
+
+  /// Deducted from worked time when the policy is AUTO_DEDUCT, or expected to
+  /// be punched when it is EXPLICIT_PUNCH.
+  unpaidBreakMinutes Int @default(0)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments EmployeeShiftAssignment[]
+  exceptions  ScheduleException[]
+
+  @@index([branchId, isActive])
+  @@map("shifts")
+}
+
+/// Which shift an employee works, on which days, over which period.
+///
+/// Effective-dated and never mutated: a rota change closes the old row and
+/// opens a new one, so attendance recorded last month still resolves against
+/// the schedule that actually applied then.
+///
+/// Deliberately not a rota pattern. Recurring day-of-week assignment covers
+/// what Phase 1 needs; cycles and rotations are Phase 7, and guessing their
+/// shape now would be guessing.
+model EmployeeShiftAssignment {
+  id         String @id @default(cuid())
+  employeeId String
+  shiftId    String
+
+  /// ISO weekdays this applies to: 1 = Monday … 7 = Sunday.
+  daysOfWeek Int[]
+
+  validFrom DateTime  @default(now())
+  validTo   DateTime?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, validFrom])
+  @@index([shiftId])
+  @@map("employee_shift_assignments")
+}
+
+enum ScheduleExceptionType {
+  /// Rostered but not working: leave, swap given away.
+  DAY_OFF
+  /// Working a different shift than the assignment says.
+  SHIFT_CHANGE
+  /// Working on a day the assignment does not cover — cover, overtime shift.
+  EXTRA_SHIFT
+}
+
+/// A one-day override of an employee's usual schedule.
+///
+/// Resolved ahead of assignments, so the everyday case of covering someone
+/// else's shift does not require editing a rota.
+model ScheduleException {
+  id         String                @id @default(cuid())
+  employeeId String
+  /// The local calendar date being overridden, in the branch's timezone.
+  date       DateTime              @db.Date
+  type       ScheduleExceptionType
+  /// Required for SHIFT_CHANGE and EXTRA_SHIFT; meaningless for DAY_OFF.
+  shiftId    String?
+
+  reason    String
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  shift Shift? @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@map("schedule_exceptions")
+}
+
+enum AttendanceDirection {
+  IN
+  OUT
+  BREAK_START
+  BREAK_END
+}
+
+/// How an attendance event reached us. Business rules reference the assurance
+/// levels below, never this — so adding RFID later changes no rule.
+enum ProviderType {
+  MOBILE_APP
+  FINGERPRINT
+  MANAGER_MANUAL
+  /// The system closing a shift nobody clocked out of.
+  SYSTEM_AUTO_CLOSE
+}
+
+/// How sure we are the event belongs to the person it names.
+enum IdentityAssurance {
+  NONE
+  ASSERTED
+  DEVICE_BOUND
+  BIOMETRIC
+}
+
+/// How sure we are the person was where the event says.
+enum LocationAssurance {
+  NONE
+  ASSERTED
+  GPS_VERIFIED
+  /// A fixed terminal bolted to a branch. Stronger than any GPS assertion,
+  /// because the device cannot be somewhere else.
+  PHYSICALLY_PRESENT
+}
+
+/// How much the timestamp can be trusted.
+enum TimeAssurance {
+  SERVER
+  DEVICE_SYNCED
+  DEVICE_UNVERIFIED
+  HUMAN_ASSERTED
+}
+
+enum VerificationOutcome {
+  VERIFIED
+  PARTIAL
+  UNVERIFIED
+  /// Verification failed but the person was let through and flagged, rather
+  /// than being locked out of their own shift.
+  FAILED_FALLBACK
+}
+
+enum GeofenceDecision {
+  INSIDE
+  OUTSIDE
+  /// Accuracy too poor to decide. Accepted and flagged for review, because the
+  /// system genuinely does not know and guessing either way is worse.
+  AMBIGUOUS
+  /// Fixed terminals and manual entry have no geofence to evaluate.
+  NOT_APPLICABLE
+}
+
+/// A raw attendance event: evidence, not interpretation.
+///
+/// APPEND-ONLY, enforced by database triggers exactly as audit_logs is. Every
+/// figure that reaches payroll is derived from these rows, so they have to be
+/// the one thing nobody can quietly adjust. Corrections are separate records
+/// and the derived day is recomputed; an event is never edited or deleted.
+///
+/// Deliberately carries no `workDate`. Which day an event belongs to depends on
+/// the schedule in effect, and schedules change — storing it here would freeze a
+/// derived value onto an immutable row and make the two disagree. Projection
+/// resolves it.
+model AttendanceEvent {
+  id         String              @id @default(cuid())
+  employeeId String
+  branchId   String
+  direction  AttendanceDirection
+
+  providerType ProviderType
+  /// Provider-scoped origin, e.g. a terminal serial or an app install id.
+  providerRef  String?
+  deviceId     String?
+  /// Who created it. Set for manual entry, null for a person clocking in.
+  actorUserId  String?
+
+  /// THE authoritative time, and the only one used in calculation. Which clock
+  /// it came from depends on the provider: the server for mobile, the terminal
+  /// for fingerprint, a human for manual entry.
+  occurredAt       DateTime
+  /// What the source claimed, kept even when it was not trusted.
+  sourceReportedAt DateTime?
+  recordedAt       DateTime  @default(now())
+  /// Measured difference between the source clock and ours. Device clock drift
+  /// is a common and entirely preventable cause of payroll disputes.
+  clockSkewMs      Int?
+
+  /// What the device said the punch was. Stored and compared, never obeyed:
+  /// terminal in/out buttons are routinely ignored by staff, and a wrong state
+  /// silently becoming an authoritative clock-out is a payroll defect.
+  directionHint AttendanceDirection?
+  hintMismatch  Boolean             @default(false)
+
+  identityAssurance   IdentityAssurance
+  locationAssurance   LocationAssurance
+  timeAssurance       TimeAssurance
+  verificationOutcome VerificationOutcome
+
+  // SUPERSESSION — both set at INSERT, never updated.
+  //
+  // There is no `status` column, and that is not an oversight. A status of
+  // SUPERSEDED would have to be written by updating an existing row, which the
+  // append-only triggers reject — and weakening them to "append-only except
+  // sometimes" would give up the guarantee entirely.
+  //
+  // So each dedup decision writes one pointer on the row being inserted:
+  // if the new event wins it records what it replaced, and if it loses it
+  // records what beat it. Nothing existing is touched either way. Whether an
+  // event still counts is then derived (see `deriveStatus` in status.ts),
+  // alongside voiding, which comes from corrections for the same reason.
+
+  /// Set when this event supersedes an earlier, lower-assurance duplicate.
+  supersedesEventId   String?
+  /// Set when this event was itself beaten by one already recorded.
+  supersededByEventId String?
+
+  /// Provider-scoped and stable: a repeated submission, a retried request or a
+  /// replayed terminal buffer must resolve to the same row rather than a second
+  /// one. The adapter decides what makes its events unique.
+  idempotencyKey String
+
+  flags String[]
+
+  evidence EventEvidence?
+
+  @@unique([providerType, idempotencyKey])
+  @@index([employeeId, occurredAt])
+  @@index([branchId, occurredAt])
+  @@index([deviceId, occurredAt])
+  /// Reverse lookup for "was this event superseded by a later one?"
+  @@index([supersedesEventId])
+  @@map("attendance_events")
+}
+
+/// Verification evidence for one event.
+///
+/// Split from AttendanceEvent because it is sparse — a fingerprint punch has no
+/// GPS, a manual entry has neither — provider-specific, and subject to
+/// retention purging that must never touch the immutable event row.
+model EventEvidence {
+  eventId String @id
+
+  latitude         Float?
+  longitude        Float?
+  accuracyMeters   Int?
+  distanceMeters   Int?
+  geofenceDecision GeofenceDecision @default(NOT_APPLICABLE)
+  /// The branch geofence as it was when this was evaluated. Without it, later
+  /// widening a radius would retroactively change a past decision.
+  geofenceSnapshot Json?
+
+  faceScore        Float?
+  faceThreshold    Float?
+  faceModelVersion String?
+  livenessResult   String?
+
+  attestationVerdict String?
+  isMockLocation     Boolean?
+
+  /// Object-storage key for a captured frame, if one was kept.
+  capturedFrameKey  String?
+  /// When this evidence must be purged. Biometric captures are kept only as
+  /// long as a dispute plausibly needs them.
+  retentionExpiresAt DateTime?
+
+  /// Raw provider payload, for reconstructing what a device actually sent.
+  deviceRawPayload Json?
+
+  /// Manual entry only. A controlled code plus free text: codes alone lose the
+  /// detail, free text alone is unanalysable, and the rate of each code per
+  /// branch is what surfaces a broken terminal or a manager inventing hours.
+  manualReasonCode ManualEntryReason?
+  manualReasonText String?
+
+  createdAt DateTime @default(now())
+
+  event AttendanceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([retentionExpiresAt])
+  @@map("event_evidence")
+}
+
+enum ManualEntryReason {
+  DEVICE_OFFLINE
+  PHONE_UNAVAILABLE
+  NEW_EMPLOYEE_NOT_ENROLLED
+  FORGOT_TO_PUNCH
+  SYSTEM_OUTAGE
+  OTHER
+}
+
+enum CorrectionOperation {
+  /// The punch happened; the recorded time was wrong.
+  ADJUST_TIME
+  /// A punch that should exist but does not.
+  INSERT_EVENT
+  /// A punch that should not count: a double punch, someone else's finger.
+  VOID_EVENT
+  /// Recorded against the wrong branch, usually cover work.
+  REASSIGN_BRANCH
+}
+
+enum CorrectionReason {
+  DEVICE_CLOCK_WRONG
+  WRONG_EMPLOYEE
+  DUPLICATE_PUNCH
+  FORGOT_TO_PUNCH
+  DISPUTE_RESOLVED
+  OTHER
+}
+
+/// A change to what an employee's attendance means, never to what was recorded.
+///
+/// APPEND-ONLY, like the events it corrects. Nothing is edited: adjusting a
+/// time voids the original event and inserts a replacement, so both the punch
+/// the terminal actually produced and the value a manager decided are
+/// permanently visible, each attributed.
+///
+/// This is what makes a dispute months later answerable. "The device said
+/// 08:47, the manager set it to 08:02 on Tuesday because the terminal clock
+/// had drifted, and their area manager approved it" is a complete answer.
+/// A system that edited the row in place could only say "08:02".
+model AttendanceCorrection {
+  id         String  @id @default(cuid())
+  employeeId String
+  /// The work date whose projection this changes.
+  workDate   DateTime @db.Date
+
+  operation CorrectionOperation
+  /// The event being corrected. Null only for INSERT_EVENT.
+  targetEventId      String?
+  /// The event this correction created, for ADJUST_TIME and INSERT_EVENT.
+  replacementEventId String?
+
+  before Json?
+  after  Json?
+
+  /// A controlled code plus mandatory free text: codes alone lose the specific
+  /// case, free text alone cannot be counted across branches, and the rate per
+  /// manager is what surfaces someone manufacturing hours.
+  reasonCode CorrectionReason
+  reasonText String
+
+  correctedBy String
+  /// Required above the materiality threshold — see isMaterial in corrections.ts.
+  requiresApproval Boolean  @default(false)
+  approvedBy       String?
+  approvedAt       DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([employeeId, workDate])
+  @@index([targetEventId])
+  @@index([correctedBy, createdAt])
+  @@map("attendance_corrections")
+}
+
+enum DayStatus {
+  /// The shift has not finished yet.
+  PENDING
+  SETTLED
+  /// Something needs a person: a missing punch, a manual entry, an
+  /// unscheduled day, an unverified identity.
+  NEEDS_REVIEW
+}
+
+/// One employee's attendance for one work date.
+///
+/// A PROJECTION, not a record. Recomputed from immutable events, the policy in
+/// effect on that date, and the schedule that applied — never hand-edited. That
+/// is deliberate and load-bearing: a calculation bug is fixed by replaying, and
+/// a correction six months later changes the correction record rather than
+/// rewriting history.
+///
+/// Not append-only, unlike attendance_events. Being rewritable is the whole
+/// point of a projection; what must never change is the evidence underneath it.
+model AttendanceDay {
+  id         String @id @default(cuid())
+  employeeId String
+  branchId   String
+  /// Local calendar date the shift is anchored to, in the branch's timezone.
+  /// For an overnight shift this is the day it STARTED.
+  workDate   DateTime @db.Date
+
+  status DayStatus
+
+  /// The schedule as it applied on this date, copied so a later rota change
+  /// cannot retroactively make a settled day look late.
+  shiftIdSnapshot  String?
+  scheduledStart   DateTime?
+  scheduledEnd     DateTime?
+  scheduledMinutes Int       @default(0)
+
+  actualIn  DateTime?
+  actualOut DateTime?
+
+  breakMinutes          Int @default(0)
+  grossMinutes          Int @default(0)
+  netWorkedMinutes      Int @default(0)
+  regularMinutes        Int @default(0)
+  overtimeMinutes       Int @default(0)
+  /// Set by approval in Phase 7. Calculated overtime is what happened;
+  /// payable overtime is what someone authorised, and they are not the same.
+  payableOvertimeMinutes Int @default(0)
+  lateMinutes           Int @default(0)
+  earlyDepartureMinutes Int @default(0)
+
+  /// The weakest assurance across the day's events. Indexed because it is what
+  /// a review queue should sort on — a day is only as defensible as its
+  /// least-verified punch.
+  lowestIdentityAssurance IdentityAssurance?
+  lowestLocationAssurance LocationAssurance?
+  lowestTimeAssurance     TimeAssurance?
+
+  flags String[]
+  /// The policy actually used, so a dispute needs no config archaeology.
+  policySnapshot Json?
+
+  settledAt DateTime?
+  /// Bumped when the projection logic changes, so days computed under older
+  /// logic can be found and replayed rather than silently disagreeing.
+  projectionVersion Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, workDate])
+  @@index([branchId, workDate])
+  @@index([status, workDate])
+  @@index([lowestIdentityAssurance])
+  @@map("attendance_days")
+}
+
+/// Input that could not be turned into an event.
+///
+/// Exists because with hardware providers, unmapped and malformed input is
+/// routine — a terminal user id nobody has linked to an employee, a timestamp
+/// from 1970. Guessing is the one unacceptable response and dropping is the
+/// second, so it lands here for a human.
+model QuarantinedEvent {
+  id           String       @id @default(cuid())
+  providerType ProviderType
+  deviceId     String?
+  rawPayload   Json
+  reason       String
+  receivedAt   DateTime     @default(now())
+
+  resolvedAt   DateTime?
+  resolvedBy   String?
+  /// What was done: linked to an employee, discarded as noise, and so on.
+  resolvedAs   String?
+
+  @@index([resolvedAt, receivedAt])
+  @@index([providerType, receivedAt])
+  @@map("quarantined_events")
+}
+
+/// How unpaid breaks are accounted for.
+enum BreakPolicy {
+  /// Employees punch break start/end explicitly.
+  EXPLICIT_PUNCH
+  /// A fixed unpaid break is deducted once a shift passes a threshold.
+  AUTO_DEDUCT
+}
+
+/// The rules attendance is calculated under.
+///
+/// EFFECTIVE-DATED, NEVER UPDATED IN PLACE. This is the property that makes the
+/// whole thing safe: `AttendanceDay` is a pure projection that can be rebuilt
+/// from events at any time, so if policy were a single mutable row, changing
+/// the overtime threshold today would silently recalculate last month's
+/// attendance under today's rules. A change closes the current row and inserts
+/// a new one, so recomputing an old day resolves the policy that applied then.
+///
+/// Belt and braces: the resolved values are also snapshotted onto each
+/// AttendanceDay at settlement, so a dispute months later is answerable without
+/// reconstructing config history at all.
+///
+/// Deliberately a fixed set of typed columns rather than a key/value store.
+/// Every knob multiplies the state space and the test matrix, and a settings
+/// table invites adding knobs that should have been decisions.
+model AttendancePolicy {
+  id String @id @default(cuid())
+
+  /// Null is the platform-wide default. Branch-scoped overrides resolve ahead
+  /// of it; nullable now so they can be introduced without a migration.
+  branchId String?
+
+  /// Minutes after scheduled start before an arrival counts as late.
+  graceInMinutes           Int @default(5)
+  /// Minutes before scheduled end that a departure is tolerated.
+  graceOutMinutes          Int @default(5)
+  /// Minutes worked beyond schedule before any of it counts as overtime.
+  /// Restaurant closes are never punctual; without this every shift generates
+  /// an approval task and managers start rubber-stamping.
+  overtimeThresholdMinutes Int @default(10)
+
+  breakPolicy            BreakPolicy @default(EXPLICIT_PUNCH)
+  /// AUTO_DEDUCT only: minutes removed, once the shift exceeds the threshold.
+  autoDeductMinutes      Int         @default(30)
+  autoDeductAfterMinutes Int         @default(300)
+
+  /// Round worked minutes to this granularity. 0 disables rounding, which is
+  /// the default because rounding is a payroll policy decision, not a
+  /// convenience — rounding always down is wage theft in slow motion.
+  roundingMinutes Int @default(0)
+
+  /// Grace after scheduled end before a missing clock-out is auto-closed.
+  autoCloseGraceMinutes Int @default(0)
+  /// Window in which the same employee's events from different providers are
+  /// treated as one action.
+  dedupWindowMinutes    Int @default(5)
+  /// How far back a manager may record attendance manually.
+  maxManualEntryDays    Int @default(7)
+
+  /// True until someone with authority confirms these against real employment
+  /// terms. Surfaced in the UI so a placeholder is never mistaken for a
+  /// decision — the failure mode of configurable defaults is that nobody
+  /// chooses, and the default quietly becomes policy.
+  isProvisional Boolean @default(true)
+
+  validFrom DateTime  @default(now())
+  /// Null means currently in effect.
+  validTo   DateTime?
+
+  /// Who put this version in place. Null for the seeded defaults.
+  createdBy String?
+  /// Why it was changed. Grace periods and overtime thresholds are employment
+  /// terms, so "who" without "why" is not enough to answer a payroll query a
+  /// year later. Null for the seeded defaults and for versions written before
+  /// this was recorded, which is why it is nullable rather than required.
+  changeReason String?
+  createdAt DateTime @default(now())
+
+  @@index([branchId, validFrom])
+  @@index([validFrom])
+  @@map("attendance_policies")
+}
+
+/// Background job queue. Postgres rather than a dedicated broker — see
+/// docs/architecture/decisions/0002-no-redis.md. At this scale (hundreds of
+/// jobs a day) `SELECT ... FOR UPDATE SKIP LOCKED` is the whole mechanism, and
+/// it comes with transactions, durability and backups already solved.
+///
+/// The decisive property is that a job can be enqueued *inside* the
+/// transaction that causes it, so work is never scheduled for a change that
+/// rolled back, and never lost for one that committed. An external broker
+/// cannot offer that.
+model Job {
+  id      String    @id @default(cuid())
+  /// Handler key, resolved through the worker registry.
+  type    String
+  payload Json      @default("{}")
+  status  JobStatus @default(PENDING)
+
+  /// When the job becomes eligible. Also the retry schedule: a failed attempt
+  /// pushes this forward by an exponential, jittered backoff.
+  runAt       DateTime  @default(now())
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  lastError   String?
+
+  /// Set while a worker holds the job. A row still RUNNING long after
+  /// `lockedAt` means that worker died mid-job, and it is reclaimed.
+  lockedAt DateTime?
+  lockedBy String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  /// The claim query's access path: eligible jobs, oldest first.
+  @@index([status, runAt])
+  /// Reclaiming jobs orphaned by a crashed worker.
+  @@index([status, lockedAt])
+  @@index([type, status])
+  @@map("jobs")
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  /// Retries exhausted. Kept, never deleted — a dead job is evidence that
+  /// something needs a human, and deleting it hides the problem.
+  DEAD
+}
+
+/// Append-only record of every state-changing action, kept because attendance
+/// will feed payroll: "who changed this, when, from what to what" has to be
+/// answerable months later, by someone who does not trust the person asking.
+///
+/// Enforced immutable in the database, not by convention — the
+/// 20260905140000_add_audit_log migration installs triggers that reject UPDATE
+/// and DELETE. Application discipline is not an audit control; a bug or a
+/// careless script is exactly the thing an audit log exists to survive.
+///
+/// Deliberately has NO foreign key to User. A cascade would let deleting a
+/// user erase the evidence of what they did, and even RESTRICT would make the
+/// audit trail an obstacle to ordinary data management. Actor identity is
+/// denormalised instead, so the entry stays readable after the user is renamed
+/// or removed.
+model AuditLog {
+  id          String   @id @default(cuid())
+  occurredAt  DateTime @default(now())
+
+  /// Null for actions taken by the system itself (scheduled jobs, migrations).
+  actorUserId String?
+  /// Copied at write time on purpose — see the note above about no FK.
+  actorEmail  String?
+  /// The role the actor held when they acted, which may differ from the role
+  /// they hold today. Stored as text so a later enum change cannot rewrite
+  /// history.
+  actorRole   String?
+
+  /// `<entity>.<verb>`, e.g. "branch.updated", "question.deactivated".
+  action     String
+  entityType String
+  entityId   String
+
+  /// State before and after. Null where it does not apply: a creation has no
+  /// before, a deletion has no after.
+  before   Json?
+  after    Json?
+  /// Anything else worth keeping that is not a field diff — a reason code, a
+  /// rejected value, the outcome of a check.
+  metadata Json?
+
+  /// Most audit reads are "what happened to this thing?", then "what has this
+  /// person been doing?", then a time-bounded sweep.
+  @@index([entityType, entityId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([occurredAt])
+  @@index([action, occurredAt])
+  @@map("audit_logs")
+}
+
+/// Authoritative fixed-window rate-limit counters, shared across every app
+/// instance. Postgres rather than Redis by deliberate decision — see
+/// docs/architecture/decisions/0002-no-redis.md.
+///
+/// Rows are disposable: losing this table costs nothing but a reset window,
+/// which is why an unreachable database fails OPEN here (see lib/platform/
+/// rate-limit.ts). No IP address is stored — `key` holds a caller-supplied
+/// opaque string, and callers hash anything identifying before passing it in.
+model RateLimitCounter {
+  key         String
+  /// Start of the fixed window this row counts, floored to the window size.
+  windowStart DateTime
+  count       Int      @default(0)
+  expiresAt   DateTime
+
+  @@id([key, windowStart])
+  @@index([expiresAt])
+  @@map("rate_limit_counters")
+}
+
+/**
+ * How a device knows an employee.
+ *
+ * A terminal reports enrolment slot 42, not `emp_abc123`. Something has to map
+ * one to the other, and it cannot be a column on Employee: a person may have a
+ * terminal enrolment at two branches and a phone as well, and the same slot
+ * number means different people on different terminals.
+ *
+ * Modelled now and empty until Phase 2 (see the implementation plan). The
+ * shape is agreed while that is still free — retrofitting an identity mapping
+ * after events reference it is exactly the migration nobody wants.
+ */
+model EmployeeDeviceIdentity {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  /// Which capture path this identity belongs to. Slot 42 on a fingerprint
+  /// terminal and install 42 of the app are unrelated.
+  providerType ProviderType
+
+  /// What the device calls this person: terminal enrolment id, app install id.
+  /// Provider-scoped, never assumed globally unique.
+  externalId String
+
+  /// The specific unit, where a provider has many. Null when the identity is
+  /// provider-wide rather than tied to one device.
+  deviceId String?
+
+  /// For the enrolment screen: "Accra Mall terminal, right of the door".
+  label String?
+
+  enrolledAt DateTime  @default(now())
+  /// Revoked, never deleted. An event that arrived last month must still
+  /// resolve to the person it belonged to then — and a leaver's slot gets
+  /// reassigned to a new hire, which a hard delete would make ambiguous.
+  revokedAt  DateTime?
+
+  /// Resolution key. NOT unique: the same slot is legitimately reused by a
+  /// different employee after the first is revoked. What must be unique is the
+  /// ACTIVE identity for a key, and Postgres expresses that as a partial
+  /// unique index, which Prisma cannot declare — so `migrate diff` would
+  /// report permanent drift and the check that catches hand-written SQL
+  /// mistakes would stop being trustworthy. Enforced in the service layer,
+  /// exactly as B7 decided for one-primary-branch.
+  @@index([providerType, externalId, revokedAt])
+  @@index([employeeId, revokedAt])
+  @@map("employee_device_identities")
+}
+
+// ---------------------------------------------------------------------------
+// HR assessments
+//
+// Deliberately its own set of models, sharing nothing with `Question` and the
+// feedback tables. They look superficially alike — both are questions with
+// answers — and are different in every way that matters: feedback is anonymous,
+// unscored, 1-5 ratings from customers with no right answer; an assessment is
+// attributable, scored against an answer key, and taken by one named person
+// once. Reusing `Question` would mean a nullable `isCorrect`, a nullable
+// section, and a rating scale that assessments never use.
+// ---------------------------------------------------------------------------
+
+enum AssessmentStatus {
+  /// Editable in full. Not reachable by any employee.
+  DRAFT
+  /// Structure and scoring frozen; invitations can be sent.
+  PUBLISHED
+  /// No new invitations, no new submissions. Existing results stay readable.
+  CLOSED
+}
+
+enum AssessmentQuestionKind {
+  /// Exactly one option is correct. The common case.
+  SINGLE_CHOICE
+  /// Several options are correct; partial credit is not given — all or nothing.
+  MULTI_CHOICE
+  /// Unscored. Recorded for a human to read, and excluded from the total.
+  FREE_TEXT
+}
+
+model Assessment {
+  id          String           @id @default(cuid())
+  title       String
+  description String?
+  status      AssessmentStatus @default(DRAFT)
+
+  /// Whether the person sees their own score on the final screen.
+  ///
+  /// Default false because that is what HR asked for, and because a visible
+  /// score turns a diagnostic into an exam: people compare, and the honest
+  /// answers HR wanted stop arriving.
+  showScoreToTaker Boolean @default(false)
+
+  /// Optional. Only meaningful to HR — never shown to the taker, since a pass
+  /// mark reveals the score even when the score is hidden.
+  passMarkPercent Int?
+
+  /// How long an invitation stays usable, in hours.
+  invitationTtlHours Int @default(168)
+
+  createdBy   String?
+  publishedAt DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sections    AssessmentSection[]
+  invitations AssessmentInvitation[]
+
+  @@index([status, createdAt])
+  @@map("assessments")
+}
+
+model AssessmentSection {
+  id           String  @id @default(cuid())
+  assessmentId String
+  title        String
+  description  String?
+  order        Int
+
+  assessment Assessment           @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questions  AssessmentQuestion[]
+
+  @@unique([assessmentId, order])
+  @@map("assessment_sections")
+}
+
+model AssessmentQuestion {
+  id        String                 @id @default(cuid())
+  sectionId String
+  kind      AssessmentQuestionKind @default(SINGLE_CHOICE)
+  text      String
+  /// Ordering within its section.
+  order     Int
+  /// Points for a correct answer. FREE_TEXT questions score nothing and are
+  /// excluded from the maximum, so a hidden score is never out of a total that
+  /// includes unscorable questions.
+  points    Int                    @default(1)
+  required  Boolean                @default(true)
+
+  section AssessmentSection    @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  options AssessmentOption[]
+  answers AssessmentAnswer[]
+
+  @@unique([sectionId, order])
+  @@map("assessment_questions")
+}
+
+model AssessmentOption {
+  id         String  @id @default(cuid())
+  questionId String
+  text       String
+  order      Int
+  /// THE ANSWER KEY. Never selected by any query that serves the public
+  /// taking pages — it would be readable in the page payload.
+  isCorrect  Boolean @default(false)
+
+  question AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, order])
+  @@map("assessment_options")
+}
+
+/**
+ * One person's tokenised link to one assessment.
+ *
+ * Per-person rather than a single shared link, so a result is attributable:
+ * with one link for everybody, nothing stops a person sitting it twice or
+ * somebody sitting it as a colleague, and HR would be scoring anonymous
+ * submissions.
+ *
+ * Only the token hash is stored, for the same reason as password resets — a
+ * database dump must not yield working links.
+ */
+model AssessmentInvitation {
+  id           String @id @default(cuid())
+  assessmentId String
+
+  /// Set when the invitation is for a known member of staff. Null for a
+  /// candidate or anyone without an employee record.
+  employeeId String?
+
+  /// Who HR believes this is. Held here rather than only on the employee
+  /// record because an invitation may precede one existing.
+  inviteeName  String
+  inviteeEmail String?
+
+  tokenHash String    @unique
+  expiresAt DateTime
+  /// First time the link was opened. Distinct from submission: HR wants to
+  /// know the difference between not started and started-and-abandoned.
+  openedAt  DateTime?
+  revokedAt DateTime?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  assessment Assessment          @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  employee   Employee?           @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  response   AssessmentResponse?
+
+  @@index([assessmentId, createdAt])
+  @@index([employeeId])
+  @@map("assessment_invitations")
+}
+
+/**
+ * One attempt. At most one per invitation, which is what makes the invitation
+ * the unit of "who sat this".
+ */
+model AssessmentResponse {
+  id           String @id @default(cuid())
+  invitationId String @unique
+
+  /// What the taker typed to identify themselves. The token already says who
+  /// they are; this is a declaration, compared against it and recorded either
+  /// way. A mismatch is flagged for HR rather than refused — a link can be
+  /// forwarded, and blocking on a misspelt name would lose a real submission.
+  declaredName  String?
+  declaredEmail String?
+  /// True when the declaration did not match the invitation. HR decides what
+  /// that means; the system only notices.
+  identityMismatch Boolean @default(false)
+
+  startedAt   DateTime  @default(now())
+  /// Null while in progress. Answers are saved as they are chosen, so an
+  /// abandoned attempt keeps whatever was answered.
+  submittedAt DateTime?
+
+  /// Computed at submission from the answers, then stored. Recomputing later
+  /// against an edited assessment would silently restate somebody's result.
+  scoredPoints Int?
+  maxPoints    Int?
+
+  invitation AssessmentInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  answers    AssessmentAnswer[]
+
+  @@index([submittedAt])
+  @@map("assessment_responses")
+}
+
+model AssessmentAnswer {
+  id         String @id @default(cuid())
+  responseId String
+  questionId String
+
+  /// Chosen option ids. An array rather than a join table: answers are always
+  /// read as a whole answer, never queried across, and MULTI_CHOICE needs
+  /// several.
+  selectedOptionIds String[] @default([])
+  /// FREE_TEXT only.
+  text              String?
+
+  /// Snapshotted at submission. A published assessment cannot have its scoring
+  /// changed, but text edits are allowed for typos, and a result should read
+  /// the same in a year regardless.
+  awardedPoints  Int?
+  possiblePoints Int?
+
+  answeredAt DateTime @updatedAt
+
+  response AssessmentResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([responseId, questionId])
+  @@map("assessment_answers")
+}

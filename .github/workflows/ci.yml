@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `postinstall` runs `prisma generate`, which the typecheck needs for
+      # @prisma/client types. No database connection is required for it.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      # Next's own build. NEXT_PUBLIC_APP_URL is an inert placeholder:
+      # lib/platform/env.ts validates lazily at request time, not at import,
+      # so no real secrets are needed here.
+      - run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+  container:
+    name: Container build (portability guard)
+    runs-on: ubuntu-latest
+    # Per ADR 0001: Vercel is the current deployment, not an architectural
+    # dependency. Portability that is never exercised rots silently — the
+    # Dockerfile breaks, nobody notices, and the cost lands on migration day.
+    # A broken container build fails the PR, the same as a broken test.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
