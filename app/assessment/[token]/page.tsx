@@ -42,7 +42,7 @@ export default async function TakeAssessmentPage({
             <p className="text-sm text-muted-foreground">
               {outcome.reason === "ALREADY_SUBMITTED"
                 ? "Your answers were recorded. There is nothing else to do."
-                : "If you think this is a mistake, ask whoever sent it to you for a new link."}
+                : "If you think this is a mistake, ask whoever sent it to you for a new link"}
             </p>
           </CardContent>
         </Card>

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 // Always render fresh: branch active/inactive status can change at any
 // time from the admin dashboard and must be respected immediately.
-export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic"; 
 
 type FeedbackPageProps = {
   searchParams: Promise<{ branch?: string | string[] }>;
