@@ -1165,10 +1165,16 @@ model Assessment {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  /// Soft delete. Invitations and responses point at this row regardless of
+  /// whether it's deleted, so a deleted assessment cannot take somebody's
+  /// already-recorded result down with it the way a hard delete would.
+  deletedAt DateTime?
+
   sections    AssessmentSection[]
   invitations AssessmentInvitation[]
 
   @@index([status, createdAt])
+  @@index([deletedAt])
   @@map("assessments")
 }
 

@@ -34,14 +34,20 @@ export type ResolvedImportRow = RawImportRow & {
 
 export type ExistingBranch = { id: string; slug: string; name: string };
 
-/**
- * A branch this import may need to create. Keyed by slug so
- * `DEPARTMENT_BRANCH_MAP` and `resolveImportRows` can both reference it
- * without repeating the name/location.
- */
-export const NEW_BRANCHES: Record<string, { slug: string; name: string; location: string }> = {
-  afienya: { slug: "afienya", name: "Basilissa Afienya", location: "Afienya" },
-  "head-office": { slug: "head-office", name: "Basilissa Head Office", location: "TSC" },
+export type BranchSpec = {
+  /** What to name/locate this branch if it has to be created. */
+  slug: string;
+  name: string;
+  location: string;
+  /**
+   * Normalized (lowercase, non-alphanumeric stripped) fragment recognized
+   * inside an existing branch's name or slug. Matching on a keyword rather
+   * than requiring `slug` to match exactly means a branch that already
+   * exists under a slightly different slug (environments drift — dev and
+   * production were never guaranteed to agree) still resolves instead of
+   * being reported as missing.
+   */
+  keyword: string;
 };
 
 /**
@@ -49,22 +55,85 @@ export const NEW_BRANCHES: Record<string, { slug: string; name: string; location
  * branch. Kept as an explicit table rather than stripping a suffix like
  * "Branch Management" from the text, because a real department — "Management"
  * alone, 7 leadership staff — would otherwise be misread as naming a branch.
- * A department not listed here falls back to `DEFAULT_BRANCH_SLUG`.
+ * A department not listed here belongs to `HEAD_OFFICE`.
+ *
+ * Every entry here can be *created* as well as matched — a branch this
+ * table expects to already exist (e.g. West Hills) is not guaranteed to,
+ * since production and dev branch data have never been the same rows. When
+ * one doesn't exist and the actor holds `branch:write`, it gets created from
+ * this spec rather than the row being permanently unresolvable.
  */
-export const DEPARTMENT_BRANCH_MAP: Record<string, string> = {
-  "Accra Mall Management": "accra-mall",
-  "Achimota Branch Management": "achimota-mall",
-  "Westhills Mall Management": "west-hills-mall",
-  "Dawhenya Branch Management": "community-25-dawhenya",
-  "Tema Branch Management": "tema-community-6",
-  "Afienya Branch Management": "afienya",
+export const DEPARTMENT_BRANCHES: Record<string, BranchSpec> = {
+  "Accra Mall Management": {
+    slug: "accra-mall",
+    name: "Basilissa Accra Mall",
+    location: "Accra Mall, Spintex Road, Accra",
+    keyword: "accramall",
+  },
+  "Achimota Branch Management": {
+    slug: "achimota-mall",
+    name: "Basilissa Achimota Mall",
+    location: "Achimota mall, Accra",
+    keyword: "achimota",
+  },
+  "Westhills Mall Management": {
+    slug: "west-hills-mall",
+    name: "Basilissa West Hills Mall",
+    location: "West Hills, Accra",
+    keyword: "westhills",
+  },
+  "Dawhenya Branch Management": {
+    slug: "community-25-dawhenya",
+    name: "Basilissa Dawhenya",
+    location: "Tema Community 25",
+    keyword: "dawhenya",
+  },
+  "Tema Branch Management": {
+    slug: "tema-community-6",
+    name: "Basilissa Tema Branch",
+    location: "Tema Community 6",
+    keyword: "tema",
+  },
+  "Afienya Branch Management": {
+    slug: "afienya",
+    name: "Basilissa Afienya",
+    location: "Afienya",
+    keyword: "afienya",
+  },
 };
 
-/** Everything not named in `DEPARTMENT_BRANCH_MAP` belongs to Head Office. */
-export const DEFAULT_BRANCH_SLUG = "head-office";
+/** Everything not named in `DEPARTMENT_BRANCHES` belongs here. */
+export const HEAD_OFFICE: BranchSpec = {
+  slug: "head-office",
+  name: "Basilissa Head Office",
+  location: "TSC",
+  keyword: "headoffice",
+};
 
-function resolveBranchSlug(department: string): string {
-  return DEPARTMENT_BRANCH_MAP[department.trim()] ?? DEFAULT_BRANCH_SLUG;
+function branchSpecFor(department: string): BranchSpec {
+  return DEPARTMENT_BRANCHES[department.trim()] ?? HEAD_OFFICE;
+}
+
+/** Every spec a resolved row's `branchSlug` might need to be created from. */
+const ALL_BRANCH_SPECS = [...Object.values(DEPARTMENT_BRANCHES), HEAD_OFFICE];
+
+/** Looks up the create spec for a `branchSlug` a resolved row came back with. */
+export function branchSpecBySlug(slug: string): BranchSpec | undefined {
+  return ALL_BRANCH_SPECS.find((spec) => spec.slug === slug);
+}
+
+function normalize(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Exact slug match first (the common case), keyword match as a fallback. */
+function findExistingBranch(spec: BranchSpec, existingBranches: ExistingBranch[]): ExistingBranch | undefined {
+  const exact = existingBranches.find((branch) => branch.slug === spec.slug);
+  if (exact) return exact;
+
+  return existingBranches.find(
+    (branch) => normalize(branch.name).includes(spec.keyword) || normalize(branch.slug).includes(spec.keyword),
+  );
 }
 
 /**
@@ -162,17 +231,15 @@ export function resolveImportRows(
   existingEmployeeNameKeys: ReadonlySet<string>,
   canCreateBranch: boolean,
 ): ResolvedImportRow[] {
-  const branchBySlug = new Map(existingBranches.map((branch) => [branch.slug, branch]));
   const seenInFile = new Set<string>();
 
   return rows.map((row): ResolvedImportRow => {
     const issues: string[] = [];
     const split = splitEmployeeName(row.employeeName);
-    const branchSlug = resolveBranchSlug(row.department);
-    const existing = branchBySlug.get(branchSlug);
-    const pending = NEW_BRANCHES[branchSlug];
+    const spec = branchSpecFor(row.department);
+    const existing = findExistingBranch(spec, existingBranches);
     const needsNewBranch = !existing;
-    const branchDisplayName = existing?.name ?? pending?.name ?? branchSlug;
+    const branchDisplayName = existing?.name ?? spec.name;
 
     // Each check appends its own issue text regardless of the others, but
     // only one status is shown — in priority order, since a row already
@@ -187,10 +254,7 @@ export function resolveImportRows(
       issues.push('Could not split "' + row.employeeName + '" into a first and last name — add manually.');
     }
 
-    if (needsNewBranch && !pending) {
-      isBlocked = true;
-      issues.push(`No branch mapping for department "${row.department}".`);
-    } else if (needsNewBranch && !canCreateBranch) {
+    if (needsNewBranch && !canCreateBranch) {
       isBlocked = true;
       issues.push(`Branch "${branchDisplayName}" doesn't exist yet — ask an admin to create it, or have them run this import.`);
     }
@@ -212,7 +276,7 @@ export function resolveImportRows(
       ...row,
       firstName: split?.firstName ?? null,
       lastName: split?.lastName ?? null,
-      branchSlug,
+      branchSlug: existing?.slug ?? spec.slug,
       branchDisplayName,
       needsNewBranch,
       status,

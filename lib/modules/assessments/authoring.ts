@@ -20,8 +20,7 @@ export type AuthoringFailure =
   | "NOT_DRAFT"
   | "ALREADY_PUBLISHED"
   | "NOTHING_TO_PUBLISH"
-  | "QUESTION_WITHOUT_ANSWER"
-  | "HAS_RESPONSES";
+  | "QUESTION_WITHOUT_ANSWER";
 
 export type AuthoringFailureResult = {
   ok: false;
@@ -48,9 +47,11 @@ const DONE = { ok: true as const, value: undefined };
 async function refuseUnlessDraft(assessmentId: string): Promise<AuthoringFailureResult | null> {
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, deletedAt: true },
   });
-  if (!assessment) return fail("NOT_FOUND", "No such assessment.");
+  // A Server Action is reachable by direct POST — the detail page already
+  // 404s a deleted assessment, but this is the actual boundary.
+  if (!assessment || assessment.deletedAt) return fail("NOT_FOUND", "No such assessment.");
   if (assessment.status !== AssessmentStatus.DRAFT) {
     return fail(
       "NOT_DRAFT",
@@ -113,9 +114,10 @@ export async function updateAssessmentDetails(
       showScoreToTaker: true,
       passMarkPercent: true,
       status: true,
+      deletedAt: true,
     },
   });
-  if (!before) return fail("NOT_FOUND", "No such assessment.");
+  if (!before || before.deletedAt) return fail("NOT_FOUND", "No such assessment.");
   if (before.status === AssessmentStatus.CLOSED) {
     return fail("NOT_DRAFT", "This assessment is closed.");
   }
@@ -290,6 +292,7 @@ export async function publishAssessment(
     select: {
       id: true,
       status: true,
+      deletedAt: true,
       sections: {
         select: {
           questions: {
@@ -304,7 +307,7 @@ export async function publishAssessment(
       },
     },
   });
-  if (!assessment) return fail("NOT_FOUND", "No such assessment.");
+  if (!assessment || assessment.deletedAt) return fail("NOT_FOUND", "No such assessment.");
   if (assessment.status !== AssessmentStatus.DRAFT) {
     return fail("ALREADY_PUBLISHED", "This has already been published.");
   }
@@ -367,31 +370,23 @@ export async function closeAssessment(
 }
 
 /**
- * Deleting is allowed only while nobody has sat it.
- *
- * Cascades would take the responses with it, and a deleted result is a
- * conversation nobody can have. Close it instead.
+ * Soft delete: hides the assessment from every HR-facing list without
+ * touching its rows. Invitations and responses point at it regardless of
+ * `deletedAt`, so — unlike a hard delete — this is safe to do even once
+ * people have started or finished taking it; nothing is lost, and a wrongly
+ * deleted assessment is recoverable by clearing the column directly.
  */
 export async function deleteAssessment(
   assessmentId: string,
   actor: AuditActor,
 ): Promise<AuthoringOutcome> {
-  const responses = await prisma.assessmentResponse.count({
-    where: { invitation: { assessmentId } },
-  });
-  if (responses > 0) {
-    return fail(
-      "HAS_RESPONSES",
-      "Somebody has already started this. Close it instead: deleting would take their results with it.",
-    );
-  }
-
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
-    select: { title: true },
+    select: { title: true, deletedAt: true },
   });
-  if (!assessment) return fail("NOT_FOUND", "No such assessment.");
+  if (!assessment || assessment.deletedAt) return fail("NOT_FOUND", "No such assessment.");
 
+  await prisma.assessment.update({ where: { id: assessmentId }, data: { deletedAt: new Date() } });
   await recordAudit({
     actor,
     action: "assessment.deleted",
@@ -399,6 +394,5 @@ export async function deleteAssessment(
     entityId: assessmentId,
     before: { title: assessment.title },
   });
-  await prisma.assessment.delete({ where: { id: assessmentId } });
   return DONE;
 }

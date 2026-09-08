@@ -13,6 +13,15 @@ export const employeeCodeSchema = z
   .max(32, "Employee code must be at most 32 characters")
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use letters, numbers, dots, dashes or underscores");
 
+export const employeeListFilterSchema = z.object({
+  branchId: z.string().optional(),
+  status: z.nativeEnum(EmploymentStatus).optional(),
+  search: z.string().optional(),
+  page: z.coerce.number().int().min(1).optional(),
+});
+
+export type EmployeeListFilterInput = z.infer<typeof employeeListFilterSchema>;
+
 export const employeeInputSchema = z.object({
   employeeCode: employeeCodeSchema,
   firstName: z.string().trim().min(1, "First name is required").max(80),

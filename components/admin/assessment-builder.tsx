@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Check, Loader2, Plus, Trash2 } from "lucide-react";
+import { Check, CheckSquare, Circle, Loader2, Plus, Trash2 } from "lucide-react";
 import type { AssessmentQuestionKind } from "@prisma/client";
 import type { AssessmentFormState } from "@/lib/modules/assessments/actions";
 import { QUESTION_KIND_LABEL, MAX_OPTIONS_PER_QUESTION } from "@/lib/modules/assessments/constants";
@@ -56,81 +56,97 @@ export function AssessmentBuilder({
       )}
 
       {sections.map((section, index) => (
-        <div key={section.id} className="space-y-3 rounded-xl border border-border p-4">
-          <div>
-            <h3 className="font-medium">
+        <div key={section.id} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="border-b border-border bg-muted/40 px-5 py-3">
+            <h3 className="font-heading font-semibold text-foreground">
               <span className="text-muted-foreground">Section {index + 1} · </span>
               {section.title}
             </h3>
             {section.description && (
-              <p className="text-sm text-muted-foreground">{section.description}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{section.description}</p>
             )}
           </div>
 
-          {section.questions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No questions in this section yet.</p>
-          ) : (
-            <ol className="space-y-3">
-              {section.questions.map((question, qIndex) => (
-                <li key={question.id} className="rounded-lg bg-muted/30 p-3 text-sm">
-                  <div className="flex flex-wrap items-baseline gap-2">
-                    <span className="font-medium">
-                      {qIndex + 1}. {question.text}
-                    </span>
-                    <Badge variant="outline" className="text-xs">
-                      {QUESTION_KIND_LABEL[question.kind]}
-                    </Badge>
-                    {question.kind !== "FREE_TEXT" && (
-                      <span className="text-xs text-muted-foreground">
-                        {question.points} {question.points === 1 ? "point" : "points"}
+          <div className="space-y-3 p-4">
+            {section.questions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No questions in this section yet.</p>
+            ) : (
+              <ol className="space-y-3">
+                {section.questions.map((question, qIndex) => (
+                  <li
+                    key={question.id}
+                    className="rounded-lg border border-border bg-background p-4 text-sm shadow-sm"
+                  >
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="font-medium text-foreground">
+                        {qIndex + 1}. {question.text}
                       </span>
-                    )}
-                    {!question.required && (
-                      <span className="text-xs text-muted-foreground">optional</span>
-                    )}
-                  </div>
+                      <Badge variant="secondary" className="text-xs font-normal">
+                        {QUESTION_KIND_LABEL[question.kind]}
+                      </Badge>
+                      {question.kind !== "FREE_TEXT" && (
+                        <span className="text-xs text-muted-foreground">
+                          {question.points} {question.points === 1 ? "point" : "points"}
+                        </span>
+                      )}
+                      {!question.required && (
+                        <span className="text-xs text-muted-foreground">optional</span>
+                      )}
+                    </div>
 
-                  {question.options.length > 0 && (
-                    <ul className="mt-2 space-y-1">
-                      {question.options.map((option) => (
-                        <li key={option.id} className="flex items-center gap-1.5 text-muted-foreground">
-                          {/*
-                            The answer key, visible here because this page is
-                            behind assessment:read. The taking pages select a
-                            different shape that cannot carry it.
-                          */}
-                          {option.isCorrect ? (
-                            <Check className="size-3.5 text-foreground" />
-                          ) : (
-                            <span className="inline-block w-3.5" />
-                          )}
-                          <span className={option.isCorrect ? "text-foreground" : undefined}>
-                            {option.text}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
+                    {question.options.length > 0 && (
+                      <ul className="mt-3 space-y-1.5">
+                        {question.options.map((option) => {
+                          const OptionIcon = question.kind === "MULTI_CHOICE" ? CheckSquare : Circle;
+                          return (
+                            <li key={option.id} className="flex items-center gap-2 text-muted-foreground">
+                              {/*
+                                The answer key, visible here because this page is
+                                behind assessment:read. The taking pages select a
+                                different shape that cannot carry it.
+                              */}
+                              <OptionIcon
+                                className={
+                                  option.isCorrect
+                                    ? "size-3.5 shrink-0 text-primary"
+                                    : "size-3.5 shrink-0 text-muted-foreground/50"
+                                }
+                              />
+                              <span className={option.isCorrect ? "font-medium text-foreground" : undefined}>
+                                {option.text}
+                              </span>
+                              {option.isCorrect && <Check className="size-3.5 shrink-0 text-primary" />}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
 
-          {editable && (
-            <>
-              {openFor === section.id ? (
-                <QuestionForm
-                  sectionId={section.id}
-                  action={addQuestionAction}
-                  onDone={() => setOpenFor(null)}
-                />
-              ) : (
-                <Button type="button" variant="outline" size="sm" onClick={() => setOpenFor(section.id)}>
-                  <Plus className="size-4" /> Add a question
-                </Button>
-              )}
-            </>
-          )}
+            {editable && (
+              <>
+                {openFor === section.id ? (
+                  <QuestionForm
+                    sectionId={section.id}
+                    action={addQuestionAction}
+                    onDone={() => setOpenFor(null)}
+                  />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-dashed"
+                    onClick={() => setOpenFor(section.id)}
+                  >
+                    <Plus className="size-4" /> Add a question
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       ))}
 
@@ -186,7 +202,10 @@ function QuestionForm({
   }
 
   return (
-    <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-3">
+    <form
+      action={formAction}
+      className="space-y-4 rounded-lg border border-border border-l-4 border-l-primary bg-background p-4 shadow-sm"
+    >
       <input type="hidden" name="sectionId" value={sectionId} />
 
       {state?.error && (
@@ -256,15 +275,23 @@ function QuestionForm({
             </span>
           </Label>
           {Array.from({ length: optionCount }, (_, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                name="optionCorrect"
-                value={index}
-                aria-label={`Option ${index + 1} is correct`}
-                className="size-4 shrink-0 accent-primary"
-              />
-              <Input name="optionText" placeholder={`Option ${index + 1}`} />
+            <div key={index} className="flex items-center gap-2.5 rounded-md border border-transparent px-1 py-0.5 hover:border-border">
+              {kind === "MULTI_CHOICE" ? (
+                <CheckSquare className="size-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <Circle className="size-4 shrink-0 text-muted-foreground" />
+              )}
+              <Input name="optionText" placeholder={`Option ${index + 1}`} className="border-0 border-b border-border rounded-none px-0 shadow-none focus-visible:ring-0 focus-visible:border-primary" />
+              <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  name="optionCorrect"
+                  value={index}
+                  aria-label={`Option ${index + 1} is correct`}
+                  className="size-4 accent-primary"
+                />
+                correct
+              </label>
             </div>
           ))}
           {optionCount < MAX_OPTIONS_PER_QUESTION && (

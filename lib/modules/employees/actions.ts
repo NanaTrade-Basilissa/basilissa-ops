@@ -14,7 +14,7 @@ import {
   shiftInputSchema,
 } from "./validation";
 import { requireFeature } from "@/lib/platform/features-guard";
-import { NEW_BRANCHES, parseEmployeeWorkbook, resolveImportRows, type ResolvedImportRow } from "./import";
+import { branchSpecBySlug, parseEmployeeWorkbook, resolveImportRows, type ResolvedImportRow } from "./import";
 
 export type { ResolvedImportRow } from "./import";
 
@@ -319,7 +319,7 @@ export async function commitEmployeeImport(formData: FormData): Promise<Employee
       );
       for (const slug of neededSlugs) {
         if (branchIdBySlug.has(slug)) continue;
-        const spec = NEW_BRANCHES[slug];
+        const spec = branchSpecBySlug(slug);
         if (!spec) continue; // resolveImportRows would already have blocked this row otherwise
 
         const branch = await tx.branch.create({

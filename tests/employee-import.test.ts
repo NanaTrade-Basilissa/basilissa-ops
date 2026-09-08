@@ -1,9 +1,8 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_BRANCH_SLUG,
-  DEPARTMENT_BRANCH_MAP,
-  NEW_BRANCHES,
+  DEPARTMENT_BRANCHES,
+  HEAD_OFFICE,
   parseEmployeeWorkbook,
   resolveImportRows,
   splitEmployeeName,
@@ -61,15 +60,46 @@ describe("resolveImportRows — department to branch", () => {
 
   it("falls back to Head Office for a department that doesn't name a branch", () => {
     const [resolved] = resolveImportRows([row({ department: "Maintenance" })], [], new Set(), false);
-    expect(resolved.branchSlug).toBe(DEFAULT_BRANCH_SLUG);
-    expect(resolved.branchDisplayName).toBe(NEW_BRANCHES["head-office"].name);
+    expect(resolved.branchSlug).toBe(HEAD_OFFICE.slug);
+    expect(resolved.branchDisplayName).toBe(HEAD_OFFICE.name);
   });
 
   it("does not mistake plain 'Management' for a branch-management department", () => {
     // A real department here (company leadership), not a branch.
-    expect(DEPARTMENT_BRANCH_MAP["Management"]).toBeUndefined();
+    expect(DEPARTMENT_BRANCHES["Management"]).toBeUndefined();
     const [resolved] = resolveImportRows([row({ department: "Management" })], [], new Set(), false);
-    expect(resolved.branchSlug).toBe(DEFAULT_BRANCH_SLUG);
+    expect(resolved.branchSlug).toBe(HEAD_OFFICE.slug);
+  });
+
+  it("matches an existing branch by name/slug keyword when the exact slug differs (the Westhills bug)", () => {
+    // The real failure this guards against: production's West Hills branch
+    // existed under a different slug than the one this file assumes, so an
+    // exact-slug-only lookup reported "no branch mapping" even though a
+    // perfectly good branch was sitting right there.
+    const [resolved] = resolveImportRows(
+      [row({ department: "Westhills Mall Management" })],
+      [{ id: "b1", slug: "westhills", name: "Basilissa West Hills" }],
+      new Set(),
+      false,
+    );
+    expect(resolved.needsNewBranch).toBe(false);
+    expect(resolved.status).toBe("ready");
+    expect(resolved.branchSlug).toBe("westhills");
+  });
+
+  it("can create a not-yet-existing 'should already exist' branch too, given branch:write", () => {
+    // Previously only Afienya/Head Office had a creation fallback; a branch
+    // like West Hills that "should" already exist had none at all, so a
+    // missing row for it blocked permanently regardless of permissions.
+    const [resolved] = resolveImportRows(
+      [row({ department: "Westhills Mall Management" })],
+      [],
+      new Set(),
+      true,
+    );
+    expect(resolved.status).toBe("ready");
+    expect(resolved.needsNewBranch).toBe(true);
+    expect(resolved.branchSlug).toBe("west-hills-mall");
   });
 
   it("blocks a row needing a not-yet-existing branch when the actor cannot create branches", () => {
@@ -92,7 +122,7 @@ describe("resolveImportRows — department to branch", () => {
     );
     expect(resolved.status).toBe("ready");
     expect(resolved.needsNewBranch).toBe(true);
-    expect(resolved.branchDisplayName).toBe(NEW_BRANCHES.afienya.name);
+    expect(resolved.branchDisplayName).toBe(DEPARTMENT_BRANCHES["Afienya Branch Management"].name);
   });
 });
 

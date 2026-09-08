@@ -14,6 +14,7 @@ import {
   addQuestionAction,
   addSectionAction,
   closeAssessmentAction,
+  deleteAssessmentAction,
   inviteManyToAssessmentAction,
   inviteToAssessmentAction,
   publishAssessmentAction,
@@ -82,6 +83,7 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
             status={assessment.status}
             publishAction={publishAssessmentAction.bind(null, assessment.id)}
             closeAction={closeAssessmentAction.bind(null, assessment.id)}
+            deleteAction={deleteAssessmentAction.bind(null, assessment.id)}
           />
         )}
       </div>

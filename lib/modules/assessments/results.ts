@@ -9,6 +9,7 @@ import { prisma } from "@/lib/platform/prisma";
 
 export async function listAssessments() {
   return prisma.assessment.findMany({
+    where: { deletedAt: null },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
@@ -24,8 +25,8 @@ export async function listAssessments() {
 
 /** The authoring view: structure and answer key. */
 export async function getAssessmentForEditing(assessmentId: string) {
-  return prisma.assessment.findUnique({
-    where: { id: assessmentId },
+  return prisma.assessment.findFirst({
+    where: { id: assessmentId, deletedAt: null },
     select: {
       id: true,
       title: true,
@@ -198,10 +199,11 @@ export async function getResponseDetail(responseId: string) {
 export async function assessmentOverview() {
   const [statusCounts, totalInvitations, totalSubmitted, recentAssessments, recentActivity] =
     await Promise.all([
-      prisma.assessment.groupBy({ by: ["status"], _count: { _all: true } }),
+      prisma.assessment.groupBy({ where: { deletedAt: null }, by: ["status"], _count: { _all: true } }),
       prisma.assessmentInvitation.count(),
       prisma.assessmentResponse.count({ where: { submittedAt: { not: null } } }),
       prisma.assessment.findMany({
+        where: { deletedAt: null },
         orderBy: { createdAt: "desc" },
         take: 5,
         select: { id: true, title: true, status: true, createdAt: true },

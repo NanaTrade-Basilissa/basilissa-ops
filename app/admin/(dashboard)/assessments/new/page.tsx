@@ -21,15 +21,16 @@ export default async function NewAssessmentPage() {
         <ChevronLeft className="size-4" /> Back to assessments
       </Link>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>New assessment</CardTitle>
+      <Card className="overflow-hidden py-0">
+        <div className="h-2 bg-primary" />
+        <CardHeader className="pt-6">
+          <CardTitle className="font-heading text-xl">New assessment</CardTitle>
           <CardDescription>
             Starts as a draft. Add sections and questions, then publish. Publishing freezes
             the questions and the scoring so everybody sits the same thing.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pb-6">
           <AssessmentDetailsForm action={createAssessmentAction} submitLabel="Create draft" />
         </CardContent>
       </Card>

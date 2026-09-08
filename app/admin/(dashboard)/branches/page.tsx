@@ -28,7 +28,7 @@ export default async function BranchesPage() {
         prisma.branch.findMany({
           where: branchFilter,
           orderBy: { name: "asc" },
-          include: { _count: { select: { submissions: true } } },
+          include: { _count: { select: { employees: { where: { validTo: null } } } } },
         }),
         prisma.feedbackSubmission.groupBy({
           by: ["branchId"],
@@ -58,7 +58,7 @@ export default async function BranchesPage() {
               <TableRow>
                 <TableHead>Branch</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Submissions</TableHead>
+                <TableHead className="text-right">Employees</TableHead>
                 <TableHead className="text-right">Avg score</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -79,7 +79,7 @@ export default async function BranchesPage() {
                         {branch.isActive ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">{branch._count.submissions}</TableCell>
+                    <TableCell className="text-right">{branch._count.employees}</TableCell>
                     <TableCell className="text-right">{avg != null ? avg.toFixed(1) : "-"}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1.5">
