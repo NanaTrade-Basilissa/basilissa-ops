@@ -20,8 +20,8 @@ import { headers } from "next/headers";
 import {
   assessmentDetailsSchema,
   answerSchema,
-  declarationSchema,
   invitationSchema,
+  publicLinkConfigSchema,
   questionSchema,
   sectionSchema,
 } from "./validation";
@@ -40,6 +40,7 @@ import {
   issueInvitations,
   resendInvitation,
   revokeInvitation,
+  setPublicLinkConfig,
   type IssuedInvitation,
 } from "./invitations";
 import { ASSESSMENT_INVITATION_SEND } from "./jobs";
@@ -82,6 +83,8 @@ export async function updateAssessmentAction(
     description: formData.get("description") || undefined,
     showScoreToTaker: formData.get("showScoreToTaker") === "on",
     passMarkPercent: formData.get("passMarkPercent") || undefined,
+    invitationsExpire: formData.get("invitationsExpire") === "on",
+    invitationTtlHours: formData.get("invitationTtlHours") || undefined,
   });
   if (!parsed.success) {
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
@@ -89,6 +92,30 @@ export async function updateAssessmentAction(
 
   const outcome = await updateAssessmentDetails(assessmentId, parsed.data, auditActorFrom(actor));
   if (!outcome.ok) return { error: outcome.message };
+
+  revalidatePath(`/admin/assessments/${assessmentId}`);
+  return { saved: true };
+}
+
+/** Turns the public link on/off and sets its identity modes. */
+export async function updatePublicLinkAction(
+  assessmentId: string,
+  _prev: AssessmentFormState,
+  formData: FormData,
+): Promise<AssessmentFormState> {
+  const actor = await requirePermission("assessment:write");
+
+  const parsed = publicLinkConfigSchema.safeParse({
+    enabled: formData.get("enabled") === "on",
+    nameMode: formData.get("nameMode"),
+    emailMode: formData.get("emailMode"),
+  });
+  if (!parsed.success) {
+    return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  const outcome = await setPublicLinkConfig(assessmentId, parsed.data, auditActorFrom(actor));
+  if (!outcome.ok) return { error: outcome.message ?? "Could not update the public link." };
 
   revalidatePath(`/admin/assessments/${assessmentId}`);
   return { saved: true };
@@ -212,7 +239,7 @@ export type InviteState =
        * stored anywhere readable — HR copies it into whatever they use to
        * reach that person.
        */
-      link?: { url: string; name: string; expiresAt: string; emailed: boolean };
+      link?: { url: string; name: string; expiresAt: string | null; emailed: boolean };
     }
   | undefined;
 
@@ -228,7 +255,7 @@ async function maybeEnqueueInvitationEmail(invitation: IssuedInvitation): Promis
   await enqueue(ASSESSMENT_INVITATION_SEND, {
     email: invitation.inviteeEmail,
     token: invitation.token,
-    expiresAt: invitation.expiresAt.toISOString(),
+    expiresAt: invitation.expiresAt?.toISOString() ?? null,
     assessmentTitle: invitation.assessmentTitle,
     inviteeName: invitation.inviteeName,
   });
@@ -262,7 +289,7 @@ export async function inviteToAssessmentAction(
     link: {
       url: `${getEnv().NEXT_PUBLIC_APP_URL}/assessment/${encodeURIComponent(outcome.invitation.token)}`,
       name: outcome.invitation.inviteeName,
-      expiresAt: outcome.invitation.expiresAt.toISOString(),
+      expiresAt: outcome.invitation.expiresAt?.toISOString() ?? null,
       emailed,
     },
   };
@@ -296,7 +323,7 @@ export async function resendInvitationAction(
     link: {
       url: `${getEnv().NEXT_PUBLIC_APP_URL}/assessment/${encodeURIComponent(outcome.invitation.token)}`,
       name: outcome.invitation.inviteeName,
-      expiresAt: outcome.invitation.expiresAt.toISOString(),
+      expiresAt: outcome.invitation.expiresAt?.toISOString() ?? null,
       emailed,
     },
   };
@@ -378,16 +405,14 @@ export async function declareIdentityAction(
   const limit = await rateLimit(`assessment-declare:${await clientIp()}`, 30, 15 * 60 * 1000);
   if (!limit.success) return { error: "Too many attempts. Please try again shortly." };
 
-  const parsed = declarationSchema.safeParse({
+  // Validated inside `declareIdentity`, not here: which fields are required,
+  // optional or not asked at all depends on the invitation (personal vs. a
+  // public link's configured modes), which only a DB lookup can resolve.
+  const outcome = await declareIdentity(token, {
     name: formData.get("name"),
-    email: formData.get("email") || undefined,
+    email: formData.get("email"),
   });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Enter your name" };
-  }
-
-  const outcome = await declareIdentity(token, parsed.data);
-  if (!outcome.ok) return { error: "This link is no longer usable." };
+  if (!outcome.ok) return { error: outcome.error ?? "This link is no longer usable." };
 
   // The mismatch is NOT reported back. Telling the taker their name did not
   // match the invitation teaches whoever is sitting it on somebody's behalf

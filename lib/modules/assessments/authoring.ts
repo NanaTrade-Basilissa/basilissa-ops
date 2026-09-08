@@ -103,6 +103,9 @@ export async function updateAssessmentDetails(
     description?: string | null;
     showScoreToTaker: boolean;
     passMarkPercent?: number;
+    /** Absent (create form) leaves the schema default — links expire — untouched. */
+    invitationsExpire?: boolean;
+    invitationTtlHours?: number;
   },
   actor: AuditActor,
 ): Promise<AuthoringOutcome> {
@@ -113,6 +116,8 @@ export async function updateAssessmentDetails(
       description: true,
       showScoreToTaker: true,
       passMarkPercent: true,
+      invitationsExpire: true,
+      invitationTtlHours: true,
       status: true,
       deletedAt: true,
     },
@@ -129,6 +134,8 @@ export async function updateAssessmentDetails(
       description: input.description?.trim() || null,
       showScoreToTaker: input.showScoreToTaker,
       passMarkPercent: input.passMarkPercent ?? null,
+      ...(input.invitationsExpire !== undefined ? { invitationsExpire: input.invitationsExpire } : {}),
+      ...(input.invitationTtlHours !== undefined ? { invitationTtlHours: input.invitationTtlHours } : {}),
     },
   });
 

@@ -24,7 +24,8 @@ export function hashInvitationToken(token: string): string {
 export type IssuedInvitation = {
   invitationId: string;
   token: string;
-  expiresAt: Date;
+  /** Null means it never expires on its own — see `Assessment.invitationsExpire`. */
+  expiresAt: Date | null;
   inviteeName: string;
   inviteeEmail: string | null;
   /** Carried so a caller can email the invitation without a second query. */
@@ -50,7 +51,14 @@ export type IssueOutcome =
  * sat on a colleague's behalf.
  */
 export async function issueInvitation(
-  input: { assessmentId: string; employeeId?: string | null; name?: string; email?: string | null },
+  input: {
+    assessmentId: string;
+    employeeId?: string | null;
+    name?: string;
+    email?: string | null;
+    /** Minted from the public link rather than issued by HR — see `startPublicAttempt`. */
+    isPublic?: boolean;
+  },
   actor: AuditActor,
 ): Promise<IssueOutcome> {
   const assessment = await prisma.assessment.findUnique({
@@ -59,6 +67,7 @@ export async function issueInvitation(
       id: true,
       title: true,
       status: true,
+      invitationsExpire: true,
       invitationTtlHours: true,
       _count: { select: { sections: true } },
     },
@@ -116,12 +125,20 @@ export async function issueInvitation(
     }
   }
 
+  // A public attempt has no name yet — that is the point of it — so it gets
+  // a placeholder instead of the "give a name" refusal HR-issued ones get.
+  // `declareIdentity` overwrites it if the taker gives a real one.
   if (!inviteeName) {
-    return { ok: false, reason: "EMPLOYEE_NOT_FOUND", message: "Give a name for the invitation." };
+    if (!input.isPublic) {
+      return { ok: false, reason: "EMPLOYEE_NOT_FOUND", message: "Give a name for the invitation." };
+    }
+    inviteeName = "Public respondent";
   }
 
   const token = generateToken();
-  const expiresAt = new Date(Date.now() + assessment.invitationTtlHours * 3_600_000);
+  const expiresAt = assessment.invitationsExpire
+    ? new Date(Date.now() + assessment.invitationTtlHours * 3_600_000)
+    : null;
 
   const invitation = await prisma.assessmentInvitation.create({
     data: {
@@ -129,6 +146,7 @@ export async function issueInvitation(
       employeeId: input.employeeId ?? null,
       inviteeName,
       inviteeEmail,
+      isPublic: input.isPublic ?? false,
       tokenHash: hashInvitationToken(token),
       expiresAt,
       createdBy: actor.userId,
@@ -146,7 +164,7 @@ export async function issueInvitation(
       employeeId: input.employeeId ?? null,
       inviteeName,
       inviteeEmail,
-      expiresAt: expiresAt.toISOString(),
+      expiresAt: expiresAt?.toISOString() ?? null,
     },
   });
 
@@ -309,4 +327,93 @@ export async function issueInvitations(
   }
 
   return { invitations, failures };
+}
+
+// ---------------------------------------------------------------------------
+// Public link — a single reusable entry point, instead of HR issuing one
+// invitation per person. Opening it mints an ordinary invitation (above) on
+// the taker's behalf, so it never becomes a second, weaker credential path:
+// everything downstream of that mint — one attempt, one submission, the
+// answer key never leaving the server — is the exact same code personal
+// invitations already run through.
+// ---------------------------------------------------------------------------
+
+function generatePublicLinkToken(): string {
+  return randomBytes(24).toString("base64url");
+}
+
+export type PublicLinkConfig = {
+  enabled: boolean;
+  nameMode: "REQUIRED" | "OPTIONAL" | "HIDDEN";
+  emailMode: "REQUIRED" | "OPTIONAL" | "HIDDEN";
+};
+
+/**
+ * Turns the public link on/off and sets its identity modes. The token itself
+ * is generated once and kept — re-enabling after disabling reuses it, so a
+ * link already shared somewhere does not go stale for no reason.
+ */
+export async function setPublicLinkConfig(
+  assessmentId: string,
+  config: PublicLinkConfig,
+  actor: AuditActor,
+): Promise<{ ok: boolean; message?: string }> {
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: assessmentId },
+    select: { id: true, status: true, publicLinkToken: true },
+  });
+  if (!assessment) return { ok: false, message: "No such assessment." };
+  if (config.enabled && assessment.status !== "PUBLISHED") {
+    return { ok: false, message: "Publish the assessment before enabling its public link." };
+  }
+
+  await prisma.assessment.update({
+    where: { id: assessmentId },
+    data: {
+      publicLinkEnabled: config.enabled,
+      publicLinkNameMode: config.nameMode,
+      publicLinkEmailMode: config.emailMode,
+      publicLinkToken: assessment.publicLinkToken ?? (config.enabled ? generatePublicLinkToken() : null),
+    },
+  });
+  await recordAudit({
+    actor,
+    action: config.enabled ? "assessment.public_link_enabled" : "assessment.public_link_disabled",
+    entityType: "Assessment",
+    entityId: assessmentId,
+    after: { nameMode: config.nameMode, emailMode: config.emailMode },
+  });
+  return { ok: true };
+}
+
+export type PublicAttemptFailure = "NOT_FOUND" | "DISABLED" | IssueFailure;
+
+export type PublicAttemptOutcome =
+  | { ok: true; token: string }
+  | { ok: false; reason: PublicAttemptFailure; message: string };
+
+/**
+ * Mints a fresh, ordinary invitation for whoever just opened the public
+ * link, and hands back its token so the caller can send them straight into
+ * the normal per-invitation taking flow. Called once per visit — there is no
+ * session here, no cookie; opening the public link twice makes two attempts,
+ * exactly as two different people opening it does.
+ */
+export async function startPublicAttempt(publicLinkToken: string): Promise<PublicAttemptOutcome> {
+  const assessment = await prisma.assessment.findUnique({
+    where: { publicLinkToken },
+    select: { id: true, publicLinkEnabled: true },
+  });
+  if (!assessment) return { ok: false, reason: "NOT_FOUND", message: "This link is not valid." };
+  if (!assessment.publicLinkEnabled) {
+    return { ok: false, reason: "DISABLED", message: "This link is no longer active." };
+  }
+
+  const outcome = await issueInvitation(
+    { assessmentId: assessment.id, isPublic: true },
+    { userId: null, email: null, role: null },
+  );
+  if (!outcome.ok) return outcome;
+
+  return { ok: true, token: outcome.invitation.token };
 }

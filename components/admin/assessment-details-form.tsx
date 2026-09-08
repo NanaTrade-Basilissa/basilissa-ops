@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { CheckCircle2, Loader2, Save } from "lucide-react";
 import type { AssessmentFormState } from "@/lib/modules/assessments/actions";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ export function AssessmentDetailsForm({
     description: string | null;
     showScoreToTaker: boolean;
     passMarkPercent: number | null;
+    invitationsExpire: boolean;
+    invitationTtlHours: number;
   };
 }) {
   const [state, formAction, isPending] = useActionState<AssessmentFormState, FormData>(
@@ -29,6 +31,7 @@ export function AssessmentDetailsForm({
     undefined,
   );
   const errors = state?.fieldErrors ?? {};
+  const [invitationsExpire, setInvitationsExpire] = useState(values?.invitationsExpire ?? true);
 
   return (
     <form action={formAction} className="space-y-5" noValidate>
@@ -124,6 +127,52 @@ export function AssessmentDetailsForm({
             test: nothing will be marked pass or fail. Shown to the taker only alongside the
             score, so it stays hidden whenever the score does.
           </p>
+        </div>
+      )}
+
+      {/* Same reasoning as pass mark: nothing to expire before a link exists. */}
+      {values && (
+        <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+          <div className="flex items-start gap-3">
+            <Switch
+              id="invitationsExpire"
+              name="invitationsExpire"
+              checked={invitationsExpire}
+              onChange={(e) => setInvitationsExpire(e.target.checked)}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="invitationsExpire" className="font-medium">
+                Links expire on their own
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Off means an issued link only stops working once the person submits it (or you
+                withdraw it). It never times out on a clock.
+              </p>
+            </div>
+          </div>
+          {invitationsExpire && (
+            <div className="space-y-1.5 pl-[calc(1rem+0.75rem)]">
+              <Label htmlFor="invitationTtlHours">Expires after (hours)</Label>
+              <Input
+                id="invitationTtlHours"
+                name="invitationTtlHours"
+                type="number"
+                min={1}
+                max={24 * 365}
+                inputMode="numeric"
+                defaultValue={values.invitationTtlHours}
+                className="max-w-[10rem]"
+                aria-describedby="invitationTtlHours-hint"
+              />
+              {errors.invitationTtlHours && (
+                <p className="text-xs text-destructive">{errors.invitationTtlHours}</p>
+              )}
+              <p id="invitationTtlHours-hint" className="text-xs text-muted-foreground">
+                168 is a week. Applies to links issued from now on — one already sent keeps the
+                expiry it was given.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

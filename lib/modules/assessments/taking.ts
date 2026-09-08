@@ -1,11 +1,15 @@
 import "server-only";
-import { AssessmentQuestionKind } from "@prisma/client";
+import { AssessmentQuestionKind, IdentityFieldMode } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { recordAuditBestEffort } from "@/lib/platform/audit";
 import { scoped } from "@/lib/platform/logger";
 import { hashInvitationToken } from "./invitations";
 import { scoreResponse, unansweredRequired, type ScorableQuestion } from "./scoring";
+import { publicDeclarationSchema } from "./validation";
 import { MAX_FREE_TEXT_LENGTH } from "./constants";
+
+/** Fixed shape a personal, HR-issued invitation always uses. */
+const PERSONAL_IDENTITY_MODES = { nameMode: IdentityFieldMode.REQUIRED, emailMode: IdentityFieldMode.OPTIONAL };
 
 const log = scoped("assessments.taking");
 
@@ -47,8 +51,11 @@ export type TakingView = {
   responseId: string;
   assessmentTitle: string;
   assessmentDescription: string | null;
+  isPublic: boolean;
   inviteeName: string;
   declaredName: string | null;
+  /** What the identity-declaration step should ask for — see `publicDeclarationSchema`. */
+  identity: { nameMode: IdentityFieldMode; emailMode: IdentityFieldMode };
   sections: TakingSection[];
 };
 
@@ -70,6 +77,7 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
     select: {
       id: true,
       inviteeName: true,
+      isPublic: true,
       expiresAt: true,
       revokedAt: true,
       openedAt: true,
@@ -79,6 +87,8 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
           title: true,
           description: true,
           status: true,
+          publicLinkNameMode: true,
+          publicLinkEmailMode: true,
           sections: {
             orderBy: { order: "asc" },
             select: {
@@ -127,7 +137,7 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
       message: "This has already been completed. Thank you.",
     };
   }
-  if (invitation.expiresAt <= new Date()) {
+  if (invitation.expiresAt && invitation.expiresAt <= new Date()) {
     return { ok: false, reason: "EXPIRED", message: "This link has expired." };
   }
   if (invitation.assessment.status !== "PUBLISHED") {
@@ -155,6 +165,23 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
     });
   }
 
+  const identity = invitation.isPublic
+    ? { nameMode: invitation.assessment.publicLinkNameMode, emailMode: invitation.assessment.publicLinkEmailMode }
+    : PERSONAL_IDENTITY_MODES;
+
+  // Nothing to ask when both fields are hidden — skip straight past the
+  // declaration step rather than showing an empty form. `declaredName` must
+  // still end up non-null, or the step would show again on every reload; see
+  // `publicDeclarationSchema` for why `""`, not `null`, is what "done" means.
+  let declaredName = response.declaredName;
+  if (declaredName === null && identity.nameMode === "HIDDEN" && identity.emailMode === "HIDDEN") {
+    await prisma.assessmentResponse.update({
+      where: { id: response.id },
+      data: { declaredName: "", declaredEmail: "" },
+    });
+    declaredName = "";
+  }
+
   const saved = new Map(response.answers.map((a) => [a.questionId, a]));
 
   return {
@@ -164,8 +191,10 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
       responseId: response.id,
       assessmentTitle: invitation.assessment.title,
       assessmentDescription: invitation.assessment.description,
+      isPublic: invitation.isPublic,
       inviteeName: invitation.inviteeName,
-      declaredName: response.declaredName,
+      declaredName,
+      identity,
       sections: invitation.assessment.sections.map((section) => ({
         id: section.id,
         title: section.title,
@@ -195,14 +224,16 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
  */
 export async function declareIdentity(
   token: string,
-  declared: { name: string; email?: string | null },
-): Promise<{ ok: boolean; mismatch: boolean }> {
+  raw: { name: unknown; email: unknown },
+): Promise<{ ok: boolean; mismatch: boolean; error?: string }> {
   const invitation = await prisma.assessmentInvitation.findUnique({
     where: { tokenHash: hashInvitationToken(token) },
     select: {
       id: true,
       inviteeName: true,
       inviteeEmail: true,
+      isPublic: true,
+      assessment: { select: { publicLinkNameMode: true, publicLinkEmailMode: true } },
       response: { select: { id: true, submittedAt: true } },
     },
   });
@@ -210,16 +241,35 @@ export async function declareIdentity(
     return { ok: false, mismatch: false };
   }
 
-  const name = declared.name.trim();
-  const email = declared.email?.trim().toLowerCase() || null;
+  const identity = invitation.isPublic
+    ? { nameMode: invitation.assessment.publicLinkNameMode, emailMode: invitation.assessment.publicLinkEmailMode }
+    : PERSONAL_IDENTITY_MODES;
 
-  const mismatch = !namesLookLikeTheSamePerson(name, invitation.inviteeName) ||
-    (email !== null && invitation.inviteeEmail !== null && email !== invitation.inviteeEmail);
+  const parsed = publicDeclarationSchema(identity.nameMode, identity.emailMode).safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, mismatch: false, error: parsed.error.issues[0]?.message ?? "Check what you entered." };
+  }
+  const { name, email } = parsed.data;
+
+  // A public attempt has nothing real to compare against — `inviteeName` is
+  // just the "Public respondent" placeholder — so there is no mismatch
+  // concept for it, only whatever was (optionally) given.
+  const mismatch = invitation.isPublic
+    ? false
+    : !namesLookLikeTheSamePerson(name, invitation.inviteeName) ||
+      (email !== "" && invitation.inviteeEmail !== null && email !== invitation.inviteeEmail);
 
   await prisma.assessmentResponse.update({
     where: { id: invitation.response.id },
-    data: { declaredName: name, declaredEmail: email, identityMismatch: mismatch },
+    data: { declaredName: name, declaredEmail: email || null, identityMismatch: mismatch },
   });
+
+  // A real name volunteered on a public attempt is worth keeping on the
+  // invitation itself, so HR's invitation list shows something better than
+  // the placeholder once somebody actually gives one.
+  if (invitation.isPublic && name) {
+    await prisma.assessmentInvitation.update({ where: { id: invitation.id }, data: { inviteeName: name } });
+  }
 
   if (mismatch) {
     log.warn("identity declaration did not match the invitation", {
@@ -268,7 +318,7 @@ export async function saveAnswer(
     !invitation?.response ||
     invitation.response.submittedAt ||
     invitation.revokedAt ||
-    invitation.expiresAt <= new Date() ||
+    (invitation.expiresAt && invitation.expiresAt <= new Date()) ||
     invitation.assessment.status !== "PUBLISHED"
   ) {
     return { ok: false };
@@ -372,7 +422,7 @@ export async function submitResponse(token: string): Promise<SubmitOutcome> {
   if (invitation.revokedAt) {
     return { ok: false, reason: "REVOKED", message: "This link has been withdrawn." };
   }
-  if (invitation.expiresAt <= new Date()) {
+  if (invitation.expiresAt && invitation.expiresAt <= new Date()) {
     return { ok: false, reason: "EXPIRED", message: "This link has expired." };
   }
   if (invitation.assessment.status !== "PUBLISHED") {

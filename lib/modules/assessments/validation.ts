@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AssessmentQuestionKind } from "@prisma/client";
+import { AssessmentQuestionKind, IdentityFieldMode } from "@prisma/client";
 import { MAX_FREE_TEXT_LENGTH, MAX_OPTIONS_PER_QUESTION, MIN_OPTIONS_PER_QUESTION } from "./constants";
 
 export const assessmentDetailsSchema = z.object({
@@ -18,6 +18,25 @@ export const assessmentDetailsSchema = z.object({
     (val) => (val === "" || val === undefined || val === null ? undefined : val),
     z.coerce.number().int().min(0, "0 to 100").max(100, "0 to 100").optional(),
   ),
+  /// HR's call, per assessment: does an issued link expire on its own, or
+  /// only when the person submits it? Optional so the create form (which
+  /// does not show this yet — see AssessmentDetailsForm) can omit it and
+  /// keep the schema default (true).
+  invitationsExpire: z.boolean().optional(),
+  /// Read only when `invitationsExpire` is true.
+  invitationTtlHours: z.coerce.number().int().min(1).max(24 * 365).optional(),
+});
+
+/**
+ * The public link's identity step, HR's choice per assessment. Independent
+ * per field: requiring a name while hiding email (or the reverse) is a
+ * legitimate combination, not just required/optional/hidden applied
+ * uniformly.
+ */
+export const publicLinkConfigSchema = z.object({
+  enabled: z.boolean(),
+  nameMode: z.nativeEnum(IdentityFieldMode),
+  emailMode: z.nativeEnum(IdentityFieldMode),
 });
 
 export const sectionSchema = z.object({
@@ -88,15 +107,35 @@ export const invitationSchema = z
   });
 
 /**
- * What the taker types to identify themselves.
+ * What the taker types to identify themselves, built for the modes an
+ * invitation actually uses. A personal, HR-issued invitation always calls
+ * this with `(REQUIRED, OPTIONAL)` — name required, email optional — which is
+ * the shape this used to be hardcoded as. A public-link attempt calls it with
+ * whatever `Assessment.publicLinkNameMode`/`publicLinkEmailMode` says.
  *
- * The token already established who they are, so this is a declaration. Email
- * is optional because plenty of staff do not have a work address.
+ * A field's resolved value is `""`, never `null`, whenever the declaration
+ * step has genuinely completed — hidden or left blank both mean "nothing
+ * given," not "not yet asked." `declaredName === null` is what gates whether
+ * the taker still sees the declaration step at all (`app/assessment/[token]/
+ * page.tsx`), so a `HIDDEN` or blank-`OPTIONAL` name resolving to `null`
+ * would show that step again on every reload — `""` is what actually marks
+ * it done. Whatever a `HIDDEN` field's raw input is, it's ignored: the form
+ * never rendered it, so nothing submitted for it should be trusted anyway.
  */
-export const declarationSchema = z.object({
-  name: z.string().trim().min(2, "Enter your name").max(200),
-  email: z.string().trim().toLowerCase().max(200).optional(),
-});
+export function publicDeclarationSchema(nameMode: IdentityFieldMode, emailMode: IdentityFieldMode) {
+  const field = (mode: IdentityFieldMode, label: string) => {
+    if (mode === "HIDDEN") return z.any().transform(() => "");
+    const base = label === "email" ? z.string().trim().toLowerCase().max(200) : z.string().trim().max(200);
+    return mode === "REQUIRED"
+      ? base.min(label === "email" ? 3 : 2, `Enter your ${label}`)
+      : base.optional().transform((v) => v ?? "");
+  };
+
+  return z.object({
+    name: field(nameMode, "name"),
+    email: field(emailMode, "email"),
+  });
+}
 
 export const answerSchema = z.object({
   questionId: z.string().min(1),

@@ -34,7 +34,12 @@ export async function getAssessmentForEditing(assessmentId: string) {
       status: true,
       showScoreToTaker: true,
       passMarkPercent: true,
+      invitationsExpire: true,
       invitationTtlHours: true,
+      publicLinkEnabled: true,
+      publicLinkToken: true,
+      publicLinkNameMode: true,
+      publicLinkEmailMode: true,
       publishedAt: true,
       sections: {
         orderBy: { order: "asc" },

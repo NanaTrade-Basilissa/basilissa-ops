@@ -16,7 +16,8 @@ type Invitation = {
   employeeId: string | null;
   inviteeName: string;
   inviteeEmail: string | null;
-  expiresAt: Date;
+  /** Null means it never expires on its own — see `Assessment.invitationsExpire`. */
+  expiresAt: Date | null;
   openedAt: Date | null;
   revokedAt: Date | null;
   response: {
@@ -33,7 +34,7 @@ function progressOf(invitation: Invitation): { label: string; tone: "done" | "op
   if (invitation.revokedAt) return { label: "withdrawn", tone: "idle" };
   if (invitation.response?.submittedAt) return { label: "completed", tone: "done" };
   if (invitation.openedAt) return { label: "started", tone: "open" };
-  if (invitation.expiresAt <= new Date()) return { label: "expired", tone: "idle" };
+  if (invitation.expiresAt && invitation.expiresAt <= new Date()) return { label: "expired", tone: "idle" };
   return { label: "not started", tone: "idle" };
 }
 
@@ -116,18 +117,15 @@ export function InvitePanel({
         <Alert>
           <AlertTitle>Link for {link.name}</AlertTitle>
           <AlertDescription className="space-y-2">
-            {link.emailed ? (
-              <p>
-                Emailed to them just now. It works once, is tied to them alone, and expires{" "}
-                {new Date(link.expiresAt).toLocaleString("en-GB")}.
-              </p>
-            ) : (
-              <p>
-                Email is not set up (or none is on file), so send this yourself. It works once,
-                is tied to them alone, and expires{" "}
-                {new Date(link.expiresAt).toLocaleString("en-GB")}.
-              </p>
-            )}
+            <p>
+              {link.emailed
+                ? "Emailed to them just now. "
+                : "Email is not set up (or none is on file), so send this yourself. "}
+              It works once, is tied to them alone, and{" "}
+              {link.expiresAt
+                ? `expires ${new Date(link.expiresAt).toLocaleString("en-GB")}.`
+                : "does not expire — only submitting it (or withdrawing it) ends it."}
+            </p>
             <code className="block overflow-x-auto rounded-md bg-background p-2 text-xs">
               {link.url}
             </code>

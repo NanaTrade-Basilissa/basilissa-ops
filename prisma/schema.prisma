@@ -1139,6 +1139,17 @@ enum AssessmentQuestionKind {
   FREE_TEXT
 }
 
+/// How a taker's name/email is handled on the public link. Personal,
+/// HR-issued invitations are unaffected by this — they always ask for a name
+/// (email optional), since the whole point there is confirming who already
+/// holds the link.
+enum IdentityFieldMode {
+  REQUIRED
+  OPTIONAL
+  /// Not asked at all. The taker is never shown the field.
+  HIDDEN
+}
+
 model Assessment {
   id          String           @id @default(cuid())
   title       String
@@ -1156,8 +1167,26 @@ model Assessment {
   /// mark reveals the score even when the score is hidden.
   passMarkPercent Int?
 
-  /// How long an invitation stays usable, in hours.
+  /// Whether an issued link stops working on its own after a time, HR's
+  /// choice per assessment. Off means the only thing that ends a link is the
+  /// person submitting it (or HR revoking it) — `invitationTtlHours` below is
+  /// then unused.
+  invitationsExpire Boolean @default(true)
+  /// How long an invitation stays usable, in hours. Read only when
+  /// `invitationsExpire` is true.
   invitationTtlHours Int @default(168)
+
+  /// A single reusable link anyone can open to take this assessment, instead
+  /// of HR issuing one per person. Opening it mints an ordinary invitation
+  /// behind the scenes (see `startPublicAttempt`), so every existing
+  /// guarantee — one attempt, one submission, one response row — still holds;
+  /// only who initiates it, and whether a name is even asked for, changes.
+  publicLinkEnabled Boolean @default(false)
+  /// Generated once, the first time the link is enabled, and kept from then
+  /// on — re-enabling reuses it rather than invalidating whatever was shared.
+  publicLinkToken    String?            @unique
+  publicLinkNameMode  IdentityFieldMode @default(REQUIRED)
+  publicLinkEmailMode IdentityFieldMode @default(OPTIONAL)
 
   createdBy   String?
   publishedAt DateTime?
@@ -1248,12 +1277,22 @@ model AssessmentInvitation {
   employeeId String?
 
   /// Who HR believes this is. Held here rather than only on the employee
-  /// record because an invitation may precede one existing.
+  /// record because an invitation may precede one existing. For a public-link
+  /// attempt nobody has named yet, this is a placeholder — see `isPublic`.
   inviteeName  String
   inviteeEmail String?
 
+  /// Minted from the assessment's public link rather than issued by HR to a
+  /// named person. Changes what the identity-declaration step asks for
+  /// (`Assessment.publicLinkNameMode`/`publicLinkEmailMode`), nothing else —
+  /// it is still exactly one invitation, one attempt, one response.
+  isPublic Boolean @default(false)
+
   tokenHash String    @unique
-  expiresAt DateTime
+  /// Null means the link never expires on its own — see
+  /// `Assessment.invitationsExpire`. Submission (or revocation) is then the
+  /// only thing that ends it.
+  expiresAt DateTime?
   /// First time the link was opened. Distinct from submission: HR wants to
   /// know the difference between not started and started-and-abandoned.
   openedAt  DateTime?

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Lock, Users } from "lucide-react";
+import { ChevronLeft, Link2, Lock, Users } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import {
@@ -21,14 +21,17 @@ import {
   resendInvitationAction,
   revokeInvitationAction,
   updateAssessmentAction,
+  updatePublicLinkAction,
 } from "@/lib/modules/assessments/actions";
 import { AssessmentDetailsForm } from "@/components/admin/assessment-details-form";
 import { AssessmentBuilder } from "@/components/admin/assessment-builder";
 import { AssessmentLifecycle } from "@/components/admin/assessment-lifecycle";
 import { InvitePanel } from "@/components/admin/invite-panel";
+import { PublicLinkPanel } from "@/components/admin/public-link-panel";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getEnv } from "@/lib/platform/env";
 
 export const metadata: Metadata = { title: "Assessment" };
 export const dynamic = "force-dynamic";
@@ -130,6 +133,35 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
         </Card>
       )}
 
+      {canWrite && assessment.status === "PUBLISHED" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Link2 className="size-4" />
+              Public link
+            </CardTitle>
+            <CardDescription>
+              An alternative to sending one invitation per person.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PublicLinkPanel
+              action={updatePublicLinkAction.bind(null, assessment.id)}
+              linkUrl={
+                assessment.publicLinkToken
+                  ? `${getEnv().NEXT_PUBLIC_APP_URL}/assessment/public/${assessment.publicLinkToken}`
+                  : null
+              }
+              values={{
+                enabled: assessment.publicLinkEnabled,
+                nameMode: assessment.publicLinkNameMode,
+                emailMode: assessment.publicLinkEmailMode,
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Sections and questions</CardTitle>
@@ -164,6 +196,8 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
                 description: assessment.description,
                 showScoreToTaker: assessment.showScoreToTaker,
                 passMarkPercent: assessment.passMarkPercent,
+                invitationsExpire: assessment.invitationsExpire,
+                invitationTtlHours: assessment.invitationTtlHours,
               }}
             />
           </CardContent>

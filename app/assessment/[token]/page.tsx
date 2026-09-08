@@ -74,6 +74,9 @@ export default async function TakeAssessmentPage({
         {view.declaredName === null ? (
           <IdentityDeclaration
             action={declareIdentityAction.bind(null, decodeURIComponent(token))}
+            nameMode={view.identity.nameMode}
+            emailMode={view.identity.emailMode}
+            personal={!view.isPublic}
           />
         ) : (
           <AssessmentRunner
