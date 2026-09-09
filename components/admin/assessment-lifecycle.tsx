@@ -6,6 +6,17 @@ import type { AssessmentStatus } from "@prisma/client";
 import type { AssessmentFormState } from "@/lib/modules/assessments/actions";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export function AssessmentLifecycle({
   status,
@@ -60,23 +71,36 @@ export function AssessmentLifecycle({
           </form>
         )}
 
-        <form
-          action={deleteAssessment}
-          onSubmit={(event) => {
-            if (
-              !window.confirm(
-                "Delete this assessment? It stays recoverable behind the scenes, but disappears from every list here.",
-              )
-            ) {
-              event.preventDefault();
-            }
-          }}
-        >
-          <Button type="submit" size="sm" variant="destructive" disabled={deleting}>
-            {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+        {/* The submit button lives in the dialog's footer, portalled outside
+            this form in the DOM — `form="delete-assessment-form"` is what
+            still ties it to this action despite that. */}
+        <form id="delete-assessment-form" action={deleteAssessment} />
+        <AlertDialog>
+          <AlertDialogTrigger render={<Button size="sm" variant="destructive" />}>
+            <Trash2 className="size-4" />
             Delete
-          </Button>
-        </form>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this assessment?</AlertDialogTitle>
+              <AlertDialogDescription>
+                It stays recoverable behind the scenes, but disappears from every list here.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                type="submit"
+                form="delete-assessment-form"
+                variant="destructive"
+                disabled={deleting}
+              >
+                {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );

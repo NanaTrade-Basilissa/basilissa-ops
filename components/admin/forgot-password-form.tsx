@@ -6,7 +6,7 @@ import { Loader2, MailCheck, Send } from "lucide-react";
 import { requestPasswordReset, type ForgotPasswordState } from "@/lib/modules/identity/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export function ForgotPasswordForm() {
@@ -23,7 +23,7 @@ export function ForgotPasswordForm() {
   */
   if (state?.sent) {
     return (
-      <div className="space-y-5">
+      <div className="flex flex-col gap-5">
         <Alert>
           <MailCheck className="size-4" />
           <AlertTitle>Check your email</AlertTitle>
@@ -44,36 +44,39 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <form action={formAction} className="space-y-5" noValidate>
-      {state?.error && (
-        <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
-      )}
+    <form action={formAction} noValidate>
+      <FieldGroup>
+        <div className="flex flex-col items-center gap-1 text-center">
+          <h1 className="text-2xl font-bold">Forgotten password</h1>
+          <p className="text-sm text-balance text-muted-foreground">
+            Give us the address you sign in with and we will send a link to set a new
+            password.
+          </p>
+        </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          placeholder="you@basilissa.gh"
-        />
-      </div>
+        {state?.error && (
+          <Alert variant="destructive">
+            <AlertDescription>{state.error}</AlertDescription>
+          </Alert>
+        )}
 
-      <Button type="submit" className="w-full" disabled={isPending}>
-        {isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-        Send a reset link
-      </Button>
+        <Field>
+          <FieldLabel htmlFor="email">Email</FieldLabel>
+          <Input id="email" name="email" type="email" autoComplete="username" required placeholder="you@basilissa.gh" />
+        </Field>
 
-      <Link
-        href="/admin/login"
-        className="block text-center text-sm text-muted-foreground underline underline-offset-4"
-      >
-        Back to sign in
-      </Link>
+        <Field>
+          <Button type="submit" size="lg" disabled={isPending}>
+            {isPending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            Send a reset link
+          </Button>
+          <FieldDescription className="text-center">
+            <Link href="/admin/login" className="underline underline-offset-4">
+              Back to sign in
+            </Link>
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
     </form>
   );
 }

@@ -57,6 +57,40 @@ failing lint got merged here once.
 - **The assessment answer key must never reach the browser.** See the note at
   the top of `lib/modules/assessments/taking.ts`.
 
+## UI components: shadcn/ui, standardised
+
+[shadcn/ui](https://ui.shadcn.com/) is this project's UI component system —
+not one option among several. Before building any UI, check whether a
+shadcn/ui component or block already fits:
+
+- **Never hand-roll a component shadcn/ui already provides** — dialogs,
+  dropdowns, tables, tabs, tooltips, sheets, comboboxes, date pickers, empty
+  states, and so on. Install it (`pnpm dlx shadcn@latest add <name>`) and
+  compose it, the same way `components/ui/*` already does. Extend an
+  installed component with a project-specific variant (see `badge.tsx`'s
+  `rating*` variants) rather than forking it into a parallel implementation.
+- **Prefer a block over building a screen from scratch** when one fits
+  (`dashboard-01`, `login-02`, and the rest at ui.shadcn.com/blocks) — adapt
+  its structure to this app's actual routes, data and auth rather than
+  copying its demo content verbatim. `components/app-sidebar.tsx` is the
+  reference: real shadcn `Sidebar` primitives, our own nav data and session.
+- **Installing overwrites some `components/ui/*` files.** Run
+  `pnpm dlx shadcn@latest diff <name>` first if a file the app depends on
+  heavily (`button`, `card`, `table`, `badge`, …) is flagged, and check for
+  project-specific extensions before accepting the overwrite — the CLI has no
+  idea `badge.tsx` carries `ratingBadgeVariant`.
+- **The `cn` helper is the `cn` npm package** (`lib/utils.ts` re-exports it),
+  not a hand-rolled `clsx`+`tailwind-merge` combo — every generated shadcn
+  file imports `cn` from `"cn"` directly, and `lib/utils.ts` exists only so
+  the rest of the app can keep importing `@/lib/utils` unchanged.
+- **Don't introduce a second component library** to solve something shadcn
+  already covers, and don't leave a shadcn primitive uninstalled-and-hand-
+  copied because pulling in the real thing felt like more setup.
+- This project's brand tokens (colours, radius, sidebar/chart variables) live
+  in `app/globals.css` and every shadcn component already reads them — a
+  rebrand or a new shadcn install never requires touching component code, only
+  those CSS variables.
+
 ## Verifying database-bound work
 
 Unit tests do not cover anything whose correctness lives in a transaction, a

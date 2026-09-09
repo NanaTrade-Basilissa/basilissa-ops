@@ -1,7 +1,3 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   Brain,
   CalendarClock,
@@ -18,9 +14,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureName } from "@/lib/platform/features";
-import { cn } from "@/lib/utils";
 
-type NavItem = {
+/**
+ * Navigation data only — no rendering here. The actual sidebar is
+ * `components/app-sidebar.tsx` (shadcn's Sidebar primitives); this file
+ * stays a plain data module so it can be read by both the sidebar and
+ * `tests/features.test.ts`, which asserts every gated destination carries
+ * its `feature` flag.
+ */
+
+export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
@@ -28,23 +31,23 @@ type NavItem = {
   feature?: FeatureName;
 };
 
-type NavGroup = {
+export type NavGroup = {
   label: string;
   items: readonly NavItem[];
 };
 
+export const DASHBOARD_ITEM: NavItem = { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true };
+
 // TODO(phase-3): filter this list by permission once every page's specific
 // permission is known here. Hiding a link is presentation, not authorisation —
 // the page and its Server Action both check independently.
-const DASHBOARD_ITEM: NavItem = { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true };
-
 /**
  * Grouped by purpose rather than left as one flat list, so the sidebar reads
  * as "what is this system made of" rather than growing sideways forever.
  * Adding a feature means adding one line to the group it belongs to, or a
  * new group — not renumbering anything.
  */
-const NAV_GROUPS: readonly NavGroup[] = [
+export const NAV_GROUPS: readonly NavGroup[] = [
   {
     label: "People",
     items: [
@@ -81,65 +84,3 @@ const NAV_GROUPS: readonly NavGroup[] = [
     ],
   },
 ] as const;
-
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
-  const Icon = item.icon;
-  return (
-    <Link
-      href={item.href}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-        active
-          ? "bg-sidebar-primary text-sidebar-primary-foreground"
-          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-      )}
-    >
-      <Icon className="size-4" />
-      {item.label}
-    </Link>
-  );
-}
-
-/**
- * Feature flags arrive as props rather than being read here.
- *
- * This is a Client Component, and a flag readable in the browser would have to
- * be `NEXT_PUBLIC_`, which ships it to everyone and makes it look like a
- * client concern. The server already knows; it just tells us.
- *
- * Each item is filtered against its OWN flag, not a single hardcoded one — an
- * item's `feature` names which entry of `enabledFeatures` decides its
- * visibility. A second flagged item silently gated on the first flag's state
- * was a latent bug this shape is what prevents.
- */
-export function AdminNav({
-  enabledFeatures,
-}: {
-  enabledFeatures: Partial<Record<FeatureName, boolean>>;
-}) {
-  const pathname = usePathname();
-  const isActive = (item: NavItem) => (item.exact ? pathname === item.href : pathname.startsWith(item.href));
-
-  return (
-    <nav className="flex flex-col gap-4" aria-label="Admin navigation">
-      <NavLink item={DASHBOARD_ITEM} active={isActive(DASHBOARD_ITEM)} />
-
-      {NAV_GROUPS.map((group) => {
-        const items = group.items.filter((item) => !item.feature || enabledFeatures[item.feature]);
-        if (items.length === 0) return null;
-
-        return (
-          <div key={group.label} className="flex flex-col gap-1">
-            <h3 className="px-3 text-xs font-semibold tracking-wide text-sidebar-foreground/60 uppercase">
-              {group.label}
-            </h3>
-            {items.map((item) => (
-              <NavLink key={item.href} item={item} active={isActive(item)} />
-            ))}
-          </div>
-        );
-      })}
-    </nav>
-  );
-}

@@ -6,6 +6,17 @@ import type { AptitudeTestStatus } from "@prisma/client";
 import type { AptitudeFormState } from "@/lib/modules/aptitude/actions";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export function AptitudeTestLifecycle({
   status,
@@ -49,23 +60,36 @@ export function AptitudeTestLifecycle({
           </form>
         )}
 
-        <form
-          action={deleteTest}
-          onSubmit={(event) => {
-            if (
-              !window.confirm(
-                "Delete this aptitude test? It stays recoverable behind the scenes, but disappears from every list here.",
-              )
-            ) {
-              event.preventDefault();
-            }
-          }}
-        >
-          <Button type="submit" size="sm" variant="destructive" disabled={deleting}>
-            {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+        {/* The submit button lives in the dialog's footer, portalled outside
+            this form in the DOM — `form="delete-aptitude-test-form"` is what
+            still ties it to this action despite that. */}
+        <form id="delete-aptitude-test-form" action={deleteTest} />
+        <AlertDialog>
+          <AlertDialogTrigger render={<Button size="sm" variant="destructive" />}>
+            <Trash2 className="size-4" />
             Delete
-          </Button>
-        </form>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this aptitude test?</AlertDialogTitle>
+              <AlertDialogDescription>
+                It stays recoverable behind the scenes, but disappears from every list here.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                type="submit"
+                form="delete-aptitude-test-form"
+                variant="destructive"
+                disabled={deleting}
+              >
+                {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
