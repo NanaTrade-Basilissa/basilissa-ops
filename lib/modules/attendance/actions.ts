@@ -5,11 +5,14 @@ import { requireFeature } from "@/lib/platform/features-guard";
 import {
   CorrectionOperation,
   ProviderType,
+  ScheduleExceptionType,
   type CorrectionReason,
   type ManualEntryReason,
 } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { auditActorFrom, requirePermission } from "@/lib/modules/identity/server";
+import { recordAudit } from "@/lib/platform/audit";
+import { settleDay } from "./settle";
 import { applyCorrection } from "./correction-service";
 import { ingestEvent } from "./ingest";
 import { checkManualEntry } from "./manual";
@@ -245,4 +248,141 @@ export async function correctAttendance(
       ? `Applied. Needs a second approver because it ${result.approvalReasons.join(" and ")}.`
       : "Applied.",
   };
+}
+
+export type ScheduleOverrideState = (NonNullable<FormState> & { saved?: string }) | undefined;
+
+/**
+ * Creates or updates a single-day schedule override (DAY_OFF, SHIFT_CHANGE, EXTRA_SHIFT).
+ */
+export async function saveScheduleOverride(
+  _prevState: ScheduleOverrideState,
+  formData: FormData,
+): Promise<ScheduleOverrideState> {
+  requireFeature("attendance");
+
+  const employeeId = String(formData.get("employeeId") ?? "");
+  const branchId = String(formData.get("branchId") ?? "");
+  const dateKey = String(formData.get("dateKey") ?? "");
+  const type = String(formData.get("type") ?? "") as ScheduleExceptionType;
+  const shiftId = String(formData.get("shiftId") ?? "") || null;
+  const reason = String(formData.get("reason") ?? "").trim();
+
+  if (!employeeId || !branchId || !dateKey || !type) {
+    return { error: "Missing required fields." };
+  }
+
+  if ((type === ScheduleExceptionType.SHIFT_CHANGE || type === ScheduleExceptionType.EXTRA_SHIFT) && !shiftId) {
+    return { error: "Please select a shift.", fieldErrors: { shiftId: "Required" } };
+  }
+
+  if (!reason) {
+    return { error: "Please provide a reason for this schedule override.", fieldErrors: { reason: "Required" } };
+  }
+
+  const actor = await requirePermission("schedule:write", { branchId });
+
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.scheduleException.findUnique({
+      where: { employeeId_date: { employeeId, date } },
+    });
+
+    const override = await tx.scheduleException.upsert({
+      where: { employeeId_date: { employeeId, date } },
+      create: {
+        employeeId,
+        date,
+        type,
+        shiftId: type === ScheduleExceptionType.DAY_OFF ? null : shiftId,
+        reason,
+        createdBy: actor.userId,
+      },
+      update: {
+        type,
+        shiftId: type === ScheduleExceptionType.DAY_OFF ? null : shiftId,
+        reason,
+      },
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: existing ? "schedule.override_updated" : "schedule.override_created",
+        entityType: "ScheduleException",
+        entityId: override.id,
+        before: existing ? { type: existing.type, shiftId: existing.shiftId, reason: existing.reason } : undefined,
+        after: { type, shiftId, reason, employeeId, date: dateKey },
+      },
+      tx,
+    );
+
+    // Resettle attendance day for this date if punches exist
+    try {
+      await settleDay(employeeId, branchId, dateKey, tx);
+    } catch {
+      // If day does not settle (e.g. outside policy window), continue
+    }
+  });
+
+  revalidatePath("/admin/shifts");
+  revalidatePath("/admin/attendance");
+  revalidatePath(`/admin/attendance/${employeeId}/${dateKey}`);
+
+  return { saved: "Schedule override saved." };
+}
+
+/**
+ * Deletes a single-day schedule override, reverting employee to recurring schedule.
+ */
+export async function clearScheduleOverride(
+  _prevState: ScheduleOverrideState,
+  formData: FormData,
+): Promise<ScheduleOverrideState> {
+  requireFeature("attendance");
+
+  const exceptionId = String(formData.get("exceptionId") ?? "");
+  const branchId = String(formData.get("branchId") ?? "");
+
+  if (!exceptionId || !branchId) {
+    return { error: "Missing required fields." };
+  }
+
+  const actor = await requirePermission("schedule:write", { branchId });
+
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.scheduleException.findUnique({
+      where: { id: exceptionId },
+    });
+    if (!existing) return;
+
+    await tx.scheduleException.delete({
+      where: { id: exceptionId },
+    });
+
+    const dateKey = existing.date.toISOString().slice(0, 10);
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "schedule.override_cleared",
+        entityType: "ScheduleException",
+        entityId: exceptionId,
+        before: { type: existing.type, shiftId: existing.shiftId, reason: existing.reason },
+      },
+      tx,
+    );
+
+    try {
+      await settleDay(existing.employeeId, branchId, dateKey, tx);
+    } catch {
+      // Continue
+    }
+  });
+
+  revalidatePath("/admin/shifts");
+  revalidatePath("/admin/attendance");
+
+  return { saved: "Override cleared. Employee reverted to standard rota." };
 }

@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
-import { auditActorFrom, can, currentBranchScope, requireBranchPermission, requirePermission } from "@/lib/modules/identity/server";
+import {
+  auditActorFrom,
+  can,
+  requireAnyBranchPermission,
+  requireAuth,
+  requireBranchPermission,
+  requirePermission,
+} from "@/lib/modules/identity/server";
 import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { isFeatureEnabled } from "@/lib/platform/features";
@@ -510,7 +517,22 @@ export async function assignShift(
   // Scheduling travels with attendance, not with the employee record.
   requireFeature("attendance");
 
-  const actor = await requirePermission("schedule:write");
+  const actor = await requireAuth();
+
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { branchAssignments: { where: { validTo: null }, select: { branchId: true } } },
+  });
+  if (!employee) return { error: "Employee not found." };
+
+  const employeeBranchIds = employee.branchAssignments.map((b) => b.branchId);
+  const isAuthorized =
+    can(actor, "schedule:write") ||
+    employeeBranchIds.some((branchId) => can(actor, "schedule:write", { branchId }));
+
+  if (!isAuthorized) {
+    return { error: "You do not have permission to manage schedules for this employee." };
+  }
 
   const parsed = shiftAssignmentSchema.safeParse({
     shiftId: formData.get("shiftId"),
@@ -549,6 +571,7 @@ export async function assignShift(
   });
 
   revalidatePath(`/admin/employees/${employeeId}`);
+  revalidatePath("/admin/shifts");
   return { success: true };
 }
 
@@ -559,16 +582,28 @@ export async function assignShift(
  * itself makes.
  */
 export async function getEmployeeDetailAction(employeeId: string) {
-  const actor = await requirePermission("employee:read");
-  const scope = await currentBranchScope("employee:read");
+  const { actor, scope } = await requireAnyBranchPermission("employee:read");
   const attendanceEnabled = isFeatureEnabled("attendance");
 
   const employee = await getEmployee(employeeId, scope);
   if (!employee) return null;
 
+  const branchWhere =
+    scope.kind === "branches"
+      ? { id: { in: scope.branchIds }, isActive: true }
+      : { isActive: true };
+
+  const employeeBranchIds = employee.branchAssignments.map((b) => b.branch.id);
+  const canWrite =
+    can(actor, "employee:write") ||
+    employeeBranchIds.some((branchId) => can(actor, "employee:write", { branchId }));
+  const canSchedule =
+    can(actor, "schedule:write") ||
+    employeeBranchIds.some((branchId) => can(actor, "schedule:write", { branchId }));
+
   const [branches, shifts, shiftAssignments] = await Promise.all([
-    prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    listShifts(),
+    prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    listShifts(scope),
     listShiftAssignments(employee.id),
   ]);
 
@@ -577,8 +612,8 @@ export async function getEmployeeDetailAction(employeeId: string) {
     branches,
     shifts,
     shiftAssignments,
-    canWrite: can(actor, "employee:write"),
-    canSchedule: can(actor, "schedule:write"),
+    canWrite,
+    canSchedule,
     attendanceEnabled,
   };
 }

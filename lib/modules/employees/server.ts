@@ -3,3 +3,4 @@
  * convention documented in `lib/modules/feedback/server.ts`.
  */
 export * from "./repository";
+export * from "./schedule-repository";

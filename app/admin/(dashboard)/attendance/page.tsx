@@ -6,14 +6,20 @@ import {
   employeeLookup,
   listAttendanceDays,
   summariseDay,
+  getTimesheetSummary,
+  getLiveFloorStatus,
 } from "@/lib/modules/attendance/server";
 import { listEmployees } from "@/lib/modules/employees/server";
 import { prisma } from "@/lib/platform/prisma";
 import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { StatCard } from "@/components/admin/stat-card";
+import { AttendanceTabs, type AttendanceView } from "@/components/admin/attendance-tabs";
 import { AttendanceFilters } from "@/components/admin/attendance-filters";
 import { AttendanceTable } from "@/components/admin/attendance-table";
+import { LiveFloorBoard } from "@/components/admin/live-floor-board";
+import { TimesheetFilters } from "@/components/admin/timesheet-filters";
+import { TimesheetsTable } from "@/components/admin/timesheets-table";
 import { ManualPunchDialog, type EmployeeOption } from "@/components/admin/manual-punch-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
@@ -48,28 +54,39 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
   const { actor, scope } = await requireAnyBranchPermission("attendance:read");
   const raw = await searchParams;
 
-  const date = first(raw.date) ?? dateKeyInZone(new Date(), DISPLAY_TIMEZONE);
+  const view = (first(raw.view) as AttendanceView) || "daily";
+  const now = new Date();
+  const todayKey = dateKeyInZone(now, DISPLAY_TIMEZONE);
+  const date = first(raw.date) ?? todayKey;
   const branchId = first(raw.branchId);
   const exceptionsOnly = first(raw.exceptions) === "1";
+  const search = first(raw.search);
+
+  // Default timesheet range: Monday of this week to today
+  const dayOfWeek = now.getDay();
+  const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMon);
+  const defaultStartDate = dateKeyInZone(monday, DISPLAY_TIMEZONE);
+  const defaultEndDate = todayKey;
+
+  const startDate = first(raw.startDate) ?? defaultStartDate;
+  const endDate = first(raw.endDate) ?? defaultEndDate;
 
   const canManualEntry =
     can(actor, "attendance:manual_entry") ||
     (scope.kind === "branches" &&
       scope.branchIds.some((id) => can(actor, "attendance:manual_entry", { branchId: id })));
 
-  const [days, summary, branches, activeEmployees] = await Promise.all([
-    listAttendanceDays(scope, { date, branchId, exceptionsOnly }),
-    summariseDay(scope, { date, branchId }),
-    prisma.branch.findMany({
-      where: scope.kind === "branches" ? { id: { in: scope.branchIds } } : {},
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-    canManualEntry ? listEmployees(scope, { status: "ACTIVE" }) : Promise.resolve([]),
-  ]);
+  const branches = await prisma.branch.findMany({
+    where: scope.kind === "branches" ? { id: { in: scope.branchIds } } : {},
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
 
-  const employees = await employeeLookup(days.map((day) => day.employeeId));
-  const branchName = new Map(branches.map((b) => [b.id, b.name]));
+  const activeEmployees = canManualEntry
+    ? await listEmployees(scope, { status: "ACTIVE" })
+    : [];
 
   const employeeOptions: EmployeeOption[] = activeEmployees.map((e) => ({
     id: e.id,
@@ -82,14 +99,18 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
     })),
   }));
 
+  // Resolve active branch for single-branch views (like Live Floor)
+  const defaultBranchId = branchId || (branches.length > 0 ? branches[0].id : undefined);
+
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Attendance</h1>
+          <h1 className="font-heading text-2xl font-bold text-foreground">Attendance Hub</h1>
           <p className="text-sm text-muted-foreground">
-            {scope.kind === "branches" ? "Your branches." : "Every branch."} Days needing a
-            person are listed first.
+            {scope.kind === "branches" ? "Your branches." : "Every branch."} Daily logs, live
+            roster, and payroll timesheets.
           </p>
         </div>
         {canManualEntry && (
@@ -97,11 +118,72 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
             employees={employeeOptions}
             branches={branches}
             defaultDate={date}
-            defaultBranchId={branchId || (branches.length === 1 ? branches[0].id : undefined)}
+            defaultBranchId={defaultBranchId}
           />
         )}
       </div>
 
+      {/* Tabs */}
+      <AttendanceTabs activeView={view} branchId={branchId} date={date} />
+
+      {/* View 1: Daily Roster */}
+      {view === "daily" && (
+        <DailyRosterView
+          scope={scope}
+          date={date}
+          branchId={branchId}
+          exceptionsOnly={exceptionsOnly}
+          branches={branches}
+        />
+      )}
+
+      {/* View 2: Live Floor Board */}
+      {view === "live" && (
+        <LiveFloorView
+          scope={scope}
+          branches={branches}
+          branchId={defaultBranchId}
+        />
+      )}
+
+      {/* View 3: Timesheets & Payroll */}
+      {view === "timesheets" && (
+        <TimesheetsView
+          scope={scope}
+          branches={branches}
+          startDate={startDate}
+          endDate={endDate}
+          branchId={branchId}
+          search={search}
+        />
+      )}
+    </div>
+  );
+}
+
+async function DailyRosterView({
+  scope,
+  date,
+  branchId,
+  exceptionsOnly,
+  branches,
+}: {
+  scope: Parameters<typeof listAttendanceDays>[0];
+  date: string;
+  branchId?: string;
+  exceptionsOnly: boolean;
+  branches: { id: string; name: string }[];
+}) {
+  const [days, summary] = await Promise.all([
+    listAttendanceDays(scope, { date, branchId, exceptionsOnly }),
+    summariseDay(scope, { date, branchId }),
+  ]);
+
+  const employees = await employeeLookup(days.map((day) => day.employeeId));
+  const branchName = new Map(branches.map((b) => [b.id, b.name]));
+
+  return (
+    <div className="space-y-6">
       {summary.needingReview > 0 && !exceptionsOnly && (
         <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200">
           <TriangleAlert className="size-4 text-amber-600 dark:text-amber-400" />
@@ -113,7 +195,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
               (missing clock-outs, late arrivals, or anomalies).
             </span>
             <Link
-              href={`/admin/attendance?date=${date}${branchId ? `&branchId=${branchId}` : ""}&exceptions=1`}
+              href={`/admin/attendance?view=daily&date=${date}${branchId ? `&branchId=${branchId}` : ""}&exceptions=1`}
               className="font-medium underline underline-offset-4 hover:text-foreground"
             >
               Filter to days needing attention &rarr;
@@ -169,6 +251,71 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
           })}
         />
       )}
+    </div>
+  );
+}
+
+async function LiveFloorView({
+  scope,
+  branches,
+  branchId,
+}: {
+  scope: Parameters<typeof getLiveFloorStatus>[0];
+  branches: { id: string; name: string }[];
+  branchId?: string;
+}) {
+  if (!branchId) {
+    return (
+      <Empty className="border">
+        <EmptyDescription>No branches available for live floor monitoring.</EmptyDescription>
+      </Empty>
+    );
+  }
+
+  const liveData = await getLiveFloorStatus(scope, branchId);
+  if (!liveData) {
+    return (
+      <Empty className="border">
+        <EmptyDescription>Branch not accessible or not found.</EmptyDescription>
+      </Empty>
+    );
+  }
+
+  return <LiveFloorBoard data={liveData} branches={branches} />;
+}
+
+async function TimesheetsView({
+  scope,
+  branches,
+  startDate,
+  endDate,
+  branchId,
+  search,
+}: {
+  scope: Parameters<typeof getTimesheetSummary>[0];
+  branches: { id: string; name: string }[];
+  startDate: string;
+  endDate: string;
+  branchId?: string;
+  search?: string;
+}) {
+  const timesheetData = await getTimesheetSummary(scope, {
+    startDate,
+    endDate,
+    branchId,
+    search,
+  });
+
+  return (
+    <div className="space-y-6">
+      <TimesheetFilters
+        branches={branches}
+        startDate={startDate}
+        endDate={endDate}
+        branchId={branchId}
+        search={search}
+      />
+      <TimesheetsTable data={timesheetData} />
     </div>
   );
 }
