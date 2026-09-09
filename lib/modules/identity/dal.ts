@@ -102,7 +102,7 @@ export async function requireAdminShell(): Promise<Actor> {
  * admin area entirely. `requireAdminShell` exists to keep that from
  * reoccurring, and `tests/mfa-enforcement.test.ts` pins it.
  */
-async function requireMfaIfNeeded(actor: Actor): Promise<void> {
+export async function requireMfaIfNeeded(actor: Actor): Promise<void> {
   const needsMfa = actor.assignments.some((assignment) =>
     MFA_REQUIRED_ROLES.includes(assignment.role),
   );

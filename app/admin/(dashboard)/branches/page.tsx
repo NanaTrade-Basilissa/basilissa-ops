@@ -5,7 +5,7 @@ import { createBranch } from "@/lib/modules/branches/actions";
 import { Button } from "@/components/ui/button";
 import { BranchDialog } from "@/components/admin/branch-dialog";
 import { BranchesTable } from "@/components/admin/branches-table";
-import { requireAnyBranchPermission } from "@/lib/modules/identity/server";
+import { requireAnyBranchPermission, can } from "@/lib/modules/identity/server";
 import { branchWhere } from "@/lib/modules/identity/authorization";
 
 export const metadata: Metadata = { title: "Branches" };
@@ -15,10 +15,11 @@ export default async function BranchesPage() {
   // `branchWhere` keys on `branchId`, which is right for rows that belong to a
   // branch. Branch rows ARE the branch, so the same scope has to be applied to
   // `id` instead.
-  const { scope } = await requireAnyBranchPermission("branch:read");
+  const { actor, scope } = await requireAnyBranchPermission("branch:read");
   const scoped = branchWhere(scope);
   const branchFilter =
     scope.kind === "branches" ? { id: { in: scope.branchIds } } : undefined;
+  const canCreate = can(actor, "branch:write");
 
   const [branches, avgGroups] = scoped === null
     ? [[], []]
@@ -32,6 +33,10 @@ export default async function BranchesPage() {
             slug: true,
             location: true,
             isActive: true,
+            latitude: true,
+            longitude: true,
+            geofenceRadiusMeters: true,
+            geofenceEnabled: true,
             _count: { select: { employees: { where: { validTo: null } } } },
           },
         }),
@@ -51,17 +56,19 @@ export default async function BranchesPage() {
           <h1 className="font-heading text-2xl font-bold text-foreground">Branches</h1>
           <p className="text-sm text-muted-foreground">Manage locations and their feedback QR codes.</p>
         </div>
-        <BranchDialog
-          action={createBranch}
-          submitLabel="Create branch"
-          title="Create a branch"
-          description="New branches start out active and accept feedback immediately."
-          trigger={
-            <Button>
-              <Plus className="size-4" /> New branch
-            </Button>
-          }
-        />
+        {canCreate && (
+          <BranchDialog
+            action={createBranch}
+            submitLabel="Create branch"
+            title="Create a branch"
+            description="New branches start out active and accept feedback immediately."
+            trigger={
+              <Button>
+                <Plus className="size-4" /> New branch
+              </Button>
+            }
+          />
+        )}
       </div>
 
       <BranchesTable
@@ -71,6 +78,11 @@ export default async function BranchesPage() {
           slug: branch.slug,
           location: branch.location,
           isActive: branch.isActive,
+          latitude: branch.latitude,
+          longitude: branch.longitude,
+          geofenceRadiusMeters: branch.geofenceRadiusMeters,
+          geofenceEnabled: branch.geofenceEnabled,
+          canWrite: can(actor, "branch:write", { branchId: branch.id }),
           _count: branch._count,
           avgScore: avgByBranch.get(branch.id) ?? null,
         }))}

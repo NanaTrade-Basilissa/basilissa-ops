@@ -75,3 +75,37 @@ export type FormattedEmailJob = {
   completedAt: Date | null;
   payload: Record<string, unknown>;
 };
+
+export type AuditLogFilters = {
+  search?: string;
+  action?: string;
+  entityType?: string;
+  actorEmail?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type AuditLogItem = {
+  id: string;
+  occurredAt: Date;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  actorRole: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  before: unknown;
+  after: unknown;
+  metadata: unknown;
+};
+
+export type AuditLogSearchResult = {
+  items: AuditLogItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+

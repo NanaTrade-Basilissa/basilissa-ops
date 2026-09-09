@@ -15,7 +15,10 @@ import {
 } from "@/components/admin/assignment-forms";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatAccraDate } from "@/lib/platform/date";
+import type { EmployeeAttendanceHistoryData } from "@/lib/modules/attendance/queries";
+import { EmployeeAttendanceTab } from "@/components/admin/employee-attendance-tab";
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -36,6 +39,7 @@ export function EmployeeDetailContent({
   canWrite,
   canSchedule,
   attendanceEnabled,
+  attendanceHistory,
   onMutated,
 }: {
   employee: Employee;
@@ -51,10 +55,12 @@ export function EmployeeDetailContent({
   canWrite: boolean;
   canSchedule: boolean;
   attendanceEnabled: boolean;
+  attendanceHistory?: EmployeeAttendanceHistoryData | null;
   onMutated?: () => void;
 }) {
-  return (
+  const profileContent = (
     <div className="space-y-6">
+
       <div className="flex flex-wrap items-baseline gap-3">
         <h2 className="font-heading text-2xl font-bold text-foreground">
           {employee.firstName} {employee.lastName}
@@ -195,4 +201,31 @@ export function EmployeeDetailContent({
       )}
     </div>
   );
+
+  if (!attendanceEnabled) {
+    return profileContent;
+  }
+
+  return (
+    <Tabs defaultValue="profile" className="space-y-6">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="profile">Profile & Schedule</TabsTrigger>
+        <TabsTrigger value="attendance" className="flex items-center gap-1.5">
+          <span>Attendance & History</span>
+          {attendanceHistory && attendanceHistory.summary.exceptionDaysCount > 0 && (
+            <Badge variant="destructive" className="h-4 px-1.5 text-[10px] leading-none">
+              {attendanceHistory.summary.exceptionDaysCount}
+            </Badge>
+          )}
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="profile">{profileContent}</TabsContent>
+
+      <TabsContent value="attendance" className="pt-2">
+        <EmployeeAttendanceTab employeeId={employee.id} history={attendanceHistory} />
+      </TabsContent>
+    </Tabs>
+  );
 }
+

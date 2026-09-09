@@ -22,7 +22,7 @@ export function BranchDialog({
   trigger,
 }: {
   action: (prevState: BranchFormState, formData: FormData) => Promise<BranchFormState>;
-  defaultValues?: { name: string; slug: string; location: string; isActive: boolean };
+  defaultValues?: React.ComponentProps<typeof BranchForm>["defaultValues"];
   submitLabel: string;
   title: string;
   description: string;

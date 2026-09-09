@@ -63,8 +63,9 @@ export function UserDetailSheet({
       }}
     >
       <SheetTrigger render={trigger} />
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl lg:max-w-2xl">
+      <SheetContent className="w-full data-[side=right]:w-full sm:max-w-full data-[side=right]:sm:max-w-full lg:w-1/3 data-[side=right]:lg:w-1/3 lg:max-w-none data-[side=right]:lg:max-w-none overflow-y-auto">
         <SheetHeader>
+
           <SheetTitle>User</SheetTitle>
         </SheetHeader>
         <div className="px-4 pb-4">

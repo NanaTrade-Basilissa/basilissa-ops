@@ -68,6 +68,13 @@ export async function autoCloseStaleDays(
     }
 
     const policy = await resolvePolicy(day.branchId, day.scheduledEnd!);
+
+    // If auto-close is disabled in policy (< 0), skip closing
+    if (policy.autoCloseGraceMinutes < 0) {
+      skipped += 1;
+      continue;
+    }
+
     const closeAfter = day.scheduledEnd!.getTime() + policy.autoCloseGraceMinutes * 60_000;
 
     // Still inside the grace window — someone may yet clock out.

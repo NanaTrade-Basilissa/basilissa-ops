@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, Loader2, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { recordManualAttendanceDirect, type AttendanceActionState } from "@/lib/modules/attendance/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,9 +82,16 @@ export function ManualPunchDialog({
   // Refresh router on success
   useEffect(() => {
     if (state?.saved) {
+      toast.success(state.saved);
       router.refresh();
+      const timer = setTimeout(() => {
+        setOpen(false);
+      }, 0);
+      return () => clearTimeout(timer);
+    } else if (state?.error) {
+      toast.error(state.error);
     }
-  }, [state?.saved, router]);
+  }, [state, router]);
 
   // Reset on open
   function handleOpenChange(nextOpen: boolean) {

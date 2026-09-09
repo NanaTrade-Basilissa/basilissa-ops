@@ -1,13 +1,23 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, PenLine, Plus } from "lucide-react";
+import { toast } from "sonner";
 import type { AttendanceActionState } from "@/lib/modules/attendance/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 type Action = (prev: AttendanceActionState, formData: FormData) => Promise<AttendanceActionState>;
 
@@ -48,12 +58,75 @@ function Result({ state }: { state: AttendanceActionState }) {
   return null;
 }
 
-export function ManualEntryForm({ action, defaultDate }: { action: Action; defaultDate: string }) {
+export function ManualEntryDialog({
+  action,
+  defaultDate,
+  employeeName,
+  trigger,
+}: {
+  action: Action;
+  defaultDate: string;
+  employeeName: string;
+  trigger?: React.ReactElement;
+}) {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          trigger ?? (
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Plus className="size-4" />
+              Record punch by hand
+            </Button>
+          )
+        }
+      />
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Record punch by hand</DialogTitle>
+          <DialogDescription>
+            Record an unverified punch for {employeeName}. This is reason-coded and logged in the branch audit trail.
+          </DialogDescription>
+        </DialogHeader>
+        <ManualEntryForm
+          action={action}
+          defaultDate={defaultDate}
+          onSuccess={() => {
+            setOpen(false);
+            router.refresh();
+          }}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ManualEntryForm({
+  action,
+  defaultDate,
+  onSuccess,
+}: {
+  action: Action;
+  defaultDate: string;
+  onSuccess?: () => void;
+}) {
   const [state, formAction, isPending] = useActionState<AttendanceActionState, FormData>(
     action,
     undefined,
   );
   const [reason, setReason] = useState<string>("DEVICE_OFFLINE");
+
+  useEffect(() => {
+    if (state?.saved) {
+      toast.success(state.saved);
+      onSuccess?.();
+    } else if (state?.error) {
+      toast.error(state.error);
+    }
+  }, [state, onSuccess]);
 
   return (
     <form action={formAction} className="space-y-4">

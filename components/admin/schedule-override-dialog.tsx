@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, CheckCircle2, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { ScheduleExceptionType } from "@prisma/client";
 import {
   saveScheduleOverride,
@@ -71,13 +72,16 @@ function ScheduleOverrideForm({
 
   useEffect(() => {
     if (saveState?.saved || clearState?.saved) {
+      toast.success(saveState?.saved || clearState?.saved);
       router.refresh();
       const timer = setTimeout(() => {
         onClose();
-      }, 600);
+      }, 500);
       return () => clearTimeout(timer);
+    } else if (saveState?.error || clearState?.error) {
+      toast.error(saveState?.error || clearState?.error);
     }
-  }, [saveState?.saved, clearState?.saved, router, onClose]);
+  }, [saveState, clearState, router, onClose]);
 
   const isPending = isSaving || isClearing;
 

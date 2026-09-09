@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { CheckCircle2, Copy, Loader2, TriangleAlert, UserPlus } from "lucide-react";
+import { toast } from "sonner";
 import type { CreateUserState } from "@/lib/modules/identity/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,14 @@ export function CreateUserForm({
     undefined,
   );
   const errors = state?.fieldErrors ?? {};
+
+  useEffect(() => {
+    if (state?.created) {
+      toast.success(`Account created for ${state.created.name}`);
+    } else if (state?.error) {
+      toast.error(state.error);
+    }
+  }, [state]);
 
   if (state?.created) {
     return (
@@ -62,7 +71,10 @@ export function CreateUserForm({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => navigator.clipboard.writeText(state.inviteUrl!)}
+              onClick={() => {
+                navigator.clipboard.writeText(state.inviteUrl!);
+                toast.success("Invite link copied to clipboard");
+              }}
             >
               <Copy className="size-4" /> Copy link
             </Button>

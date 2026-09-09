@@ -23,8 +23,11 @@ import {
 import { requireFeature } from "@/lib/platform/features-guard";
 import { branchSpecBySlug, parseEmployeeWorkbook, resolveImportRows, type ResolvedImportRow } from "./import";
 import { getEmployee, listShiftAssignments, listShifts } from "./repository";
+import { getEmployeeAttendanceHistory } from "@/lib/modules/attendance/server";
 
 export type { ResolvedImportRow } from "./import";
+
+
 
 const EMPLOYEE_FIELDS = [
   "employeeCode",
@@ -601,10 +604,16 @@ export async function getEmployeeDetailAction(employeeId: string) {
     can(actor, "schedule:write") ||
     employeeBranchIds.some((branchId) => can(actor, "schedule:write", { branchId }));
 
-  const [branches, shifts, shiftAssignments] = await Promise.all([
+  const canReadAttendance =
+    attendanceEnabled &&
+    (can(actor, "attendance:read") ||
+      employeeBranchIds.some((branchId) => can(actor, "attendance:read", { branchId })));
+
+  const [branches, shifts, shiftAssignments, attendanceHistory] = await Promise.all([
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     listShifts(scope),
     listShiftAssignments(employee.id),
+    canReadAttendance ? getEmployeeAttendanceHistory(scope, employeeId) : null,
   ]);
 
   return {
@@ -615,5 +624,7 @@ export async function getEmployeeDetailAction(employeeId: string) {
     canWrite,
     canSchedule,
     attendanceEnabled,
+    attendanceHistory,
   };
 }
+

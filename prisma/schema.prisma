@@ -915,6 +915,9 @@ model AttendancePolicy {
   dedupWindowMinutes    Int @default(5)
   /// How far back a manager may record attendance manually.
   maxManualEntryDays    Int @default(7)
+  /// When true, branch managers may authorize payable overtime for their branch.
+  /// When false (the default), only area managers and administrators may authorize it.
+  branchManagerCanAuthorizeOvertime Boolean @default(false)
 
   /// True until someone with authority confirms these against real employment
   /// terms. Surfaced in the UI so a placeholder is never mistaken for a

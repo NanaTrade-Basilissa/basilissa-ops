@@ -32,6 +32,7 @@ const POLICY_SELECT = {
   autoCloseGraceMinutes: true,
   dedupWindowMinutes: true,
   maxManualEntryDays: true,
+  branchManagerCanAuthorizeOvertime: true,
   isProvisional: true,
 } satisfies Prisma.AttendancePolicySelect;
 

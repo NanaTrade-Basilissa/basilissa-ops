@@ -697,3 +697,141 @@ export async function getLiveFloorStatus(
   };
 }
 
+export type EmployeeAttendanceDayRow = {
+  id: string;
+  dateKey: string;
+  branchId: string;
+  branchName: string;
+  status: "PENDING" | "SETTLED" | "NEEDS_REVIEW";
+  scheduledStart: Date | null;
+  scheduledEnd: Date | null;
+  scheduledMinutes: number;
+  actualIn: Date | null;
+  actualOut: Date | null;
+  netWorkedMinutes: number;
+  regularMinutes: number;
+  overtimeMinutes: number;
+  payableOvertimeMinutes: number;
+  lateMinutes: number;
+  earlyDepartureMinutes: number;
+  lowestIdentityAssurance: string | null;
+  flags: string[];
+  settledAt: Date | null;
+};
+
+export type EmployeeAttendanceSummary = {
+  totalRecordedDays: number;
+  daysWorked: number;
+  totalNetMinutes: number;
+  totalRegularMinutes: number;
+  totalOvertimeMinutes: number;
+  totalPayableOvertimeMinutes: number;
+  totalLateMinutes: number;
+  lateDaysCount: number;
+  exceptionDaysCount: number;
+  onTimeRate: number;
+};
+
+export type EmployeeAttendanceHistoryData = {
+  summary: EmployeeAttendanceSummary;
+  days: EmployeeAttendanceDayRow[];
+};
+
+/**
+ * Returns an employee's recent attendance days and aggregated metrics, strictly scoped by branch.
+ */
+export async function getEmployeeAttendanceHistory(
+  scope: BranchScope,
+  employeeId: string,
+  limit = 60,
+): Promise<EmployeeAttendanceHistoryData | null> {
+  const scoped = scopeWhere(scope);
+  if (scoped === null) return null;
+
+  const whereClause: Prisma.AttendanceDayWhereInput = {
+    AND: [
+      scoped,
+      { employeeId },
+    ],
+  };
+
+  const days = await prisma.attendanceDay.findMany({
+    where: whereClause,
+    orderBy: { workDate: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      branchId: true,
+      workDate: true,
+      status: true,
+      scheduledStart: true,
+      scheduledEnd: true,
+      scheduledMinutes: true,
+      actualIn: true,
+      actualOut: true,
+      netWorkedMinutes: true,
+      regularMinutes: true,
+      overtimeMinutes: true,
+      payableOvertimeMinutes: true,
+      lateMinutes: true,
+      earlyDepartureMinutes: true,
+      lowestIdentityAssurance: true,
+      flags: true,
+      settledAt: true,
+    },
+  });
+
+  const branchIds = [...new Set(days.map((d) => d.branchId))];
+  const branches = await prisma.branch.findMany({
+    where: { id: { in: branchIds } },
+    select: { id: true, name: true },
+  });
+  const branchMap = new Map(branches.map((b) => [b.id, b.name]));
+
+  const rows: EmployeeAttendanceDayRow[] = days.map((day) => ({
+    id: day.id,
+    dateKey: dateKeyInZone(day.workDate, DISPLAY_TIMEZONE),
+    branchId: day.branchId,
+    branchName: branchMap.get(day.branchId) ?? "Unknown Branch",
+    status: day.status,
+    scheduledStart: day.scheduledStart,
+    scheduledEnd: day.scheduledEnd,
+    scheduledMinutes: day.scheduledMinutes,
+    actualIn: day.actualIn,
+    actualOut: day.actualOut,
+    netWorkedMinutes: day.netWorkedMinutes,
+    regularMinutes: day.regularMinutes,
+    overtimeMinutes: day.overtimeMinutes,
+    payableOvertimeMinutes: day.payableOvertimeMinutes,
+    lateMinutes: day.lateMinutes,
+    earlyDepartureMinutes: day.earlyDepartureMinutes,
+    lowestIdentityAssurance: day.lowestIdentityAssurance,
+    flags: day.flags,
+    settledAt: day.settledAt,
+  }));
+
+  const daysWorked = rows.filter((r) => r.actualIn !== null).length;
+  const lateDaysCount = rows.filter((r) => r.lateMinutes > 0).length;
+  const exceptionDaysCount = rows.filter(
+    (r) => r.status === "NEEDS_REVIEW" || r.flags.length > 0,
+  ).length;
+
+  const onTimeRate =
+    daysWorked > 0 ? Math.round(((daysWorked - lateDaysCount) / daysWorked) * 100) : 100;
+
+  const summary: EmployeeAttendanceSummary = {
+    totalRecordedDays: rows.length,
+    daysWorked,
+    totalNetMinutes: rows.reduce((acc, r) => acc + r.netWorkedMinutes, 0),
+    totalRegularMinutes: rows.reduce((acc, r) => acc + r.regularMinutes, 0),
+    totalOvertimeMinutes: rows.reduce((acc, r) => acc + r.overtimeMinutes, 0),
+    totalPayableOvertimeMinutes: rows.reduce((acc, r) => acc + r.payableOvertimeMinutes, 0),
+    totalLateMinutes: rows.reduce((acc, r) => acc + r.lateMinutes, 0),
+    lateDaysCount,
+    exceptionDaysCount,
+    onTimeRate,
+  };
+
+  return { summary, days: rows };
+}
+

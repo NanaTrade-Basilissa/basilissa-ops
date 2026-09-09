@@ -28,8 +28,10 @@ const BASE = {
   autoCloseGraceMinutes: 0,
   dedupWindowMinutes: 5,
   maxManualEntryDays: 7,
+  branchManagerCanAuthorizeOvertime: false,
   isProvisional: true,
 };
+
 
 function row(overrides: Partial<PolicyRow> & Pick<PolicyRow, "id" | "validFrom">): PolicyRow {
   return { branchId: null, validTo: null, ...BASE, ...overrides };

@@ -21,6 +21,7 @@ import { LiveFloorBoard } from "@/components/admin/live-floor-board";
 import { TimesheetFilters } from "@/components/admin/timesheet-filters";
 import { TimesheetsTable } from "@/components/admin/timesheets-table";
 import { ManualPunchDialog, type EmployeeOption } from "@/components/admin/manual-punch-dialog";
+import { AttendanceSweepButton } from "@/components/admin/attendance-sweep-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { requireFeature } from "@/lib/platform/features-guard";
@@ -101,6 +102,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
 
   // Resolve active branch for single-branch views (like Live Floor)
   const defaultBranchId = branchId || (branches.length > 0 ? branches[0].id : undefined);
+  const canWrite = can(actor, "attendance:write");
 
   return (
     <div className="space-y-6">
@@ -113,14 +115,17 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
             roster, and payroll timesheets.
           </p>
         </div>
-        {canManualEntry && (
-          <ManualPunchDialog
-            employees={employeeOptions}
-            branches={branches}
-            defaultDate={date}
-            defaultBranchId={defaultBranchId}
-          />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canWrite && <AttendanceSweepButton />}
+          {canManualEntry && (
+            <ManualPunchDialog
+              employees={employeeOptions}
+              branches={branches}
+              defaultDate={date}
+              defaultBranchId={defaultBranchId}
+            />
+          )}
+        </div>
       </div>
 
       {/* Tabs */}

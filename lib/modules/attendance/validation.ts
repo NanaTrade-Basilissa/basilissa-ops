@@ -22,7 +22,8 @@ export const attendancePolicySchema = z.object({
   /// enough that it should be a conversation, not a setting.
   roundingMinutes: z.coerce.number().int().min(0).max(30),
 
-  autoCloseGraceMinutes: z.coerce.number().int().min(0).max(12 * 60),
+  // -1 disables auto-close entirely. 0 to 720 minutes defines the grace window.
+  autoCloseGraceMinutes: z.coerce.number().int().min(-1).max(12 * 60),
   /// Below a minute the window cannot absorb ordinary clock skew between a
   /// terminal and a phone; above an hour it starts swallowing real second
   /// punches, like a genuine return from a break.
@@ -31,6 +32,7 @@ export const attendancePolicySchema = z.object({
   /// window makes fabricating history easy and hard to notice.
   maxManualEntryDays: z.coerce.number().int().min(0).max(90),
 
+  branchManagerCanAuthorizeOvertime: z.boolean().default(false),
   isProvisional: z.boolean(),
 
   /// Ten characters, matching the threshold corrections use when there is no

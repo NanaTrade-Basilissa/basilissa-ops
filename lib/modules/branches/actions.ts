@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import {
-  requireBranchPermission,
-  requirePermission,
+  requireAuth,
+  requireMfaIfNeeded,
+  can,
   auditActorFrom,
 } from "@/lib/modules/identity/server";
 import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
@@ -14,15 +15,36 @@ import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 
 export type BranchFormState = FormState;
 
-/** The fields worth diffing. `updatedAt` changes on every write and says nothing. */
-const AUDITED_FIELDS = ["name", "slug", "location", "isActive"] as const;
+const AUDITED_FIELDS = [
+  "name",
+  "slug",
+  "location",
+  "isActive",
+  "latitude",
+  "longitude",
+  "geofenceRadiusMeters",
+  "geofenceEnabled",
+] as const;
+
+function parseCoord(val: FormDataEntryValue | null): number | null {
+  if (!val || typeof val !== "string" || !val.trim()) return null;
+  const num = Number(val);
+  return Number.isFinite(num) ? num : null;
+}
 
 function parseBranchForm(formData: FormData) {
+  const rawRadius = formData.get("geofenceRadiusMeters");
+  const radius = rawRadius ? Number(rawRadius) : 150;
+
   return branchInputSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
     location: formData.get("location"),
     isActive: formData.get("isActive") === "on",
+    latitude: parseCoord(formData.get("latitude")),
+    longitude: parseCoord(formData.get("longitude")),
+    geofenceRadiusMeters: Number.isFinite(radius) && radius > 0 ? radius : 150,
+    geofenceEnabled: formData.get("geofenceEnabled") === "on",
   });
 }
 
@@ -30,10 +52,11 @@ export async function createBranch(
   _prevState: BranchFormState,
   formData: FormData,
 ): Promise<BranchFormState> {
-  // No branch named, which `can` treats as requiring a GLOBAL grant. That is
-  // exactly right here: an area manager holds branch:write over the branches
-  // they run, and running a branch is not authority to invent one.
-  const actor = await requirePermission("branch:write");
+  const actor = await requireAuth();
+  await requireMfaIfNeeded(actor);
+  if (!can(actor, "branch:write")) {
+    return { error: "You do not have permission to create branches." };
+  }
 
   const parsed = parseBranchForm(formData);
   if (!parsed.success) {
@@ -73,7 +96,11 @@ export async function updateBranch(
   _prevState: BranchFormState,
   formData: FormData,
 ): Promise<BranchFormState> {
-  const actor = await requireBranchPermission("branch:write", branchId);
+  const actor = await requireAuth();
+  await requireMfaIfNeeded(actor);
+  if (!can(actor, "branch:write", { branchId })) {
+    return { error: "You do not have permission to update this branch." };
+  }
 
   const parsed = parseBranchForm(formData);
   if (!parsed.success) {
@@ -111,9 +138,11 @@ export async function updateBranch(
 
 export async function toggleBranchActive(formData: FormData): Promise<void> {
   const id = String(formData.get("id"));
-  // Read the id before the gate: which branch is being closed decides whether
-  // this caller may close it.
-  const actor = await requireBranchPermission("branch:write", id);
+  const actor = await requireAuth();
+  await requireMfaIfNeeded(actor);
+  if (!can(actor, "branch:write", { branchId: id })) {
+    throw new Error("Unauthorized to modify branch");
+  }
 
   const nextIsActive = formData.get("nextIsActive") === "true";
 

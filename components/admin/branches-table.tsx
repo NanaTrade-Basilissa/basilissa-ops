@@ -7,6 +7,17 @@ import { toggleBranchActive, updateBranch } from "@/lib/modules/branches/actions
 import { BranchDialog } from "@/components/admin/branch-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export type BranchRow = {
   id: string;
@@ -14,6 +25,11 @@ export type BranchRow = {
   slug: string;
   location: string;
   isActive: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  geofenceRadiusMeters?: number;
+  geofenceEnabled?: boolean;
+  canWrite?: boolean;
   _count: { employees: number };
   avgScore: number | null;
 };
@@ -53,30 +69,71 @@ const columns = columnHelper.columns([
         <Link href={`/admin/branches/${row.original.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
           View
         </Link>
-        <BranchDialog
-          action={updateBranch.bind(null, row.original.id)}
-          submitLabel="Save changes"
-          title="Edit branch"
-          description="Changing the slug also changes this branch's QR code link."
-          defaultValues={{
-            name: row.original.name,
-            slug: row.original.slug,
-            location: row.original.location,
-            isActive: row.original.isActive,
-          }}
-          trigger={
-            <Button variant="outline" size="sm">
-              Edit
-            </Button>
-          }
-        />
-        <form action={toggleBranchActive}>
-          <input type="hidden" name="id" value={row.original.id} />
-          <input type="hidden" name="nextIsActive" value={(!row.original.isActive).toString()} />
-          <Button size="sm" variant={row.original.isActive ? "destructive" : "secondary"} type="submit">
-            {row.original.isActive ? "Deactivate" : "Activate"}
-          </Button>
-        </form>
+        {row.original.canWrite !== false && (
+          <>
+            <BranchDialog
+              action={updateBranch.bind(null, row.original.id)}
+              submitLabel="Save changes"
+              title="Edit branch"
+              description="Changing the slug also changes this branch's QR code link."
+              defaultValues={{
+                name: row.original.name,
+                slug: row.original.slug,
+                location: row.original.location,
+                isActive: row.original.isActive,
+                latitude: row.original.latitude,
+                longitude: row.original.longitude,
+                geofenceRadiusMeters: row.original.geofenceRadiusMeters,
+                geofenceEnabled: row.original.geofenceEnabled,
+              }}
+              trigger={
+                <Button variant="outline" size="sm">
+                  Edit
+                </Button>
+              }
+            />
+            {row.original.isActive ? (
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={
+                    <Button size="sm" variant="destructive">
+                      Deactivate
+                    </Button>
+                  }
+                />
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Deactivate {row.original.name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This branch will immediately stop accepting new feedback submissions and will be marked inactive.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <form action={toggleBranchActive}>
+                      <input type="hidden" name="id" value={row.original.id} />
+                      <input type="hidden" name="nextIsActive" value="false" />
+                      <AlertDialogAction
+                        type="submit"
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Deactivate branch
+                      </AlertDialogAction>
+                    </form>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <form action={toggleBranchActive}>
+                <input type="hidden" name="id" value={row.original.id} />
+                <input type="hidden" name="nextIsActive" value="true" />
+                <Button size="sm" variant="secondary" type="submit">
+                  Activate
+                </Button>
+              </form>
+            )}
+          </>
+        )}
       </div>
     ),
   }),

@@ -22,6 +22,7 @@ export type ResolvedPolicy = {
   autoCloseGraceMinutes: number;
   dedupWindowMinutes: number;
   maxManualEntryDays: number;
+  branchManagerCanAuthorizeOvertime: boolean;
   isProvisional: boolean;
   /** Which row this came from, or null when the built-in fallback was used. */
   sourcePolicyId: string | null;
@@ -51,6 +52,7 @@ export const FALLBACK_POLICY: ResolvedPolicy = {
   autoCloseGraceMinutes: 0,
   dedupWindowMinutes: 5,
   maxManualEntryDays: 7,
+  branchManagerCanAuthorizeOvertime: false,
   isProvisional: true,
   sourcePolicyId: null,
   scope: "fallback",
@@ -111,6 +113,7 @@ export function resolveFrom(
     autoCloseGraceMinutes: chosen.autoCloseGraceMinutes,
     dedupWindowMinutes: chosen.dedupWindowMinutes,
     maxManualEntryDays: chosen.maxManualEntryDays,
+    branchManagerCanAuthorizeOvertime: chosen.branchManagerCanAuthorizeOvertime ?? false,
     isProvisional: chosen.isProvisional,
     sourcePolicyId: chosen.id,
     scope: chosen.branchId ? "branch" : "global",
@@ -131,6 +134,7 @@ export const POLICY_FIELDS = [
   "autoCloseGraceMinutes",
   "dedupWindowMinutes",
   "maxManualEntryDays",
+  "branchManagerCanAuthorizeOvertime",
   "isProvisional",
 ] as const satisfies readonly (keyof PolicyInput)[];
 

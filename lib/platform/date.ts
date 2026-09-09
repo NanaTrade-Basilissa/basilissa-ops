@@ -23,6 +23,14 @@ export function formatAccraDate(date: Date): string {
   }).format(date);
 }
 
+export function formatAccraTime(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: DISPLAY_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 /** YYYY-MM-DD for the given instant, as seen in Accra. Used as a stable bucket key. */
 export function accraDateKey(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {

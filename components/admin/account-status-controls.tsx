@@ -2,10 +2,22 @@
 
 import { useActionState, useEffect } from "react";
 import { Loader2, Mail, UserCheck, UserX } from "lucide-react";
+import { toast } from "sonner";
 import type { UserStatus } from "@prisma/client";
 import type { RoleActionState } from "@/lib/modules/identity/actions";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export function AccountStatusControls({
   userId,
@@ -37,11 +49,24 @@ export function AccountStatusControls({
     undefined,
   );
 
-  useEffect(() => {
-    if (statusState?.done) onMutated?.();
-  }, [statusState, onMutated]);
-
   const suspended = status !== "ACTIVE";
+
+  useEffect(() => {
+    if (statusState?.done) {
+      toast.success(suspended ? `Account reactivated for ${name}` : `Account suspended for ${name}`);
+      onMutated?.();
+    } else if (statusState?.error) {
+      toast.error(statusState.error);
+    }
+  }, [statusState, suspended, name, onMutated]);
+
+  useEffect(() => {
+    if (resendState?.done) {
+      toast.success(`Sign-in link sent to ${email}`);
+    } else if (resendState?.error) {
+      toast.error(resendState.error);
+    }
+  }, [resendState, email]);
 
   return (
     <div className="w-full space-y-3">
@@ -74,25 +99,70 @@ export function AccountStatusControls({
           refuses it too — this is the courtesy, that is the boundary.
         */}
         {!isSelf && (
-          <form action={changeStatus}>
-            <input type="hidden" name="userId" value={userId} />
-            <input type="hidden" name="status" value={suspended ? "ACTIVE" : "SUSPENDED"} />
-            <Button
-              type="submit"
-              variant={suspended ? "outline" : "destructive"}
-              size="sm"
-              disabled={changing}
-            >
-              {changing ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : suspended ? (
-                <UserCheck className="size-4" />
-              ) : (
-                <UserX className="size-4" />
-              )}
-              {suspended ? `Reactivate ${name.split(" ")[0]}` : "Suspend account"}
-            </Button>
-          </form>
+          <>
+            {suspended ? (
+              <form action={changeStatus}>
+                <input type="hidden" name="userId" value={userId} />
+                <input type="hidden" name="status" value="ACTIVE" />
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  disabled={changing}
+                >
+                  {changing ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <UserCheck className="size-4" />
+                  )}
+                  Reactivate {name.split(" ")[0]}
+                </Button>
+              </form>
+            ) : (
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={changing}
+                    >
+                      {changing ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <UserX className="size-4" />
+                      )}
+                      Suspend account
+                    </Button>
+                  }
+                />
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Suspend account for {name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Suspending signs them out of every device immediately and blocks sign-in.
+                      Their employment record, attendance, and audit history remain intact.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={changing}>Cancel</AlertDialogCancel>
+                    <form action={changeStatus}>
+                      <input type="hidden" name="userId" value={userId} />
+                      <input type="hidden" name="status" value="SUSPENDED" />
+                      <AlertDialogAction
+                        type="submit"
+                        disabled={changing}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {changing && <Loader2 className="size-4 animate-spin mr-1.5" />}
+                        Suspend account
+                      </AlertDialogAction>
+                    </form>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </>
         )}
       </div>
 

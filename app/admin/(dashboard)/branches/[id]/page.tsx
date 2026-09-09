@@ -20,7 +20,7 @@ import {
 import { RecentSubmissionsTable } from "@/components/admin/recent-submissions-table";
 import { getEnv } from "@/lib/platform/env";
 import { cn } from "@/lib/utils";
-import { requireBranchPermission } from "@/lib/modules/identity/server";
+import { requireBranchPermission, can } from "@/lib/modules/identity/server";
 
 export const metadata: Metadata = { title: "Branch analytics" };
 export const dynamic = "force-dynamic";
@@ -40,7 +40,8 @@ export default async function BranchDetailPage({
   const { id } = await params;
   // Scoped to this branch, matching the actions on the page. A page that
   // renders what its own buttons will refuse is just a slower refusal.
-  await requireBranchPermission("branch:read", id);
+  const actor = await requireBranchPermission("branch:read", id);
+  const canWrite = can(actor, "branch:write", { branchId: id });
 
   const { granularity: rawGranularity } = await searchParams;
   const granularity: TrendGranularity = GRANULARITIES.includes(rawGranularity as TrendGranularity)
@@ -77,32 +78,38 @@ export default async function BranchDetailPage({
             <MapPin className="size-3.5" /> {branch.location}
           </p>
         </div>
-        <div className="flex gap-2">
-          <BranchDialog
-            action={updateBranch.bind(null, branch.id)}
-            submitLabel="Save changes"
-            title="Edit branch"
-            description="Changing the slug also changes this branch's QR code link."
-            defaultValues={{
-              name: branch.name,
-              slug: branch.slug,
-              location: branch.location,
-              isActive: branch.isActive,
-            }}
-            trigger={
-              <Button variant="outline" size="sm">
-                <Pencil className="size-4" /> Edit
+        {canWrite && (
+          <div className="flex gap-2">
+            <BranchDialog
+              action={updateBranch.bind(null, branch.id)}
+              submitLabel="Save changes"
+              title="Edit branch"
+              description="Changing the slug also changes this branch's QR code link."
+              defaultValues={{
+                name: branch.name,
+                slug: branch.slug,
+                location: branch.location,
+                isActive: branch.isActive,
+                latitude: branch.latitude,
+                longitude: branch.longitude,
+                geofenceRadiusMeters: branch.geofenceRadiusMeters,
+                geofenceEnabled: branch.geofenceEnabled,
+              }}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Pencil className="size-4" /> Edit
+                </Button>
+              }
+            />
+            <form action={toggleBranchActive}>
+              <input type="hidden" name="id" value={branch.id} />
+              <input type="hidden" name="nextIsActive" value={(!branch.isActive).toString()} />
+              <Button size="sm" variant={branch.isActive ? "destructive" : "secondary"} type="submit">
+                {branch.isActive ? "Deactivate" : "Activate"}
               </Button>
-            }
-          />
-          <form action={toggleBranchActive}>
-            <input type="hidden" name="id" value={branch.id} />
-            <input type="hidden" name="nextIsActive" value={(!branch.isActive).toString()} />
-            <Button size="sm" variant={branch.isActive ? "destructive" : "secondary"} type="submit">
-              {branch.isActive ? "Deactivate" : "Activate"}
-            </Button>
-          </form>
-        </div>
+            </form>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_260px]">

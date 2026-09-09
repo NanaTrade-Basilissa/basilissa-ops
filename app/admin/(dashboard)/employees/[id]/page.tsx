@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/platform/prisma";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { getEmployee, listShiftAssignments, listShifts } from "@/lib/modules/employees/server";
+import { getEmployeeAttendanceHistory } from "@/lib/modules/attendance/server";
 import { EmployeeDetailContent } from "@/components/admin/employee-detail-content";
 import { isFeatureEnabled } from "@/lib/platform/features";
 
@@ -31,11 +32,16 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
   const canSchedule =
     can(actor, "schedule:write") ||
     employeeBranchIds.some((branchId) => can(actor, "schedule:write", { branchId }));
+  const canReadAttendance =
+    attendanceEnabled &&
+    (can(actor, "attendance:read") ||
+      employeeBranchIds.some((branchId) => can(actor, "attendance:read", { branchId })));
 
-  const [branches, shifts, shiftAssignments] = await Promise.all([
+  const [branches, shifts, shiftAssignments, attendanceHistory] = await Promise.all([
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     listShifts(scope),
     listShiftAssignments(employee.id),
+    canReadAttendance ? getEmployeeAttendanceHistory(scope, employee.id) : null,
   ]);
 
   return (
@@ -48,7 +54,9 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
         canWrite={canWrite}
         canSchedule={canSchedule}
         attendanceEnabled={attendanceEnabled}
+        attendanceHistory={attendanceHistory}
       />
     </div>
   );
 }
+

@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileClock } from "lucide-react";
+import { ArrowLeft, Clock, FileClock, Trash2 } from "lucide-react";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
-import { getAttendanceDay } from "@/lib/modules/attendance/server";
+import { getAttendanceDay, resolvePolicy, canAuthorizeOvertime } from "@/lib/modules/attendance/server";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
-import { formatAccraDate } from "@/lib/platform/date";
-import { recordManualAttendance, correctAttendance } from "@/lib/modules/attendance/actions";
-import { ManualEntryForm, CorrectionForm } from "@/components/admin/attendance-actions";
+import { formatAccraDate, formatAccraDateTime } from "@/lib/platform/date";
+import { recordManualAttendance } from "@/lib/modules/attendance/actions";
+import { ManualEntryDialog } from "@/components/admin/attendance-actions";
+import { ResolveExceptionDialog } from "@/components/admin/resolve-exception-dialog";
+import { AttendanceCorrectionDialog } from "@/components/admin/attendance-correction-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatCard } from "@/components/admin/stat-card";
 import { requireFeature } from "@/lib/platform/features-guard";
 
@@ -53,6 +57,11 @@ export default async function AttendanceDayPage({
     corrections.filter((c) => c.operation !== "INSERT_EVENT").map((c) => c.targetEventId),
   );
 
+  const policy = await resolvePolicy(day.branchId, day.workDate);
+  const canAuthOvertime = canAuthorizeOvertime(actor, day.branchId, policy);
+  const canWrite = can(actor, "attendance:write", { branchId: day.branchId });
+  const isAutoClosed = day.flags.includes("AUTO_CLOSED");
+
   return (
     <div className="space-y-6">
       <Link
@@ -63,20 +72,93 @@ export default async function AttendanceDayPage({
         Back to attendance
       </Link>
 
-      <div className="flex flex-wrap items-baseline gap-3">
-        <h1 className="font-heading text-2xl font-bold text-foreground">
-          {employee ? `${employee.firstName} ${employee.lastName}` : employeeId}
-        </h1>
-        <span className="text-muted-foreground">{formatAccraDate(day.workDate)}</span>
-        <span className="text-muted-foreground">· {branchName}</span>
-        <Badge variant={day.status === "SETTLED" ? "default" : "outline"}>
-          {day.status.toLowerCase().replace("_", " ")}
-        </Badge>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <div>
+            <h1 className="font-heading text-2xl font-bold text-foreground">
+            {employee ? `${employee.firstName} ${employee.lastName}` : employeeId}
+          </h1>
+          <span className="text-muted-foreground">{formatAccraDate(day.workDate)}</span>
+          <span className="text-muted-foreground">· {branchName}</span>
+          </div>
+          <Badge variant={day.status === "SETTLED" ? "default" : "outline"}>
+            {day.status.toLowerCase().replace("_", " ")}
+          </Badge>
+          {isAutoClosed && (
+            <Badge variant="outline" className="border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300">
+              Auto-closed shift
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {day.status === "NEEDS_REVIEW" && canWrite && (
+            <ResolveExceptionDialog
+              employeeId={employeeId}
+              employeeName={employee ? `${employee.firstName} ${employee.lastName}` : employeeId}
+              branchId={day.branchId}
+              dateKey={date}
+              flags={day.flags}
+              calculatedOvertimeMinutes={day.overtimeMinutes}
+              payableOvertimeMinutes={day.payableOvertimeMinutes}
+              canAuthorizeOvertime={canAuthOvertime}
+            />
+          )}
+
+          {can(actor, "attendance:manual_entry", { branchId: day.branchId }) && (
+            <ManualEntryDialog
+              action={recordManualAttendance.bind(null, employeeId, day.branchId)}
+              defaultDate={date}
+              employeeName={employee ? `${employee.firstName} ${employee.lastName}` : employeeId}
+            />
+          )}
+
+          {canWrite && (
+            <AttendanceCorrectionDialog
+              employeeId={employeeId}
+              branchId={day.branchId}
+              dateKey={date}
+              events={events.map((e) => ({
+                id: e.id,
+                direction: e.direction,
+                occurredAt: e.occurredAt,
+                isVoided: voided.has(e.id),
+                providerType: e.providerType,
+              }))}
+            />
+          )}
+        </div>
       </div>
+
+      {isAutoClosed && (
+        <Alert className="border-purple-500/30 bg-purple-500/10 text-purple-950 dark:text-purple-200">
+          <AlertTitle className="font-semibold">Shift Automatically Closed</AlertTitle>
+          <AlertDescription>
+            This shift was automatically closed by the system because no clock-out was recorded.
+            Per company policy, zero overtime was credited. If the employee worked past the scheduled end,
+            use &ldquo;Correct attendance&rdquo; above to record the actual time.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {day.status === "SETTLED" && (
+        <div className="rounded-xl border border-border bg-muted/20 p-4 text-xs text-muted-foreground flex flex-wrap gap-4 items-center justify-between">
+          <div>
+            Settled: <span className="font-medium text-foreground">{day.settledAt ? formatAccraDateTime(day.settledAt) : "Yes"}</span>
+          </div>
+          <div>
+            Payable Overtime Authorized: <span className="font-semibold text-foreground">{day.payableOvertimeMinutes} minutes</span>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Worked" value={hours(day.netWorkedMinutes)} icon={FileClock} />
-        <StatCard label="Overtime" value={hours(day.overtimeMinutes)} icon={FileClock} />
+        <StatCard
+          label="Overtime"
+          value={day.payableOvertimeMinutes > 0 ? `${hours(day.payableOvertimeMinutes)} (payable)` : hours(day.overtimeMinutes)}
+          icon={FileClock}
+        />
         <StatCard label="Late" value={`${day.lateMinutes}m`} icon={FileClock} />
         <StatCard label="Left early" value={`${day.earlyDepartureMinutes}m`} icon={FileClock} />
       </div>
@@ -92,14 +174,28 @@ export default async function AttendanceDayPage({
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">What was recorded</CardTitle>
-          <CardDescription>
-            Every signal received, including ones that did not count. A punch superseded by
-            a stronger record, or set aside by a correction, stays here. The point is that
-            the person disputing a time can see everything the system saw, not only what it
-            chose.
-          </CardDescription>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <CardTitle className="text-base">What was recorded</CardTitle>
+            <CardDescription>
+              Every signal received, including ones that did not count. A punch superseded by
+              a stronger record, or set aside by a correction, stays here.
+            </CardDescription>
+          </div>
+          {canWrite && (
+            <AttendanceCorrectionDialog
+              employeeId={employeeId}
+              branchId={day.branchId}
+              dateKey={date}
+              events={events.map((e) => ({
+                id: e.id,
+                direction: e.direction,
+                occurredAt: e.occurredAt,
+                isVoided: voided.has(e.id),
+                providerType: e.providerType,
+              }))}
+            />
+          )}
         </CardHeader>
         <CardContent>
           <ul className="divide-y divide-border">
@@ -113,7 +209,7 @@ export default async function AttendanceDayPage({
               return (
                 <li
                   key={event.id}
-                  className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 py-3 text-sm ${
+                  className={`flex flex-wrap items-center gap-x-3 gap-y-1 py-3 text-sm ${
                     counts ? "" : "opacity-60"
                   }`}
                 >
@@ -152,6 +248,56 @@ export default async function AttendanceDayPage({
                       {event.evidence.manualReasonCode.toLowerCase().replace(/_/g, " ")}
                       {event.evidence.manualReasonText ? ` · ${event.evidence.manualReasonText}` : ""}
                     </span>
+                  )}
+
+                  {canWrite && !isVoided && (
+                    <div className="ml-auto flex items-center gap-1">
+                      <AttendanceCorrectionDialog
+                        employeeId={employeeId}
+                        branchId={day.branchId}
+                        dateKey={date}
+                        initialEventId={event.id}
+                        initialOperation="ADJUST_TIME"
+                        events={events.map((e) => ({
+                          id: e.id,
+                          direction: e.direction,
+                          occurredAt: e.occurredAt,
+                          isVoided: voided.has(e.id),
+                          providerType: e.providerType,
+                        }))}
+                        trigger={
+                          <Button variant="ghost" size="icon-sm" title="Adjust punch time">
+                            <Clock className="size-3.5" />
+                            <span className="sr-only">Adjust punch time</span>
+                          </Button>
+                        }
+                      />
+                      <AttendanceCorrectionDialog
+                        employeeId={employeeId}
+                        branchId={day.branchId}
+                        dateKey={date}
+                        initialEventId={event.id}
+                        initialOperation="VOID_EVENT"
+                        events={events.map((e) => ({
+                          id: e.id,
+                          direction: e.direction,
+                          occurredAt: e.occurredAt,
+                          isVoided: voided.has(e.id),
+                          providerType: e.providerType,
+                        }))}
+                        trigger={
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-destructive hover:bg-destructive/10"
+                            title="Void punch"
+                          >
+                            <Trash2 className="size-3.5" />
+                            <span className="sr-only">Void punch</span>
+                          </Button>
+                        }
+                      />
+                    </div>
                   )}
                 </li>
               );
@@ -193,49 +339,6 @@ export default async function AttendanceDayPage({
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {can(actor, "attendance:manual_entry", { branchId: day.branchId }) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Record a punch by hand</CardTitle>
-            <CardDescription>
-              For when the terminal was down or somebody forgot. This is the only path
-              with no verification at all, so every entry is attributed, reason-coded and
-              counted towards your branch&rsquo;s manual-entry rate.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ManualEntryForm
-              action={recordManualAttendance.bind(null, employeeId, day.branchId)}
-              defaultDate={date}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {can(actor, "attendance:write", { branchId: day.branchId }) && events.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Correct a punch</CardTitle>
-            <CardDescription>
-              Changes what the attendance means without changing what was recorded.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CorrectionForm
-              action={correctAttendance.bind(null, employeeId, day.branchId, date)}
-              events={events
-                .filter((event) => !voided.has(event.id))
-                .map((event) => ({
-                  id: event.id,
-                  label: `${time(event.occurredAt)} ${event.direction.toLowerCase().replace("_", " ")} · ${
-                    PROVIDER_LABEL[event.providerType] ?? event.providerType
-                  }`,
-                }))}
-            />
           </CardContent>
         </Card>
       )}

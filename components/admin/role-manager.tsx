@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { Loader2, Plus, ShieldAlert, X } from "lucide-react";
+import { toast } from "sonner";
 import type { Role, ScopeType } from "@prisma/client";
 import type { RoleActionState } from "@/lib/modules/identity/actions";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,17 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type ActiveRole = {
   id: string;
@@ -57,8 +69,22 @@ export function RoleManager({
   const [scopeType, setScopeType] = useState<"GLOBAL" | "BRANCH">("GLOBAL");
 
   useEffect(() => {
-    if (grantState?.done || revokeState?.done) onMutated?.();
-  }, [grantState, revokeState, onMutated]);
+    if (grantState?.done) {
+      toast.success("Role granted");
+      onMutated?.();
+    } else if (grantState?.error) {
+      toast.error(grantState.error);
+    }
+  }, [grantState, onMutated]);
+
+  useEffect(() => {
+    if (revokeState?.done) {
+      toast.success("Role revoked");
+      onMutated?.();
+    } else if (revokeState?.error) {
+      toast.error(revokeState.error);
+    }
+  }, [revokeState, onMutated]);
 
   return (
     <div className="space-y-6">
@@ -91,13 +117,46 @@ export function RoleManager({
               <span className="text-xs text-muted-foreground">since {assignment.since}</span>
 
               {canAssign && (
-                <form action={revokeRole} className="ml-auto">
-                  <input type="hidden" name="assignmentId" value={assignment.id} />
-                  <Button type="submit" variant="ghost" size="sm" disabled={revoking}>
-                    {revoking ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
-                    Revoke
-                  </Button>
-                </form>
+                <div className="ml-auto">
+                  <AlertDialog>
+                    <AlertDialogTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={revoking}
+                          className="text-muted-foreground hover:text-destructive gap-1"
+                        >
+                          {revoking ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
+                          Revoke
+                        </Button>
+                      }
+                    />
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Revoke {humanise(assignment.role)} role?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will remove their {humanise(assignment.role)} permissions ({assignment.scopeLabel}).
+                          If this is their only role, they will lose access to administrative functions.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+                        <form action={revokeRole}>
+                          <input type="hidden" name="assignmentId" value={assignment.id} />
+                          <AlertDialogAction
+                            type="submit"
+                            disabled={revoking}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            {revoking && <Loader2 className="size-4 animate-spin mr-1.5" />}
+                            Revoke role
+                          </AlertDialogAction>
+                        </form>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               )}
             </li>
           ))}

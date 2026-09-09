@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Save, TriangleAlert } from "lucide-react";
+import { toast } from "sonner";
 import type { PolicyFormState } from "@/lib/modules/attendance/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ export type PolicyValues = {
   autoCloseGraceMinutes: number;
   dedupWindowMinutes: number;
   maxManualEntryDays: number;
+  branchManagerCanAuthorizeOvertime: boolean;
   isProvisional: boolean;
 };
 
@@ -73,20 +75,39 @@ export function AttendancePolicyForm({
   action,
   values,
   canEdit,
+  branchId,
+  branchName,
 }: {
   action: (prevState: PolicyFormState, formData: FormData) => Promise<PolicyFormState>;
   values: PolicyValues;
   canEdit: boolean;
+  branchId?: string | null;
+  branchName?: string;
 }) {
   const [state, formAction, isPending] = useActionState<PolicyFormState, FormData>(
     action,
     undefined,
   );
+
   const [breakPolicy, setBreakPolicy] = useState(values.breakPolicy);
+  const [autoCloseEnabled, setAutoCloseEnabled] = useState(values.autoCloseGraceMinutes >= 0);
   const errors = state?.fieldErrors ?? {};
+
+  useEffect(() => {
+    if (state?.saved) {
+      toast.success(
+        branchName
+          ? `Policy override for ${branchName} saved`
+          : "Global attendance policy saved"
+      );
+    } else if (state?.error) {
+      toast.error(state.error);
+    }
+  }, [state, branchName]);
 
   return (
     <form action={formAction} className="max-w-2xl space-y-8" noValidate>
+      <input type="hidden" name="branchId" value={branchId ?? ""} />
       {/*
         The most important thing on this page. A placeholder nobody revisits
         quietly becomes company policy, and that is worse than a hard-coded
@@ -248,18 +269,43 @@ export function AttendancePolicyForm({
 
         <section className="space-y-4">
           <div>
-            <h2 className="font-heading text-lg font-bold">Exceptions</h2>
+            <h2 className="font-heading text-lg font-bold">Shift Auto-Closing & Exceptions</h2>
           </div>
+
+          <div className="rounded-xl border border-border p-4 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="autoCloseEnabled" className="text-base font-semibold">
+                  Auto-close missing clock-outs
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, shifts left open past their scheduled end time are automatically
+                  closed with a SYSTEM_AUTO_CLOSE event, flagged with AUTO_CLOSED, and credited 0 overtime.
+                </p>
+              </div>
+              <Switch
+                id="autoCloseEnabled"
+                checked={autoCloseEnabled}
+                onChange={(e) => setAutoCloseEnabled(e.target.checked)}
+              />
+            </div>
+
+            {autoCloseEnabled ? (
+              <Field
+                name="autoCloseGraceMinutes"
+                label="Auto-close grace period"
+                hint="How long after scheduled end before the shift is closed automatically."
+                defaultValue={Math.max(0, values.autoCloseGraceMinutes)}
+                min={0}
+                max={720}
+                error={errors.autoCloseGraceMinutes}
+              />
+            ) : (
+              <input type="hidden" name="autoCloseGraceMinutes" value="-1" />
+            )}
+          </div>
+
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field
-              name="autoCloseGraceMinutes"
-              label="Auto-close grace"
-              hint="How long after the scheduled end a missing clock-out is closed automatically. Auto-closed shifts never earn overtime."
-              defaultValue={values.autoCloseGraceMinutes}
-              min={0}
-              max={720}
-              error={errors.autoCloseGraceMinutes}
-            />
             <Field
               name="dedupWindowMinutes"
               label="Duplicate window"
@@ -278,6 +324,33 @@ export function AttendancePolicyForm({
               max={90}
               suffix="days"
               error={errors.maxManualEntryDays}
+            />
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div>
+            <h2 className="font-heading text-lg font-bold">Overtime Authorization Authority</h2>
+            <p className="text-sm text-muted-foreground">
+              By default, only Area Managers and Administrators have authority to approve payable overtime.
+              You can grant this authority to Branch Managers as well.
+            </p>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border p-4">
+            <div>
+              <Label htmlFor="branchManagerCanAuthorizeOvertime" className="font-semibold">
+                Allow Branch Managers to authorize payable overtime
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                When enabled, branch managers can sign off on payable overtime minutes for employees assigned to their branch.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              id="branchManagerCanAuthorizeOvertime"
+              name="branchManagerCanAuthorizeOvertime"
+              defaultChecked={values.branchManagerCanAuthorizeOvertime}
+              className="size-4 rounded border-input"
             />
           </div>
         </section>

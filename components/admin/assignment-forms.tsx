@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect } from "react";
 import { Loader2, Plus, X } from "lucide-react";
+import { toast } from "sonner";
 import type { FormState } from "@/lib/platform/forms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,17 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -24,7 +36,12 @@ export function BranchAssignmentForm({
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
 
   useEffect(() => {
-    if (state?.success) onSuccess?.();
+    if (state?.success) {
+      toast.success("Branch assigned successfully");
+      onSuccess?.();
+    } else if (state?.error) {
+      toast.error(state.error);
+    }
   }, [state, onSuccess]);
 
   return (
@@ -87,7 +104,12 @@ export function ShiftAssignmentForm({
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
 
   useEffect(() => {
-    if (state?.success) onSuccess?.();
+    if (state?.success) {
+      toast.success("Shift assigned successfully");
+      onSuccess?.();
+    } else if (state?.error) {
+      toast.error(state.error);
+    }
   }, [state, onSuccess]);
 
   return (
@@ -145,25 +167,64 @@ export function ShiftAssignmentForm({
 export function EndAssignmentButton({
   action,
   assignmentId,
+  label = "assignment",
   onSuccess,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
   assignmentId: string;
+  label?: string;
   onSuccess?: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
 
   useEffect(() => {
-    if (state?.success) onSuccess?.();
+    if (state?.success) {
+      toast.success("Assignment ended");
+      onSuccess?.();
+    } else if (state?.error) {
+      toast.error(state.error);
+    }
   }, [state, onSuccess]);
 
   return (
-    <form action={formAction} className="ml-auto">
-      <input type="hidden" name="assignmentId" value={assignmentId} />
-      <Button type="submit" variant="ghost" size="sm" disabled={isPending}>
-        {isPending ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
-        End
-      </Button>
-    </form>
+    <div className="ml-auto">
+      <AlertDialog>
+        <AlertDialogTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+              className="text-muted-foreground hover:text-destructive gap-1"
+            >
+              {isPending ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
+              End
+            </Button>
+          }
+        />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>End this {label}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark the {label} as ended as of today. Attendance already recorded will remain intact.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <form action={formAction}>
+              <input type="hidden" name="assignmentId" value={assignmentId} />
+              <AlertDialogAction
+                type="submit"
+                disabled={isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isPending && <Loader2 className="size-4 animate-spin mr-1.5" />}
+                End {label}
+              </AlertDialogAction>
+            </form>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }

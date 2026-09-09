@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireFeature } from "@/lib/platform/features-guard";
 import {
   CorrectionOperation,
+  Prisma,
   ProviderType,
   ScheduleExceptionType,
   type CorrectionReason,
@@ -20,6 +21,8 @@ import { resolvePolicy } from "./policy-repository";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { supersedePolicy } from "./policy-repository";
 import { attendancePolicySchema } from "./validation";
+import { canAuthorizeOvertime } from "./overtime-auth";
+import { autoCloseStaleDays, type AutoCloseSummary } from "./auto-close";
 
 // `FormState` already includes undefined, so intersecting with it would make
 // the whole type non-optional. Extend the non-null half and re-add undefined.
@@ -61,6 +64,7 @@ export async function updateAttendancePolicy(
     autoCloseGraceMinutes: formData.get("autoCloseGraceMinutes"),
     dedupWindowMinutes: formData.get("dedupWindowMinutes"),
     maxManualEntryDays: formData.get("maxManualEntryDays"),
+    branchManagerCanAuthorizeOvertime: formData.get("branchManagerCanAuthorizeOvertime") === "on",
     // Confirming the values is the act of removing the provisional flag, so
     // the checkbox reads as "these are agreed" rather than "still a guess".
     isProvisional: formData.get("confirmed") !== "on",
@@ -71,11 +75,14 @@ export async function updateAttendancePolicy(
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
   }
 
+  const rawBranchId = formData.get("branchId");
+  const branchId = typeof rawBranchId === "string" && rawBranchId.trim() ? rawBranchId.trim() : null;
+
   // Supersede, never update: the current version is closed and a new one
   // opened, so attendance already settled keeps resolving against the rules
   // that applied when it was worked.
   const versionId = await supersedePolicy(
-    null,
+    branchId,
     parsed.data,
     auditActorFrom(actor),
     parsed.data.changeReason,
@@ -230,6 +237,7 @@ export async function correctAttendance(
       workDateKey,
       targetEventId,
       correctedOccurredAt,
+      direction: (formData.get("direction") as Prisma.AttendanceEventCreateInput["direction"]) || undefined,
       reasonCode: String(formData.get("reasonCode") ?? "") as CorrectionReason,
       reasonText: String(formData.get("reasonText") ?? ""),
       actorUserId: actor.userId,
@@ -385,4 +393,101 @@ export async function clearScheduleOverride(
   revalidatePath("/admin/attendance");
 
   return { saved: "Override cleared. Employee reverted to standard rota." };
+}
+
+export type ResolveDayInput = {
+  notes: string;
+  payableOvertimeMinutes?: number;
+};
+
+/**
+ * Resolves an attendance day that requires review, transitions status to SETTLED,
+ * and authorizes payable overtime if the actor has sufficient authority.
+ */
+export async function resolveAttendanceDay(
+  employeeId: string,
+  branchId: string,
+  dateKey: string,
+  input: ResolveDayInput,
+): Promise<{ success: boolean; error?: string }> {
+  requireFeature("attendance");
+
+  const actor = await requirePermission("attendance:write", { branchId });
+  const policy = await resolvePolicy(branchId, new Date(`${dateKey}T00:00:00.000Z`));
+
+  if (input.payableOvertimeMinutes !== undefined && input.payableOvertimeMinutes > 0) {
+    const authorized = canAuthorizeOvertime(actor, branchId, policy);
+    if (!authorized) {
+      return {
+        success: false,
+        error: "Only Area Managers and Administrators may authorize payable overtime unless enabled in policy.",
+      };
+    }
+  }
+
+  const workDate = new Date(`${dateKey}T00:00:00.000Z`);
+  const existingDay = await prisma.attendanceDay.findUnique({
+    where: { employeeId_workDate: { employeeId, workDate } },
+  });
+
+  if (!existingDay) {
+    return { success: false, error: "Attendance day record not found." };
+  }
+
+  const payableOvertime =
+    input.payableOvertimeMinutes !== undefined
+      ? Math.max(0, input.payableOvertimeMinutes)
+      : existingDay.payableOvertimeMinutes;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.attendanceDay.update({
+      where: { employeeId_workDate: { employeeId, workDate } },
+      data: {
+        status: "SETTLED",
+        settledAt: new Date(),
+        payableOvertimeMinutes: payableOvertime,
+      },
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "attendance_day.resolved",
+        entityType: "AttendanceDay",
+        entityId: existingDay.id,
+        before: {
+          status: existingDay.status,
+          payableOvertimeMinutes: existingDay.payableOvertimeMinutes,
+        },
+        after: {
+          status: "SETTLED",
+          payableOvertimeMinutes: payableOvertime,
+        },
+        metadata: {
+          employeeId,
+          branchId,
+          workDate: dateKey,
+          notes: input.notes,
+        },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath(`/admin/attendance/${employeeId}/${dateKey}`);
+  revalidatePath("/admin/attendance");
+
+  return { success: true };
+}
+
+/**
+ * Triggers an on-demand sweep to close unclocked-out shifts that have exceeded their schedule.
+ */
+export async function runDailyAttendanceSweepAction(): Promise<AutoCloseSummary> {
+  requireFeature("attendance");
+  await requirePermission("attendance:write");
+
+  const result = await autoCloseStaleDays();
+  revalidatePath("/admin/attendance");
+  return result;
 }
