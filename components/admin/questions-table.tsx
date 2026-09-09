@@ -1,18 +1,19 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
-import { moveQuestion, toggleQuestionActive } from "@/lib/modules/questions/actions";
+import { moveQuestion, toggleQuestionActive, updateQuestion } from "@/lib/modules/questions/actions";
+import { QuestionDialog } from "@/components/admin/question-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 
 export type QuestionRow = {
   id: string;
   text: string;
   isActive: boolean;
+  ratingLabels: string[];
 };
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, QuestionRow>();
@@ -72,9 +73,24 @@ export function QuestionsTable({
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => (
         <div className="flex justify-end gap-1.5">
-          <Link href={`/admin/questions/${row.original.id}/edit`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-            Edit
-          </Link>
+          <QuestionDialog
+            action={updateQuestion.bind(null, row.original.id)}
+            submitLabel="Save changes"
+            title="Edit question"
+            description="Editing the text does not affect past feedback answers."
+            defaultValues={{
+              text: row.original.text,
+              isActive: row.original.isActive,
+              ratingLabels: row.original.ratingLabels,
+            }}
+            activeCount={activeCount - (row.original.isActive ? 1 : 0)}
+            activeCap={maxActive}
+            trigger={
+              <Button variant="outline" size="sm">
+                Edit
+              </Button>
+            }
+          />
           <form action={toggleQuestionActive}>
             <input type="hidden" name="id" value={row.original.id} />
             <input type="hidden" name="nextIsActive" value={(!row.original.isActive).toString()} />

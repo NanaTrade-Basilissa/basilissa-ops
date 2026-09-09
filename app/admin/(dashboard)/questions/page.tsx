@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Plus } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
+import { createQuestion } from "@/lib/modules/questions/actions";
 import { FEEDBACK_QUESTION_COUNT } from "@/lib/modules/feedback/constants";
-import { buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { QuestionDialog } from "@/components/admin/question-dialog";
 import { QuestionsTable } from "@/components/admin/questions-table";
 import { requirePermission } from "@/lib/modules/identity/server";
 
@@ -26,13 +27,22 @@ export default async function QuestionsPage({ searchParams }: { searchParams: Se
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Questions</h1>
           <p className="text-sm text-muted-foreground">
-            The fixed rating questions shown to customers, in order. Exactly{" "}
-            {FEEDBACK_QUESTION_COUNT} must be active for the feedback form to work.
+            Shown to customers, in order. Exactly {FEEDBACK_QUESTION_COUNT} must be active.
           </p>
         </div>
-        <Link href="/admin/questions/new" className={buttonVariants({ variant: "default" })}>
-          <Plus className="size-4" /> New question
-        </Link>
+        <QuestionDialog
+          action={createQuestion}
+          submitLabel="Create question"
+          title="Create a question"
+          description="New questions are added to the end of the order."
+          activeCount={activeCount}
+          activeCap={FEEDBACK_QUESTION_COUNT}
+          trigger={
+            <Button>
+              <Plus className="size-4" /> New question
+            </Button>
+          }
+        />
       </div>
 
       {typeof error === "string" && (

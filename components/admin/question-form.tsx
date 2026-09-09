@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Loader2, Save } from "lucide-react";
 import type { QuestionFormState } from "@/lib/modules/questions/actions";
 import { DEFAULT_RATING_LABELS } from "@/lib/modules/feedback/constants";
@@ -16,6 +16,7 @@ export function QuestionForm({
   submitLabel,
   activeCount,
   activeCap,
+  onSuccess,
 }: {
   action: (prevState: QuestionFormState, formData: FormData) => Promise<QuestionFormState>;
   defaultValues?: { text: string; isActive: boolean; ratingLabels?: string[] };
@@ -23,11 +24,16 @@ export function QuestionForm({
   /** Count of *other* active questions (excludes the one being edited, if any). */
   activeCount: number;
   activeCap: number;
+  onSuccess?: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<QuestionFormState, FormData>(action, undefined);
   const atCap = activeCount >= activeCap;
   const wasActive = defaultValues?.isActive ?? false;
   const ratingLabels = defaultValues?.ratingLabels ?? DEFAULT_RATING_LABELS;
+
+  useEffect(() => {
+    if (state?.success) onSuccess?.();
+  }, [state, onSuccess]);
 
   return (
     <form action={formAction} className="max-w-lg space-y-5" noValidate>

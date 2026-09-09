@@ -96,8 +96,6 @@ describe("nothing is gated by its page alone", () => {
     "attendance/policy/page.tsx",
     "attendance/[employeeId]/[date]/page.tsx",
     "shifts/page.tsx",
-    "shifts/new/page.tsx",
-    "shifts/[id]/edit/page.tsx",
   ];
 
   it("gates every attendance and scheduling page", () => {

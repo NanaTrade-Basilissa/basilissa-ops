@@ -1,8 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import { useMemo } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { updateShift } from "@/lib/modules/employees/actions";
+import { ShiftDialog } from "@/components/admin/shift-dialog";
 import { Badge } from "@/components/ui/badge";
 
 export type ShiftRow = {
@@ -15,20 +17,42 @@ export type ShiftRow = {
   branchLabel: string;
   assignmentCount: number;
   canEdit: boolean;
+  branchId: string;
+  startTime: string;
+  endTime: string;
+  unpaidBreakMinutes: number;
 };
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, ShiftRow>();
 
-const columns = columnHelper.columns([
+function buildColumns(branches: { id: string; name: string }[]) {
+  return columnHelper.columns([
   columnHelper.display({
     id: "name",
     header: "Name",
     cell: ({ row }) => (
       <>
         {row.original.canEdit ? (
-          <Link href={`/admin/shifts/${row.original.id}/edit`} className="font-medium underline">
-            {row.original.name}
-          </Link>
+          <ShiftDialog
+            action={updateShift.bind(null, row.original.id)}
+            branches={branches}
+            submitLabel="Save changes"
+            title="Edit shift"
+            description="Changes affect future days only. Settled attendance keeps its original schedule."
+            defaultValues={{
+              name: row.original.name,
+              branchId: row.original.branchId,
+              startTime: row.original.startTime,
+              endTime: row.original.endTime,
+              unpaidBreakMinutes: row.original.unpaidBreakMinutes,
+              isActive: row.original.isActive,
+            }}
+            trigger={
+              <button type="button" className="font-medium underline underline-offset-2">
+                {row.original.name}
+              </button>
+            }
+          />
         ) : (
           <span className="font-medium">{row.original.name}</span>
         )}
@@ -66,8 +90,16 @@ const columns = columnHelper.columns([
     header: "In use",
     cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue()}</span>,
   }),
-]);
+  ]);
+}
 
-export function ShiftsTable({ shifts }: { shifts: ShiftRow[] }) {
+export function ShiftsTable({
+  shifts,
+  branches,
+}: {
+  shifts: ShiftRow[];
+  branches: { id: string; name: string }[];
+}) {
+  const columns = useMemo(() => buildColumns(branches), [branches]);
   return <DataTable columns={columns} data={shifts} />;
 }

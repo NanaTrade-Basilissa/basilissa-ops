@@ -24,13 +24,12 @@ export default async function AttendancePolicyPage() {
   const [current, history] = await Promise.all([resolvePolicy(null), policyHistory(null)]);
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-3xl space-y-8">
       <div>
         <h1 className="font-heading text-2xl font-bold text-foreground">Attendance policy</h1>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          The rules attendance is calculated under. Saving creates a new version rather than
-          editing this one, so attendance already settled keeps the rules it was calculated
-          under: changing a threshold today never rewrites last month.
+        <p className="text-sm text-muted-foreground">
+          Saving adds a new version, so settled attendance keeps the rules it was calculated
+          under.
         </p>
       </div>
 
@@ -58,11 +57,7 @@ export default async function AttendancePolicyPage() {
             <History className="size-4" />
             Version history
           </CardTitle>
-          <CardDescription>
-            Every version ever in effect. Nothing here is editable: a change adds a version
-            rather than replacing one, which is what lets an old day be recalculated
-            correctly.
-          </CardDescription>
+          <CardDescription>Every version ever in effect. Not editable.</CardDescription>
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (

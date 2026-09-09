@@ -21,16 +21,22 @@ export function BranchForm({
   action,
   defaultValues,
   submitLabel,
+  onSuccess,
 }: {
   action: (prevState: BranchFormState, formData: FormData) => Promise<BranchFormState>;
   defaultValues?: { name: string; slug: string; location: string; isActive: boolean };
   submitLabel: string;
+  onSuccess?: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<BranchFormState, FormData>(action, undefined);
   const [name, setName] = useState(defaultValues?.name ?? "");
   const [slug, setSlug] = useState(defaultValues?.slug ?? "");
   const [slugTouched, setSlugTouched] = useState(Boolean(defaultValues?.slug));
   const [origin, setOrigin] = useState("");
+
+  useEffect(() => {
+    if (state?.success) onSuccess?.();
+  }, [state, onSuccess]);
 
   // `window` is an external system unavailable during SSR, so reading it in a
   // lazy useState initializer would break hydration. `origin` starts empty and

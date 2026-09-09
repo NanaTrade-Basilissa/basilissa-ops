@@ -3,7 +3,9 @@
  * from the per-module action files, which each had an identical copy.
  */
 
-export type FormState = { error?: string; fieldErrors?: Record<string, string> } | undefined;
+export type FormState =
+  | { error?: string; fieldErrors?: Record<string, string>; success?: boolean }
+  | undefined;
 
 type ZodLikeError = { issues: { path: (string | number)[]; message: string }[] };
 

@@ -4,7 +4,9 @@ import { ChevronLeft, Plus, Timer } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { requireFeature } from "@/lib/platform/features-guard";
 import { listAptitudeTests } from "@/lib/modules/aptitude/server";
-import { buttonVariants } from "@/components/ui/button";
+import { createAptitudeTestAction } from "@/lib/modules/aptitude/actions";
+import { Button } from "@/components/ui/button";
+import { AptitudeTestCreateDialog } from "@/components/admin/aptitude-test-create-dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { AptitudeTestsTable } from "@/components/admin/aptitude-tests-table";
 
@@ -34,9 +36,14 @@ export default async function AllAptitudeTestsPage() {
           </p>
         </div>
         {canWrite && (
-          <Link href="/admin/aptitude-tests/new" className={buttonVariants({ size: "sm" })}>
-            <Plus className="size-4" /> New test
-          </Link>
+          <AptitudeTestCreateDialog
+            action={createAptitudeTestAction}
+            trigger={
+              <Button size="sm">
+                <Plus className="size-4" /> New test
+              </Button>
+            }
+          />
         )}
       </div>
 

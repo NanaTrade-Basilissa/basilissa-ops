@@ -195,7 +195,7 @@ export function InvitePanel({
               {employees.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No active employees yet.{" "}
-                  <Link href="/admin/employees/new" className="underline underline-offset-4">
+                  <Link href="/admin/employees" className="underline underline-offset-4">
                     Add one
                   </Link>
                   .
@@ -254,7 +254,7 @@ export function InvitePanel({
                   {employees.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                       No active employees yet.{" "}
-                      <Link href="/admin/employees/new" className="underline underline-offset-4">
+                      <Link href="/admin/employees" className="underline underline-offset-4">
                         Add one
                       </Link>
                       , or send to somebody without a record.

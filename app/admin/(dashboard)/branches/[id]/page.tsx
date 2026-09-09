@@ -4,10 +4,11 @@ import { notFound } from "next/navigation";
 import { Download, MapPin, MessageSquareText, Pencil, Star } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { getDashboardData, getBranchTrendSeries, type TrendGranularity } from "@/lib/modules/feedback/server";
-import { toggleBranchActive } from "@/lib/modules/branches/actions";
+import { toggleBranchActive, updateBranch } from "@/lib/modules/branches/actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { BranchDialog } from "@/components/admin/branch-dialog";
 import { StatCard } from "@/components/admin/stat-card";
 import { CopyLinkButton } from "@/components/admin/copy-link-button";
 import {
@@ -77,9 +78,23 @@ export default async function BranchDetailPage({
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href={`/admin/branches/${branch.id}/edit`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-            <Pencil className="size-4" /> Edit
-          </Link>
+          <BranchDialog
+            action={updateBranch.bind(null, branch.id)}
+            submitLabel="Save changes"
+            title="Edit branch"
+            description="Changing the slug also changes this branch's QR code link."
+            defaultValues={{
+              name: branch.name,
+              slug: branch.slug,
+              location: branch.location,
+              isActive: branch.isActive,
+            }}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Pencil className="size-4" /> Edit
+              </Button>
+            }
+          />
           <form action={toggleBranchActive}>
             <input type="hidden" name="id" value={branch.id} />
             <input type="hidden" name="nextIsActive" value={(!branch.isActive).toString()} />

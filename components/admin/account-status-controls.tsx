@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Loader2, Mail, UserCheck, UserX } from "lucide-react";
 import type { UserStatus } from "@prisma/client";
 import type { RoleActionState } from "@/lib/modules/identity/actions";
@@ -16,6 +16,7 @@ export function AccountStatusControls({
   statusAction,
   resendAction,
   emailConfigured,
+  onMutated,
 }: {
   userId: string;
   email: string;
@@ -25,6 +26,7 @@ export function AccountStatusControls({
   statusAction: (prev: RoleActionState, formData: FormData) => Promise<RoleActionState>;
   resendAction: (prev: RoleActionState, formData: FormData) => Promise<RoleActionState>;
   emailConfigured: boolean;
+  onMutated?: () => void;
 }) {
   const [statusState, changeStatus, changing] = useActionState<RoleActionState, FormData>(
     statusAction,
@@ -34,6 +36,10 @@ export function AccountStatusControls({
     resendAction,
     undefined,
   );
+
+  useEffect(() => {
+    if (statusState?.done) onMutated?.();
+  }, [statusState, onMutated]);
 
   const suspended = status !== "ACTIVE";
 

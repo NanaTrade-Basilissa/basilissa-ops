@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import {
@@ -66,7 +65,7 @@ export async function createBranch(
 
   revalidatePath("/admin/branches");
   revalidatePath("/admin");
-  redirect("/admin/branches");
+  return { success: true };
 }
 
 export async function updateBranch(
@@ -107,7 +106,7 @@ export async function updateBranch(
   revalidatePath("/admin/branches");
   revalidatePath(`/admin/branches/${branchId}`);
   revalidatePath("/admin");
-  redirect(`/admin/branches/${branchId}`);
+  return { success: true };
 }
 
 export async function toggleBranchActive(formData: FormData): Promise<void> {

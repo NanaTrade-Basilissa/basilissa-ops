@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
-import { toggleBranchActive } from "@/lib/modules/branches/actions";
+import { toggleBranchActive, updateBranch } from "@/lib/modules/branches/actions";
+import { BranchDialog } from "@/components/admin/branch-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 
 export type BranchRow = {
   id: string;
   name: string;
+  slug: string;
   location: string;
   isActive: boolean;
   _count: { employees: number };
@@ -51,9 +53,23 @@ const columns = columnHelper.columns([
         <Link href={`/admin/branches/${row.original.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
           View
         </Link>
-        <Link href={`/admin/branches/${row.original.id}/edit`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-          Edit
-        </Link>
+        <BranchDialog
+          action={updateBranch.bind(null, row.original.id)}
+          submitLabel="Save changes"
+          title="Edit branch"
+          description="Changing the slug also changes this branch's QR code link."
+          defaultValues={{
+            name: row.original.name,
+            slug: row.original.slug,
+            location: row.original.location,
+            isActive: row.original.isActive,
+          }}
+          trigger={
+            <Button variant="outline" size="sm">
+              Edit
+            </Button>
+          }
+        />
         <form action={toggleBranchActive}>
           <input type="hidden" name="id" value={row.original.id} />
           <input type="hidden" name="nextIsActive" value={(!row.original.isActive).toString()} />

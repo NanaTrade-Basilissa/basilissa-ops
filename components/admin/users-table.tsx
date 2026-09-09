@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { UserDetailSheet } from "@/components/admin/user-detail-sheet";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { formatAccraDateTime } from "@/lib/platform/date";
 
 export type UserRow = {
@@ -30,9 +30,14 @@ export function UsersTable({ users, canWrite }: { users: UserRow[]; canWrite: bo
       header: "Name",
       cell: ({ row }) => (
         <>
-          <Link href={`/admin/users/${row.original.id}`} className="font-medium underline-offset-4 hover:underline">
-            {row.original.name}
-          </Link>
+          <UserDetailSheet
+            userId={row.original.id}
+            trigger={
+              <button type="button" className="font-medium underline-offset-4 hover:underline">
+                {row.original.name}
+              </button>
+            }
+          />
           <span className="block text-xs text-muted-foreground">{row.original.email}</span>
           {row.original.status !== "ACTIVE" && (
             <Badge variant="destructive" className="mt-1 text-xs">
@@ -85,9 +90,14 @@ export function UsersTable({ users, canWrite }: { users: UserRow[]; canWrite: bo
             id: "actions",
             header: () => <span className="sr-only">Actions</span>,
             cell: ({ row }) => (
-              <Link href={`/admin/users/${row.original.id}`} className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                Manage
-              </Link>
+              <UserDetailSheet
+                userId={row.original.id}
+                trigger={
+                  <Button variant="ghost" size="sm">
+                    Manage
+                  </Button>
+                }
+              />
             ),
           }),
         ]

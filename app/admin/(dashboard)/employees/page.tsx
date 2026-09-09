@@ -5,10 +5,12 @@ import { UserPlus, Upload } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { countEmployees, listEmployees } from "@/lib/modules/employees/server";
+import { createEmployee } from "@/lib/modules/employees/actions";
 import { employeeListFilterSchema } from "@/lib/modules/employees/validation";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { EmployeeFilters } from "@/components/admin/employee-filters";
+import { EmployeeDialog } from "@/components/admin/employee-dialog";
 import { EmployeesTable } from "@/components/admin/employees-table";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 
@@ -75,10 +77,15 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
               <Upload className="size-4" />
               Import
             </Link>
-            <Link href="/admin/employees/new" className={buttonVariants()}>
-              <UserPlus className="size-4" />
-              Add employee
-            </Link>
+            <EmployeeDialog
+              action={createEmployee}
+              trigger={
+                <Button>
+                  <UserPlus className="size-4" />
+                  Add employee
+                </Button>
+              }
+            />
           </div>
         )}
       </div>

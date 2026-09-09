@@ -30,7 +30,13 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
       <AppSidebar enabledFeatures={enabledFeatures} user={{ name: session.name, email: session.email }} />
       <SidebarInset>
         <SiteHeader />
-        <main className="flex-1 px-4 py-6 lg:px-6 lg:py-6">{children}</main>
+        {/*
+          The header stays outside this wrapper so its border and background
+          span the full width of the inset area; only the page content below
+          it is centered with a cap, so a wide monitor does not leave data
+          tables and forms pinned to the left with the rest of the screen bare.
+        */}
+        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 lg:px-6 lg:py-6">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

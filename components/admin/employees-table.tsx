@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
 import { Badge } from "@/components/ui/badge";
 
 export type EmployeeRow = {
@@ -28,9 +28,14 @@ const columns = columnHelper.columns([
     header: "Name",
     cell: ({ row }) => (
       <>
-        <Link href={`/admin/employees/${row.original.id}`} className="font-medium underline">
-          {row.original.firstName} {row.original.lastName}
-        </Link>
+        <EmployeeDetailSheet
+          employeeId={row.original.id}
+          trigger={
+            <button type="button" className="font-medium underline underline-offset-2">
+              {row.original.firstName} {row.original.lastName}
+            </button>
+          }
+        />
         {row.original.jobTitle && (
           <span className="block text-xs text-muted-foreground">{row.original.jobTitle}</span>
         )}

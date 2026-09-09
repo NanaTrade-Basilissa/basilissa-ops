@@ -3,10 +3,12 @@ import Link from "next/link";
 import { CheckCircle2, ClipboardCheck, FileEdit, ListChecks, Plus, Send } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { assessmentOverview } from "@/lib/modules/assessments/server";
+import { createAssessmentAction } from "@/lib/modules/assessments/actions";
 import { STATUS_LABEL } from "@/lib/modules/assessments/constants";
 import { StatCard } from "@/components/admin/stat-card";
+import { AssessmentCreateDialog } from "@/components/admin/assessment-create-dialog";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatAccraDateTime } from "@/lib/platform/date";
 
@@ -31,8 +33,7 @@ export default async function AssessmentsOverviewPage() {
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Assessments</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Scored tests sent to one person at a time on their own link, so a result belongs
-            to somebody rather than to an anonymous submission.
+            Scored tests sent to one person at a time, so results are attributable.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -40,9 +41,14 @@ export default async function AssessmentsOverviewPage() {
             <ListChecks className="size-4" /> View all
           </Link>
           {canWrite && (
-            <Link href="/admin/assessments/new" className={buttonVariants({ size: "sm" })}>
-              <Plus className="size-4" /> New assessment
-            </Link>
+            <AssessmentCreateDialog
+              action={createAssessmentAction}
+              trigger={
+                <Button size="sm">
+                  <Plus className="size-4" /> New assessment
+                </Button>
+              }
+            />
           )}
         </div>
       </div>
@@ -70,9 +76,14 @@ export default async function AssessmentsOverviewPage() {
               <p className="text-sm text-muted-foreground">
                 Nothing yet.{" "}
                 {canWrite && (
-                  <Link href="/admin/assessments/new" className="underline underline-offset-4">
-                    Create the first one
-                  </Link>
+                  <AssessmentCreateDialog
+                    action={createAssessmentAction}
+                    trigger={
+                      <button type="button" className="underline underline-offset-4">
+                        Create the first one
+                      </button>
+                    }
+                  />
                 )}
               </p>
             ) : (

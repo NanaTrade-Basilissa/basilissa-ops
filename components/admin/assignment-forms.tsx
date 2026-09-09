@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { useActionState, useEffect } from "react";
+import { Loader2, Plus, X } from "lucide-react";
 import type { FormState } from "@/lib/platform/forms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,11 +15,17 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function BranchAssignmentForm({
   action,
   branches,
+  onSuccess,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
   branches: { id: string; name: string }[];
+  onSuccess?: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
+
+  useEffect(() => {
+    if (state?.success) onSuccess?.();
+  }, [state, onSuccess]);
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
@@ -72,11 +78,17 @@ const DAYS = [
 export function ShiftAssignmentForm({
   action,
   shifts,
+  onSuccess,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
   shifts: { id: string; label: string }[];
+  onSuccess?: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
+
+  useEffect(() => {
+    if (state?.success) onSuccess?.();
+  }, [state, onSuccess]);
 
   return (
     <form action={formAction} className="space-y-3 border-t border-border pt-4">
@@ -126,6 +138,32 @@ export function ShiftAssignmentForm({
             that never applies. */}
         <p className="text-xs text-muted-foreground">Pick at least one day.</p>
       </fieldset>
+    </form>
+  );
+}
+
+export function EndAssignmentButton({
+  action,
+  assignmentId,
+  onSuccess,
+}: {
+  action: (prevState: FormState, formData: FormData) => Promise<FormState>;
+  assignmentId: string;
+  onSuccess?: () => void;
+}) {
+  const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
+
+  useEffect(() => {
+    if (state?.success) onSuccess?.();
+  }, [state, onSuccess]);
+
+  return (
+    <form action={formAction} className="ml-auto">
+      <input type="hidden" name="assignmentId" value={assignmentId} />
+      <Button type="submit" variant="ghost" size="sm" disabled={isPending}>
+        {isPending ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
+        End
+      </Button>
     </form>
   );
 }

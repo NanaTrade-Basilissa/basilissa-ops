@@ -33,7 +33,7 @@ export default async function SecurityPage({
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="font-heading text-2xl font-bold text-foreground">Security</h1>
         <p className="text-sm text-muted-foreground">Signed in as {actor.email}.</p>
@@ -56,9 +56,8 @@ export default async function SecurityPage({
             Two-step verification
           </CardTitle>
           <CardDescription>
-            A code from your phone in addition to your password. Required for{" "}
-            {MFA_REQUIRED_ROLES.join(", ").toLowerCase().replace(/_/g, " ")}: those roles
-            can grant access or change what people are paid.
+            A code from your phone, on top of your password. Required for{" "}
+            {MFA_REQUIRED_ROLES.join(", ").toLowerCase().replace(/_/g, " ")}.
           </CardDescription>
         </CardHeader>
         <CardContent>

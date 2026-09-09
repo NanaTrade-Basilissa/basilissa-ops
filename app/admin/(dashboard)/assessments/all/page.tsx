@@ -3,7 +3,9 @@ import Link from "next/link";
 import { ChevronLeft, ClipboardCheck, Plus } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { listAssessments } from "@/lib/modules/assessments/server";
-import { buttonVariants } from "@/components/ui/button";
+import { createAssessmentAction } from "@/lib/modules/assessments/actions";
+import { Button } from "@/components/ui/button";
+import { AssessmentCreateDialog } from "@/components/admin/assessment-create-dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { AssessmentsTable } from "@/components/admin/assessments-table";
 
@@ -33,14 +35,18 @@ export default async function AllAssessmentsPage() {
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">All assessments</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Scored tests sent to one person at a time on their own link, so a result belongs
-            to somebody rather than to an anonymous submission.
+            Scored tests sent to one person at a time, so results are attributable.
           </p>
         </div>
         {canWrite && (
-          <Link href="/admin/assessments/new" className={buttonVariants({ size: "sm" })}>
-            <Plus className="size-4" /> New assessment
-          </Link>
+          <AssessmentCreateDialog
+            action={createAssessmentAction}
+            trigger={
+              <Button size="sm">
+                <Plus className="size-4" /> New assessment
+              </Button>
+            }
+          />
         )}
       </div>
 

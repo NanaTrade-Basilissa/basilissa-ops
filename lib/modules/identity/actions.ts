@@ -33,6 +33,10 @@ import {
   verifyMfaChallenge,
 } from "./mfa";
 import { requireAuth, requirePermission, verifySession } from "./dal";
+import { can } from "./authorization";
+import { MFA_REQUIRED_ROLES } from "./constants";
+import { Role, ScopeType } from "@prisma/client";
+import { formatAccraDateTime } from "@/lib/platform/date";
 import { auditActorFrom } from "./audit";
 import { revalidatePath } from "next/cache";
 import { recordAuditBestEffort } from "@/lib/platform/audit";
@@ -580,4 +584,75 @@ export async function resendInvite(
   });
 
   return { done: true };
+}
+
+/**
+ * Thin read-only wrapper so a client component (the user Sheet on the list)
+ * can fetch one record, and re-fetch it after a mutation, without a full
+ * page navigation. Same permission checks and shaping the page itself does.
+ */
+export async function getUserDetailAction(userId: string) {
+  const actor = await requirePermission("user:read");
+
+  const [user, branches] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        status: true,
+        lastLoginAt: true,
+        passwordChangedAt: true,
+        mfaEnabledAt: true,
+        createdAt: true,
+        roleAssignments: {
+          orderBy: { validFrom: "desc" },
+          select: { id: true, role: true, scopeType: true, scopeId: true, validFrom: true, validTo: true },
+        },
+        _count: { select: { mfaRecoveryCodes: { where: { usedAt: null } } } },
+      },
+    }),
+    prisma.branch.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
+  if (!user) return null;
+
+  const branchName = new Map(branches.map((b) => [b.id, b.name]));
+  const now = new Date();
+  const activeAssignments = user.roleAssignments.filter((a) => a.validTo === null || a.validTo > now);
+  const revokedAssignments = user.roleAssignments.filter((a) => a.validTo !== null && a.validTo <= now);
+
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      status: user.status,
+      lastLoginAt: user.lastLoginAt,
+      passwordChangedAt: user.passwordChangedAt,
+      mfaEnabledAt: user.mfaEnabledAt,
+      createdAt: user.createdAt,
+      mfaRecoveryCodesLeft: user._count.mfaRecoveryCodes,
+    },
+    canWrite: can(actor, "user:write"),
+    canAssign: can(actor, "role:assign"),
+    roles: Object.values(Role),
+    branches,
+    isSelf: user.id === actor.userId,
+    emailConfigured: isEmailConfigured(),
+    active: activeAssignments.map((a) => ({
+      id: a.id,
+      role: a.role,
+      scopeType: a.scopeType,
+      scopeLabel: a.scopeType === ScopeType.BRANCH ? (branchName.get(a.scopeId) ?? "unknown branch") : "company-wide",
+      since: formatAccraDateTime(a.validFrom),
+      requiresMfa: MFA_REQUIRED_ROLES.includes(a.role),
+    })),
+    revoked: revokedAssignments.map((a) => ({
+      id: a.id,
+      role: a.role,
+      scopeLabel: a.scopeType === ScopeType.BRANCH ? (branchName.get(a.scopeId) ?? "unknown branch") : "company-wide",
+      endedAt: formatAccraDateTime(a.validTo!),
+    })),
+  };
 }

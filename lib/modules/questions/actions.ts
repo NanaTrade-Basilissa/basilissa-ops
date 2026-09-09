@@ -71,7 +71,7 @@ export async function createQuestion(
   });
 
   revalidatePath("/admin/questions");
-  redirect("/admin/questions");
+  return { success: true };
 }
 
 export async function updateQuestion(
@@ -110,7 +110,7 @@ export async function updateQuestion(
   });
 
   revalidatePath("/admin/questions");
-  redirect("/admin/questions");
+  return { success: true };
 }
 
 /** Quick activate/deactivate from the list row — mirrors toggleBranchActive,

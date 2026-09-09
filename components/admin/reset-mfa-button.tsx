@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Loader2, ShieldOff } from "lucide-react";
 import type { UserAdminState } from "@/lib/modules/identity/actions";
 import { Button } from "@/components/ui/button";
@@ -10,15 +10,21 @@ export function ResetMfaButton({
   action,
   userId,
   label,
+  onMutated,
 }: {
   action: (prev: UserAdminState, formData: FormData) => Promise<UserAdminState>;
   userId: string;
   label: string;
+  onMutated?: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<UserAdminState, FormData>(
     action,
     undefined,
   );
+
+  useEffect(() => {
+    if (state?.saved) onMutated?.();
+  }, [state, onMutated]);
 
   return (
     <form action={formAction} className="space-y-2">

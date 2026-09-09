@@ -72,7 +72,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Customer feedback across every Basilissa branch, updated in real time.
+            Customer feedback across every branch, live.
           </p>
         </div>
         <GeneralQrButton feedbackUrl={`${getEnv().NEXT_PUBLIC_APP_URL}/feedback`} />

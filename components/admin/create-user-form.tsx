@@ -1,10 +1,9 @@
 "use client";
 
 import { useActionState } from "react";
-import Link from "next/link";
 import { CheckCircle2, Copy, Loader2, TriangleAlert, UserPlus } from "lucide-react";
 import type { CreateUserState } from "@/lib/modules/identity/actions";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,9 +11,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 export function CreateUserForm({
   action,
   emailConfigured,
+  onClose,
+  onAddAnother,
 }: {
   action: (prev: CreateUserState, formData: FormData) => Promise<CreateUserState>;
   emailConfigured: boolean;
+  /** Renders inside a Dialog: closes it, or resets the form for another. */
+  onClose: () => void;
+  onAddAnother: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<CreateUserState, FormData>(
     action,
@@ -77,12 +81,12 @@ export function CreateUserForm({
         </Alert>
 
         <div className="flex flex-wrap gap-2">
-          <Link href="/admin/users" className={buttonVariants({ variant: "outline" })}>
-            Back to users
-          </Link>
-          <Link href="/admin/users/new" className={buttonVariants({ variant: "ghost" })}>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Close
+          </Button>
+          <Button type="button" variant="ghost" onClick={onAddAnother}>
             Add another
-          </Link>
+          </Button>
         </div>
       </div>
     );

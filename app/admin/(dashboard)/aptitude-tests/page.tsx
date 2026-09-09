@@ -4,10 +4,12 @@ import { CheckCircle2, FileEdit, ListChecks, Plus, Send, Timer } from "lucide-re
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { requireFeature } from "@/lib/platform/features-guard";
 import { aptitudeOverview } from "@/lib/modules/aptitude/server";
+import { createAptitudeTestAction } from "@/lib/modules/aptitude/actions";
 import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
 import { StatCard } from "@/components/admin/stat-card";
+import { AptitudeTestCreateDialog } from "@/components/admin/aptitude-test-create-dialog";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatAccraDateTime } from "@/lib/platform/date";
 
@@ -32,9 +34,8 @@ export default async function AptitudeTestsOverviewPage() {
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Aptitude Tests</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Timed screening tests for job candidates, shared as one public link or sent to
-            specific people by email — separate from Assessments, which is for staff already on
-            payroll.
+            Timed screening tests for job candidates, separate from Assessments, which is for
+            staff already on payroll.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -42,9 +43,14 @@ export default async function AptitudeTestsOverviewPage() {
             <ListChecks className="size-4" /> View all
           </Link>
           {canWrite && (
-            <Link href="/admin/aptitude-tests/new" className={buttonVariants({ size: "sm" })}>
-              <Plus className="size-4" /> New test
-            </Link>
+            <AptitudeTestCreateDialog
+              action={createAptitudeTestAction}
+              trigger={
+                <Button size="sm">
+                  <Plus className="size-4" /> New test
+                </Button>
+              }
+            />
           )}
         </div>
       </div>
@@ -72,9 +78,14 @@ export default async function AptitudeTestsOverviewPage() {
               <p className="text-sm text-muted-foreground">
                 Nothing yet.{" "}
                 {canWrite && (
-                  <Link href="/admin/aptitude-tests/new" className="underline underline-offset-4">
-                    Create the first one
-                  </Link>
+                  <AptitudeTestCreateDialog
+                    action={createAptitudeTestAction}
+                    trigger={
+                      <button type="button" className="underline underline-offset-4">
+                        Create the first one
+                      </button>
+                    }
+                  />
                 )}
               </p>
             ) : (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import Link from "next/link";
 import { Loader2, Save } from "lucide-react";
 import type { FormState } from "@/lib/platform/forms";
@@ -16,6 +16,7 @@ export function ShiftForm({
   branches,
   defaultValues,
   submitLabel,
+  onSuccess,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
   branches: { id: string; name: string }[];
@@ -28,9 +29,14 @@ export function ShiftForm({
     isActive: boolean;
   };
   submitLabel: string;
+  onSuccess?: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
   const errors = state?.fieldErrors ?? {};
+
+  useEffect(() => {
+    if (state?.success) onSuccess?.();
+  }, [state, onSuccess]);
 
   return (
     <form action={formAction} className="max-w-lg space-y-5" noValidate>

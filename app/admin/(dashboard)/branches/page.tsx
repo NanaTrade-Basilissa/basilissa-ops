@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Plus } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
-import { buttonVariants } from "@/components/ui/button";
+import { createBranch } from "@/lib/modules/branches/actions";
+import { Button } from "@/components/ui/button";
+import { BranchDialog } from "@/components/admin/branch-dialog";
 import { BranchesTable } from "@/components/admin/branches-table";
 import { requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { branchWhere } from "@/lib/modules/identity/authorization";
@@ -25,7 +26,14 @@ export default async function BranchesPage() {
         prisma.branch.findMany({
           where: branchFilter,
           orderBy: { name: "asc" },
-          include: { _count: { select: { employees: { where: { validTo: null } } } } },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            location: true,
+            isActive: true,
+            _count: { select: { employees: { where: { validTo: null } } } },
+          },
         }),
         prisma.feedbackSubmission.groupBy({
           by: ["branchId"],
@@ -43,15 +51,24 @@ export default async function BranchesPage() {
           <h1 className="font-heading text-2xl font-bold text-foreground">Branches</h1>
           <p className="text-sm text-muted-foreground">Manage locations and their feedback QR codes.</p>
         </div>
-        <Link href="/admin/branches/new" className={buttonVariants({ variant: "default" })}>
-          <Plus className="size-4" /> New branch
-        </Link>
+        <BranchDialog
+          action={createBranch}
+          submitLabel="Create branch"
+          title="Create a branch"
+          description="New branches start out active and accept feedback immediately."
+          trigger={
+            <Button>
+              <Plus className="size-4" /> New branch
+            </Button>
+          }
+        />
       </div>
 
       <BranchesTable
         branches={branches.map((branch) => ({
           id: branch.id,
           name: branch.name,
+          slug: branch.slug,
           location: branch.location,
           isActive: branch.isActive,
           _count: branch._count,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Loader2, Save } from "lucide-react";
 import type { FormState } from "@/lib/platform/forms";
 import { Button } from "@/components/ui/button";
@@ -24,13 +24,19 @@ export function EmployeeForm({
   action,
   defaultValues,
   submitLabel,
+  onSuccess,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
   defaultValues?: EmployeeValues;
   submitLabel: string;
+  onSuccess?: () => void;
 }) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
   const errors = state?.fieldErrors ?? {};
+
+  useEffect(() => {
+    if (state?.success) onSuccess?.();
+  }, [state, onSuccess]);
 
   return (
     <form action={formAction} className="max-w-lg space-y-5" noValidate>

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { ShieldAlert, UserPlus } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import {
@@ -7,8 +6,11 @@ import {
   can,
   requirePermission,
 } from "@/lib/modules/identity/server";
-import { buttonVariants } from "@/components/ui/button";
+import { createUserAccount } from "@/lib/modules/identity/actions";
+import { isEmailConfigured } from "@/lib/platform/env";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { UserDialog } from "@/components/admin/user-dialog";
 import { UsersTable } from "@/components/admin/users-table";
 
 export const metadata: Metadata = { title: "Users" };
@@ -56,14 +58,19 @@ export default async function UsersPage() {
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Users</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Accounts that can sign in. Most staff need an employee record and no user account
-            at all: someone who only ever punches a terminal never signs in to anything.
+            Accounts that can sign in. Most staff only need an employee record, not this.
           </p>
         </div>
         {canWrite && (
-          <Link href="/admin/users/new" className={buttonVariants({ size: "sm" })}>
-            <UserPlus className="size-4" /> New user
-          </Link>
+          <UserDialog
+            action={createUserAccount}
+            emailConfigured={isEmailConfigured()}
+            trigger={
+              <Button size="sm">
+                <UserPlus className="size-4" /> New user
+              </Button>
+            }
+          />
         )}
       </div>
 

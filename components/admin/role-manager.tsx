@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Loader2, Plus, ShieldAlert, X } from "lucide-react";
 import type { Role, ScopeType } from "@prisma/client";
 import type { RoleActionState } from "@/lib/modules/identity/actions";
@@ -34,6 +34,7 @@ export function RoleManager({
   branches,
   active,
   revoked,
+  onMutated,
 }: {
   userId: string;
   canAssign: boolean;
@@ -43,6 +44,7 @@ export function RoleManager({
   branches: { id: string; name: string }[];
   active: ActiveRole[];
   revoked: RevokedRole[];
+  onMutated?: () => void;
 }) {
   const [grantState, grant, granting] = useActionState<RoleActionState, FormData>(
     grantAction,
@@ -53,6 +55,10 @@ export function RoleManager({
     undefined,
   );
   const [scopeType, setScopeType] = useState<"GLOBAL" | "BRANCH">("GLOBAL");
+
+  useEffect(() => {
+    if (grantState?.done || revokeState?.done) onMutated?.();
+  }, [grantState, revokeState, onMutated]);
 
   return (
     <div className="space-y-6">

@@ -54,7 +54,7 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
   const isDraft = assessment.status === "DRAFT";
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <Link
         href="/admin/assessments/all"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"

@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
-import { auditActorFrom, can, requirePermission } from "@/lib/modules/identity/server";
+import { auditActorFrom, can, currentBranchScope, requirePermission } from "@/lib/modules/identity/server";
 import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
+import { isFeatureEnabled } from "@/lib/platform/features";
 import {
   branchAssignmentSchema,
   employeeInputSchema,
@@ -15,6 +15,7 @@ import {
 } from "./validation";
 import { requireFeature } from "@/lib/platform/features-guard";
 import { branchSpecBySlug, parseEmployeeWorkbook, resolveImportRows, type ResolvedImportRow } from "./import";
+import { getEmployee, listShiftAssignments, listShifts } from "./repository";
 
 export type { ResolvedImportRow } from "./import";
 
@@ -53,9 +54,8 @@ export async function createEmployee(
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
   }
 
-  let employeeId: string;
   try {
-    employeeId = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const employee = await tx.employee.create({
         // masterSource defaults to LOCAL: until Odoo exists the platform owns
         // this record, and adoption later links it rather than recreating it.
@@ -71,7 +71,6 @@ export async function createEmployee(
         },
         tx,
       );
-      return employee.id;
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -84,7 +83,7 @@ export async function createEmployee(
   }
 
   revalidatePath("/admin/employees");
-  redirect(`/admin/employees/${employeeId}`);
+  return { success: true };
 }
 
 export async function updateEmployee(
@@ -137,7 +136,7 @@ export async function updateEmployee(
 
   revalidatePath(`/admin/employees/${employeeId}`);
   revalidatePath("/admin/employees");
-  return { error: undefined };
+  return { success: true };
 }
 
 /**
@@ -201,10 +200,13 @@ export async function assignBranch(
   });
 
   revalidatePath(`/admin/employees/${employeeId}`);
-  return { error: undefined };
+  return { success: true };
 }
 
-export async function endBranchAssignment(formData: FormData): Promise<void> {
+export async function endBranchAssignment(
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
   const actor = await requirePermission("employee:write");
   const assignmentId = String(formData.get("assignmentId"));
 
@@ -223,6 +225,7 @@ export async function endBranchAssignment(formData: FormData): Promise<void> {
   });
 
   revalidatePath(`/admin/employees/${assignment.employeeId}`);
+  return { success: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -451,7 +454,7 @@ export async function createShift(_prevState: FormState, formData: FormData): Pr
   });
 
   revalidatePath("/admin/shifts");
-  redirect("/admin/shifts");
+  return { success: true };
 }
 
 export async function updateShift(
@@ -486,7 +489,7 @@ export async function updateShift(
   });
 
   revalidatePath("/admin/shifts");
-  redirect("/admin/shifts");
+  return { success: true };
 }
 
 /** Puts an employee on a shift from a date. Effective-dated, like branches. */
@@ -537,5 +540,36 @@ export async function assignShift(
   });
 
   revalidatePath(`/admin/employees/${employeeId}`);
-  return { error: undefined };
+  return { success: true };
+}
+
+/**
+ * Thin read-only wrapper so a client component (the employee Sheet on the
+ * list) can fetch one record, and re-fetch it after a mutation, without a
+ * full page navigation. Same scoped lookup and permission checks the page
+ * itself makes.
+ */
+export async function getEmployeeDetailAction(employeeId: string) {
+  const actor = await requirePermission("employee:read");
+  const scope = await currentBranchScope("employee:read");
+  const attendanceEnabled = isFeatureEnabled("attendance");
+
+  const employee = await getEmployee(employeeId, scope);
+  if (!employee) return null;
+
+  const [branches, shifts, shiftAssignments] = await Promise.all([
+    prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    listShifts(),
+    listShiftAssignments(employee.id),
+  ]);
+
+  return {
+    employee,
+    branches,
+    shifts,
+    shiftAssignments,
+    canWrite: can(actor, "employee:write"),
+    canSchedule: can(actor, "schedule:write"),
+    attendanceEnabled,
+  };
 }
