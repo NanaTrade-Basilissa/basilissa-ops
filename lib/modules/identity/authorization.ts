@@ -67,7 +67,10 @@ export type Permission =
   /// by HR, Administrator and Super Admin. Every page and action behind it
   /// checks the specific permission it needs, so this decides whether the
   /// navigation is shown, never what may be done.
-  | "admin:access";
+  | "admin:access"
+  // Email Queue & Background Job Administration (Super Admin only)
+  | "email_queue:read"
+  | "email_queue:manage";
 
 /** A permission and the scope it was granted at. */
 type Grant = {
@@ -210,6 +213,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "assessment:write",
     "aptitude:read",
     "aptitude:write",
+    "email_queue:read",
+    "email_queue:manage",
   ],
 };
 
@@ -296,4 +301,10 @@ export function branchWhere(scope: BranchScope): { branchId?: { in: string[] } }
 /** The permissions a role carries. Exported for the role-management UI. */
 export function permissionsForRole(role: Role): readonly Permission[] {
   return ROLE_PERMISSIONS[role] ?? [];
+}
+
+/** Returns true if the actor is active and holds a SUPER_ADMIN role assignment. */
+export function isSuperAdmin(actor: Actor): boolean {
+  if (actor.status !== UserStatus.ACTIVE) return false;
+  return actor.assignments.some((a) => a.role === Role.SUPER_ADMIN);
 }

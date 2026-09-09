@@ -6,6 +6,7 @@ import {
   ClipboardList,
   LayoutDashboard,
   ListChecks,
+  Mail,
   MessageSquareText,
   ShieldCheck,
   Store,
@@ -14,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { FeatureName } from "@/lib/platform/features";
+import type { Permission } from "@/lib/modules/identity/authorization";
 
 /**
  * Navigation data only — no rendering here. The actual sidebar is
@@ -29,6 +31,7 @@ export type NavItem = {
   icon: LucideIcon;
   exact: boolean;
   feature?: FeatureName;
+  permission?: Permission;
 };
 
 export type NavGroup = {
@@ -81,6 +84,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: "/admin/users", label: "Users", icon: UserCog, exact: false },
       { href: "/admin/security", label: "Security", icon: ShieldCheck, exact: false },
+      { href: "/admin/email-queue", label: "Email Queue", icon: Mail, exact: false, permission: "email_queue:read" },
     ],
   },
 ] as const;

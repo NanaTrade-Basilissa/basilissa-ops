@@ -10,3 +10,4 @@ export * from "./mfa";
 export * from "./password-reset";
 export * from "./user-admin";
 export * from "./jobs";
+export * from "./email-queue";

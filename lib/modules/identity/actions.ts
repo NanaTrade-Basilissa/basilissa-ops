@@ -15,6 +15,7 @@ import {
 import { createUser, grantRole, revokeRole, setUserStatus } from "./user-admin";
 import { getEnv, isEmailConfigured } from "@/lib/platform/env";
 import { completePasswordReset, issuePasswordReset } from "./password-reset";
+import { retryEmailJob, resendEmailJob, cancelEmailJob } from "./email-queue";
 import { PASSWORD_RESET_SEND } from "./jobs";
 import { enqueue } from "@/lib/platform/jobs";
 import { fieldErrorsFrom } from "@/lib/platform/forms";
@@ -655,4 +656,45 @@ export async function getUserDetailAction(userId: string) {
       endedAt: formatAccraDateTime(a.validTo!),
     })),
   };
+}
+
+/**
+ * Resets a dead or stalled email job to pending for immediate pickup by the worker.
+ * Super Admin only.
+ */
+export async function retryEmailJobAction(jobId: string): Promise<{ success: boolean; error?: string }> {
+  const actor = await requirePermission("email_queue:manage");
+  const result = await retryEmailJob(jobId, actor);
+  if (result.success) {
+    revalidatePath("/admin/email-queue");
+  }
+  return result;
+}
+
+/**
+ * Re-enqueues an identical copy of an email job.
+ * Super Admin only.
+ */
+export async function resendEmailJobAction(
+  jobId: string,
+): Promise<{ success: boolean; newJobId?: string; error?: string }> {
+  const actor = await requirePermission("email_queue:manage");
+  const result = await resendEmailJob(jobId, actor);
+  if (result.success) {
+    revalidatePath("/admin/email-queue");
+  }
+  return result;
+}
+
+/**
+ * Cancels a pending email job so it will not be executed.
+ * Super Admin only.
+ */
+export async function cancelEmailJobAction(jobId: string): Promise<{ success: boolean; error?: string }> {
+  const actor = await requirePermission("email_queue:manage");
+  const result = await cancelEmailJob(jobId, actor);
+  if (result.success) {
+    revalidatePath("/admin/email-queue");
+  }
+  return result;
 }

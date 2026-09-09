@@ -4,6 +4,7 @@ import {
   branchScope,
   branchWhere,
   can,
+  isSuperAdmin,
   permissionsForRole,
   type Actor,
   type ActorAssignment,
@@ -293,5 +294,35 @@ describe("what moving off admin:access changed", () => {
       permissionsForRole(role).includes("question:write"),
     );
     expect(holders.sort()).toEqual([Role.ADMINISTRATOR, Role.SUPER_ADMIN].sort());
+  });
+
+  it("keeps email_queue permissions exclusively with SUPER_ADMIN", () => {
+    const readHolders = Object.values(Role).filter((role) =>
+      permissionsForRole(role).includes("email_queue:read"),
+    );
+    expect(readHolders).toEqual([Role.SUPER_ADMIN]);
+
+    const manageHolders = Object.values(Role).filter((role) =>
+      permissionsForRole(role).includes("email_queue:manage"),
+    );
+    expect(manageHolders).toEqual([Role.SUPER_ADMIN]);
+  });
+});
+
+describe("isSuperAdmin", () => {
+  it("returns true for active user with SUPER_ADMIN role", () => {
+    const admin = actor([globalRole(Role.SUPER_ADMIN)]);
+    expect(isSuperAdmin(admin)).toBe(true);
+  });
+
+  it("returns false for non-super-admin roles", () => {
+    expect(isSuperAdmin(actor([globalRole(Role.ADMINISTRATOR)]))).toBe(false);
+    expect(isSuperAdmin(actor([globalRole(Role.HR)]))).toBe(false);
+    expect(isSuperAdmin(actor([branchRole(Role.BRANCH_MANAGER, "b1")]))).toBe(false);
+  });
+
+  it("returns false for suspended or terminated super admin", () => {
+    expect(isSuperAdmin(actor([globalRole(Role.SUPER_ADMIN)], UserStatus.SUSPENDED))).toBe(false);
+    expect(isSuperAdmin(actor([globalRole(Role.SUPER_ADMIN)], UserStatus.TERMINATED))).toBe(false);
   });
 });

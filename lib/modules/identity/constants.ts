@@ -3,7 +3,7 @@
  * read the cookie name without pulling the JWT library into the proxy bundle.
  */
 
-import { Role } from "@prisma/client";
+import { JobStatus, Role } from "@prisma/client";
 
 export const SESSION_COOKIE_NAME = "basilissa_admin_session";
 
@@ -43,3 +43,28 @@ export const MFA_REQUIRED_ROLES: readonly Role[] = [
  * read it without importing anything request-scoped.
  */
 export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+export const EMAIL_JOB_TYPES = [
+  "feedback.notify",
+  "identity.password_reset_send",
+  "assessments.invitation_send",
+  "aptitude.invitation_send",
+] as const;
+
+export type EmailJobType = (typeof EMAIL_JOB_TYPES)[number];
+
+export type FormattedEmailJob = {
+  id: string;
+  type: string;
+  typeLabel: string;
+  recipient: string;
+  subject: string;
+  status: JobStatus;
+  attempts: number;
+  maxAttempts: number;
+  runAt: Date;
+  lastError: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+  payload: Record<string, unknown>;
+};

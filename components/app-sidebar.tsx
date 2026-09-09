@@ -30,10 +30,12 @@ import type { FeatureName } from "@/lib/platform/features";
 export function AppSidebar({
   enabledFeatures,
   user,
+  permissions = [],
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   enabledFeatures: Partial<Record<FeatureName, boolean>>;
   user: { name: string; email: string };
+  permissions?: string[];
 }) {
   const pathname = usePathname();
   const isActive = (item: NavItem) => (item.exact ? pathname === item.href : pathname.startsWith(item.href));
@@ -70,7 +72,11 @@ export function AppSidebar({
         </SidebarGroup>
 
         {NAV_GROUPS.map((group) => {
-          const items = group.items.filter((item) => !item.feature || enabledFeatures[item.feature]);
+          const items = group.items.filter((item) => {
+            if (item.feature && !enabledFeatures[item.feature]) return false;
+            if (item.permission && !permissions.includes(item.permission)) return false;
+            return true;
+          });
           if (items.length === 0) return null;
 
           return (
