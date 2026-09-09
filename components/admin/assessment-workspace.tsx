@@ -1,6 +1,7 @@
 "use client";
 
-import { ClipboardCheck, Link2, Lock, Settings2, Users } from "lucide-react";
+import { ClipboardCheck, Copy, Lock, Settings2, Users } from "lucide-react";
+import { toast } from "sonner";
 import type { AssessmentQuestionKind, IdentityFieldMode } from "@prisma/client";
 import type {
   AssessmentFormState,
@@ -8,12 +9,15 @@ import type {
   InviteState,
 } from "@/lib/modules/assessments/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AssessmentBuilder } from "@/components/admin/assessment-builder";
 import { InvitePanel } from "@/components/admin/invite-panel";
-import { PublicLinkPanel } from "@/components/admin/public-link-panel";
+import { AssessmentInviteDialog } from "@/components/admin/assessment-invite-dialog";
+import { AssessmentPublicLinkDialog } from "@/components/admin/assessment-public-link-dialog";
 import { AssessmentDetailsForm } from "@/components/admin/assessment-details-form";
 
 type Section = {
@@ -138,59 +142,90 @@ export function AssessmentWorkspace({
           </Empty>
         ) : (
           <>
-            <div className="flex flex-wrap gap-6 text-sm">
-              <div>
-                <p className="text-2xl font-semibold text-foreground">{summary.invited}</p>
-                <p className="text-muted-foreground">invited</p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
+              <div className="flex flex-wrap items-center gap-6 text-sm">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-semibold tracking-tight text-foreground">{summary.invited}</span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider">invited</span>
+                </div>
+                <div className="h-6 w-px bg-border hidden sm:block" />
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-semibold tracking-tight text-foreground">{summary.submitted}</span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider">completed</span>
+                </div>
+                {summary.averagePercent !== null && (
+                  <>
+                    <div className="h-6 w-px bg-border hidden sm:block" />
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-semibold tracking-tight text-foreground">{summary.averagePercent}%</span>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider">average</span>
+                    </div>
+                  </>
+                )}
               </div>
-              <div>
-                <p className="text-2xl font-semibold text-foreground">{summary.submitted}</p>
-                <p className="text-muted-foreground">completed</p>
-              </div>
-              {summary.averagePercent !== null && (
-                <div>
-                  <p className="text-2xl font-semibold text-foreground">{summary.averagePercent}%</p>
-                  <p className="text-muted-foreground">average</p>
+
+              {canWrite && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {publicLinkValues.enabled && publicLinkUrl && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-1.5"
+                      onClick={() => {
+                        navigator.clipboard.writeText(publicLinkUrl);
+                        toast.success("Public assessment link copied to clipboard");
+                      }}
+                    >
+                      <Copy className="size-4" />
+                      Copy public link
+                    </Button>
+                  )}
+
+                  <AssessmentPublicLinkDialog
+                    action={publicLinkAction}
+                    linkUrl={publicLinkUrl}
+                    values={publicLinkValues}
+                  />
+
+                  <AssessmentInviteDialog
+                    employees={employees}
+                    invitations={invitations}
+                    inviteAction={inviteAction}
+                    inviteManyAction={inviteManyAction}
+                  />
                 </div>
               )}
             </div>
 
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Users className="size-4" />
-                  Who has it
-                </CardTitle>
-                <CardDescription>One link per person, so a result is always attributable.</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Users className="size-4" />
+                    Participant responses
+                  </CardTitle>
+                  <CardDescription>
+                    Track invitation delivery, employee participation, and assessment scores.
+                  </CardDescription>
+                </div>
+                {publicLinkValues.enabled && (
+                  <Badge variant="outline" className="text-xs gap-1.5 py-1">
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Public link active
+                  </Badge>
+                )}
               </CardHeader>
               <CardContent>
                 <InvitePanel
                   assessmentId={assessmentId}
                   canWrite={canWrite}
-                  employees={employees}
                   invitations={invitations}
-                  inviteAction={inviteAction}
-                  inviteManyAction={inviteManyAction}
                   resendAction={resendAction}
                   revokeAction={revokeAction}
                 />
               </CardContent>
             </Card>
-
-            {canWrite && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Link2 className="size-4" />
-                    Public link
-                  </CardTitle>
-                  <CardDescription>An alternative to sending one invitation per person.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <PublicLinkPanel action={publicLinkAction} linkUrl={publicLinkUrl} values={publicLinkValues} />
-                </CardContent>
-              </Card>
-            )}
           </>
         )}
       </TabsContent>

@@ -132,28 +132,173 @@ export async function summariseDay(scope: BranchScope, filters: DayFilters): Pro
   };
 }
 
-/** One day with the evidence behind it, or null when out of scope. */
+/** One day with the evidence behind it, or synthesized unrecorded day if in scope, or null when out of scope. */
 export async function getAttendanceDay(
   scope: BranchScope,
   employeeId: string,
   dateKey: string,
+  preferredBranchId?: string,
 ) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return null;
+  }
+
   const where = scopeWhere(scope);
   if (where === null) return null;
 
-  const day = await prisma.attendanceDay.findFirst({
-    where: { ...where, employeeId, workDate: new Date(`${dateKey}T00:00:00.000Z`) },
-  });
-  if (!day) return null;
+  const dayStart = new Date(`${dateKey}T00:00:00.000Z`);
+  if (Number.isNaN(dayStart.getTime())) {
+    return null;
+  }
 
-  const [employee, branch, corrections] = await Promise.all([
-    prisma.employee.findUnique({
-      where: { id: employeeId },
-      select: { id: true, employeeCode: true, firstName: true, lastName: true },
+  const existingDay = await prisma.attendanceDay.findFirst({
+    where: { ...where, employeeId, workDate: dayStart },
+  });
+
+  if (existingDay) {
+    const [employee, branch, corrections, events] = await Promise.all([
+      prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { id: true, employeeCode: true, firstName: true, lastName: true },
+      }),
+      prisma.branch.findUnique({ where: { id: existingDay.branchId }, select: { name: true } }),
+      prisma.attendanceCorrection.findMany({
+        where: { employeeId, workDate: existingDay.workDate },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          operation: true,
+          targetEventId: true,
+          reasonCode: true,
+          reasonText: true,
+          correctedBy: true,
+          requiresApproval: true,
+          approvedBy: true,
+          createdAt: true,
+        },
+      }),
+      prisma.attendanceEvent.findMany({
+        where: {
+          employeeId,
+          occurredAt: {
+            gte: new Date(dayStart.getTime() - 24 * 60 * 60_000),
+            lte: new Date(dayStart.getTime() + 48 * 60 * 60_000),
+          },
+        },
+        orderBy: { occurredAt: "asc" },
+        select: {
+          id: true,
+          direction: true,
+          occurredAt: true,
+          providerType: true,
+          deviceId: true,
+          actorUserId: true,
+          identityAssurance: true,
+          locationAssurance: true,
+          timeAssurance: true,
+          hintMismatch: true,
+          supersedesEventId: true,
+          supersededByEventId: true,
+          clockSkewMs: true,
+          flags: true,
+          evidence: {
+            select: { manualReasonCode: true, manualReasonText: true, geofenceDecision: true },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      day: existingDay,
+      employee,
+      branchName: branch?.name ?? "Unknown",
+      events,
+      corrections,
+      isRecorded: true,
+      shiftName: null as string | null,
+    };
+  }
+
+  // If no existing AttendanceDay, fetch the employee and check scope permissions
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: {
+      id: true,
+      employeeCode: true,
+      firstName: true,
+      lastName: true,
+      branchAssignments: {
+        select: {
+          branchId: true,
+          branch: { select: { id: true, name: true, timezone: true } },
+        },
+      },
+    },
+  });
+
+  if (!employee) return null;
+
+  const allowedBranchAssignments =
+    scope.kind === "all"
+      ? employee.branchAssignments
+      : scope.kind === "branches"
+        ? employee.branchAssignments.filter((ba) => scope.branchIds.includes(ba.branchId))
+        : [];
+
+  if (allowedBranchAssignments.length === 0) {
+    return null;
+  }
+
+  const selectedAssignment =
+    (preferredBranchId && allowedBranchAssignments.find((ba) => ba.branchId === preferredBranchId)) ||
+    allowedBranchAssignments[0];
+
+  if (!selectedAssignment) return null;
+  const targetBranchId = selectedAssignment.branchId;
+  const branch = selectedAssignment.branch;
+
+  const [shifts, assignments, exceptions, corrections, events] = await Promise.all([
+    prisma.shift.findMany({
+      where: {
+        isActive: true,
+        OR: [{ branchId: targetBranchId }, { branchId: null }],
+      },
+      select: {
+        id: true,
+        name: true,
+        startMinute: true,
+        endMinute: true,
+        unpaidBreakMinutes: true,
+      },
     }),
-    prisma.branch.findUnique({ where: { id: day.branchId }, select: { name: true } }),
+    prisma.employeeShiftAssignment.findMany({
+      where: {
+        employeeId,
+        validFrom: { lte: dayStart },
+        OR: [{ validTo: null }, { validTo: { gte: dayStart } }],
+      },
+      select: {
+        employeeId: true,
+        shiftId: true,
+        daysOfWeek: true,
+        validFrom: true,
+        validTo: true,
+      },
+    }),
+    prisma.scheduleException.findMany({
+      where: {
+        employeeId,
+        date: dayStart,
+      },
+      select: {
+        employeeId: true,
+        date: true,
+        type: true,
+        shiftId: true,
+      },
+    }),
     prisma.attendanceCorrection.findMany({
-      where: { employeeId, workDate: day.workDate },
+      where: { employeeId, workDate: dayStart },
       orderBy: { createdAt: "asc" },
       select: {
         id: true,
@@ -167,41 +312,95 @@ export async function getAttendanceDay(
         createdAt: true,
       },
     }),
+    prisma.attendanceEvent.findMany({
+      where: {
+        employeeId,
+        occurredAt: {
+          gte: new Date(dayStart.getTime() - 24 * 60 * 60_000),
+          lte: new Date(dayStart.getTime() + 48 * 60 * 60_000),
+        },
+      },
+      orderBy: { occurredAt: "asc" },
+      select: {
+        id: true,
+        direction: true,
+        occurredAt: true,
+        providerType: true,
+        deviceId: true,
+        actorUserId: true,
+        identityAssurance: true,
+        locationAssurance: true,
+        timeAssurance: true,
+        hintMismatch: true,
+        supersedesEventId: true,
+        supersededByEventId: true,
+        clockSkewMs: true,
+        flags: true,
+        evidence: {
+          select: { manualReasonCode: true, manualReasonText: true, geofenceDecision: true },
+        },
+      },
+    }),
   ]);
 
-  // A generous window: an overnight shift's events sit on two calendar dates.
-  const dayStart = new Date(`${dateKey}T00:00:00.000Z`);
-  const events = await prisma.attendanceEvent.findMany({
-    where: {
-      employeeId,
-      occurredAt: {
-        gte: new Date(dayStart.getTime() - 24 * 60 * 60_000),
-        lte: new Date(dayStart.getTime() + 48 * 60 * 60_000),
-      },
-    },
-    orderBy: { occurredAt: "asc" },
-    select: {
-      id: true,
-      direction: true,
-      occurredAt: true,
-      providerType: true,
-      deviceId: true,
-      actorUserId: true,
-      identityAssurance: true,
-      locationAssurance: true,
-      timeAssurance: true,
-      hintMismatch: true,
-      supersedesEventId: true,
-      supersededByEventId: true,
-      clockSkewMs: true,
-      flags: true,
-      evidence: {
-        select: { manualReasonCode: true, manualReasonText: true, geofenceDecision: true },
-      },
-    },
+  const resolved = resolveScheduleForDate(dateKey, {
+    timeZone: branch?.timezone ?? DISPLAY_TIMEZONE,
+    shifts,
+    assignments,
+    exceptions: exceptions.map((e) => ({
+      dateKey,
+      type: e.type,
+      shiftId: e.shiftId,
+    })),
   });
 
-  return { day, employee, branchName: branch?.name ?? "Unknown", events, corrections };
+  const day = {
+    id: `unrecorded-${employeeId}-${dateKey}`,
+    employeeId,
+    branchId: targetBranchId,
+    workDate: dayStart,
+    status: "PENDING" as const,
+    shiftIdSnapshot: null,
+    scheduledStart: resolved?.scheduledStart ?? null,
+    scheduledEnd: resolved?.scheduledEnd ?? null,
+    scheduledMinutes: resolved
+      ? Math.round((resolved.scheduledEnd.getTime() - resolved.scheduledStart.getTime()) / 60_000)
+      : 0,
+    actualIn: null,
+    actualOut: null,
+    breakMinutes: 0,
+    grossMinutes: 0,
+    netWorkedMinutes: 0,
+    regularMinutes: 0,
+    overtimeMinutes: 0,
+    payableOvertimeMinutes: 0,
+    lateMinutes: 0,
+    earlyDepartureMinutes: 0,
+    lowestIdentityAssurance: null,
+    lowestLocationAssurance: null,
+    lowestTimeAssurance: null,
+    flags: [] as string[],
+    policySnapshot: null,
+    settledAt: null,
+    projectionVersion: 1,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  return {
+    day,
+    employee: {
+      id: employee.id,
+      employeeCode: employee.employeeCode,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+    },
+    branchName: branch?.name ?? "Unknown",
+    events,
+    corrections,
+    isRecorded: false,
+    shiftName: resolved?.shiftName ?? null,
+  };
 }
 
 export type TimesheetFilters = {

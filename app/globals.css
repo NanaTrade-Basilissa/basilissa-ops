@@ -38,6 +38,7 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
@@ -73,6 +74,7 @@
   --popover-foreground: oklch(0.2 0.015 82);
   --primary: oklch(0.91 0.189 100);
   --primary-foreground: oklch(0.17 0.01 89);
+  --primary-text: oklch(0.48 0.16 75);
   --secondary: oklch(0.96 0.063 97);
   --secondary-foreground: oklch(0.2 0.015 82);
   --muted: oklch(0.95 0.025 92);
@@ -112,6 +114,7 @@
   --popover-foreground: oklch(0.97 0.027 93);
   --primary: oklch(0.91 0.189 100);
   --primary-foreground: oklch(0.17 0.01 89);
+  --primary-text: oklch(0.91 0.189 100);
   --secondary: oklch(0.27 0.026 87);
   --secondary-foreground: oklch(0.97 0.027 93);
   --muted: oklch(0.27 0.026 87);
@@ -152,3 +155,24 @@
     @apply font-sans;
   }
 }
+
+@layer utilities {
+  /*
+   * High-contrast primary text on light backgrounds.
+   * Brand yellow (--primary) is used for button backgrounds, but yellow text
+   * on white backgrounds has unreadable contrast. This ensures any text-primary
+   * element renders with an accessible, high-contrast amber-gold on light mode.
+   */
+  .text-primary {
+    color: var(--primary-text);
+  }
+
+  .hover\:text-primary:hover {
+    color: var(--primary-text);
+  }
+
+  .group:hover .group-hover\:text-primary {
+    color: var(--primary-text);
+  }
+}
+

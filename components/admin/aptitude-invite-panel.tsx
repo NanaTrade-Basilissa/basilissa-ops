@@ -1,18 +1,27 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
-import { Copy, Loader2, RotateCw, Send, Users, X } from "lucide-react";
-import type { AptitudeFormState, BulkInviteState, InviteState } from "@/lib/modules/aptitude/actions";
+import { Check, Copy, ExternalLink, Loader2, RotateCw, Users, X } from "lucide-react";
+import { toast } from "sonner";
+import type { AptitudeFormState, InviteState } from "@/lib/modules/aptitude/actions";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/native-select";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
-type Invitation = {
+export type AptitudeInvitation = {
   id: string;
   candidateName: string;
   candidateEmail: string | null;
@@ -30,7 +39,7 @@ type Invitation = {
   } | null;
 };
 
-function progressOf(invitation: Invitation): { label: string; tone: "done" | "open" | "idle" | "timeout" } {
+function progressOf(invitation: AptitudeInvitation): { label: string; tone: "done" | "open" | "idle" | "timeout" } {
   if (invitation.revokedAt) return { label: "withdrawn", tone: "idle" };
   if (invitation.attempt?.submittedAt) {
     return invitation.attempt.autoSubmitted ? { label: "timed out", tone: "timeout" } : { label: "completed", tone: "done" };
@@ -44,187 +53,173 @@ export function AptitudeInvitePanel({
   testId,
   canWrite,
   invitations,
-  inviteAction,
-  inviteManyAction,
   resendAction,
   revokeAction,
 }: {
   testId: string;
   canWrite: boolean;
-  invitations: Invitation[];
-  inviteAction: (prev: InviteState, formData: FormData) => Promise<InviteState>;
-  inviteManyAction: (prev: BulkInviteState, formData: FormData) => Promise<BulkInviteState>;
+  invitations: AptitudeInvitation[];
   resendAction: (prev: InviteState, formData: FormData) => Promise<InviteState>;
   revokeAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
+  inviteAction?: unknown;
+  inviteManyAction?: unknown;
 }) {
-  const [inviteState, invite, inviting] = useActionState<InviteState, FormData>(inviteAction, undefined);
-  const [bulkState, inviteMany, invitingMany] = useActionState<BulkInviteState, FormData>(inviteManyAction, undefined);
   const [resendState, resend, resending] = useActionState<InviteState, FormData>(resendAction, undefined);
   const [revokeState, revoke, revoking] = useActionState<AptitudeFormState, FormData>(revokeAction, undefined);
-  const [mode, setMode] = useState<"one" | "many">("one");
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  const link = resendState?.link ?? inviteState?.link;
+  useEffect(() => {
+    if (resendState?.link) {
+      if (resendState.link.emailed) {
+        toast.success(`New link emailed to ${resendState.link.name}`);
+      } else {
+        toast.info(`New link generated for ${resendState.link.name}`);
+      }
+    } else if (resendState?.error) {
+      toast.error(resendState.error);
+    }
+  }, [resendState]);
+
+  useEffect(() => {
+    if (revokeState?.saved) {
+      toast.success("Invitation link withdrawn");
+    } else if (revokeState?.error) {
+      toast.error(revokeState.error);
+    }
+  }, [revokeState]);
+
+  const resentLink = resendState?.link;
+
+  async function copyResentLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedLink(true);
+      toast.success("Link copied to clipboard");
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch {
+      toast.error("Failed to copy link");
+    }
+  }
 
   return (
-    <div className="space-y-5">
-      {link && (
+    <div className="space-y-4">
+      {/* Newly resent link banner */}
+      {resentLink && (
         <Alert>
-          <AlertTitle>Link for {link.name}</AlertTitle>
-          <AlertDescription className="space-y-2">
+          <AlertTitle>New link for {resentLink.name}</AlertTitle>
+          <AlertDescription className="space-y-2 pt-1 text-xs">
             <p>
-              {link.emailed
-                ? "Emailed to them just now. "
-                : "Email is not set up (or none is on file), so send this yourself. "}
-              It works once, is tied to them alone, and{" "}
-              {link.expiresAt
-                ? `expires ${new Date(link.expiresAt).toLocaleString("en-GB")}.`
-                : "does not expire — only submitting it (or withdrawing it) ends it."}
+              {resentLink.emailed
+                ? "Emailed to candidate automatically. The previous link has been invalidated."
+                : "The previous link has been withdrawn. Send this replacement link to the candidate:"}
             </p>
-            <code className="block overflow-x-auto rounded-md bg-background p-2 text-xs">{link.url}</code>
-            <Button type="button" size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(link.url)}>
-              <Copy className="size-4" /> Copy link
-            </Button>
-            <p className="text-xs">Shown once. It is not stored anywhere it can be looked up again.</p>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {(inviteState?.error || bulkState?.error || resendState?.error || revokeState?.error) && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {inviteState?.error ?? bulkState?.error ?? resendState?.error ?? revokeState?.error}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {bulkState?.summary && (
-        <Alert>
-          <Users className="size-4" />
-          <AlertTitle>
-            Sent to {bulkState.summary.invited} {bulkState.summary.invited === 1 ? "person" : "people"}
-          </AlertTitle>
-          <AlertDescription className="space-y-1">
-            <p>
-              {bulkState.summary.emailed} emailed automatically
-              {bulkState.summary.invited > bulkState.summary.emailed &&
-                `; the rest have no address on file or email is not set up, so send those links yourself from the list below`}
-              .
+            <div className="flex items-center gap-2 w-full min-w-0">
+              <code className="flex-1 min-w-0 truncate rounded-md bg-muted px-2.5 py-1.5 font-mono text-xs">
+                {resentLink.url}
+              </code>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 shrink-0 gap-1 text-xs"
+                onClick={() => copyResentLink(resentLink.url)}
+              >
+                {copiedLink ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                {copiedLink ? "Copied" : "Copy"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {resentLink.expiresAt
+                ? `Expires: ${new Date(resentLink.expiresAt).toLocaleString("en-GB")}. Single-use only.`
+                : "Does not expire until submitted or withdrawn. Single-use only."}
             </p>
-            {bulkState.summary.failures.length > 0 && (
-              <p className="text-destructive">
-                Could not invite: {bulkState.summary.failures.map((f) => `${f.name} (${f.message})`).join("; ")}
-              </p>
-            )}
           </AlertDescription>
         </Alert>
-      )}
-
-      {canWrite && (
-        <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="mode">Send by email</Label>
-            <NativeSelect
-              id="mode"
-              value={mode}
-              onChange={(e) => setMode(e.target.value as "one" | "many")}
-              className="max-w-xs"
-            >
-              <option value="one">One candidate</option>
-              <option value="many">Several at once</option>
-            </NativeSelect>
-          </div>
-
-          {mode === "one" ? (
-            <form action={invite} className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">Their name</Label>
-                  <Input id="name" name="name" placeholder="Ama Mensah" required />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" name="email" type="email" required />
-                </div>
-              </div>
-              <Button type="submit" size="sm" disabled={inviting}>
-                {inviting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                Send invitation
-              </Button>
-            </form>
-          ) : (
-            <form action={inviteMany} className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="candidates">Candidates, one per line</Label>
-                <Textarea
-                  id="candidates"
-                  name="candidates"
-                  rows={5}
-                  placeholder={"Ama Mensah <ama@example.com>\nkwesi@example.com"}
-                  aria-describedby="candidates-hint"
-                />
-                <p id="candidates-hint" className="text-xs text-muted-foreground">
-                  A name is optional. Accepts &ldquo;Name &lt;email&gt;&rdquo;, &ldquo;Name, email&rdquo;, or a bare
-                  email per line.
-                </p>
-              </div>
-              <Button type="submit" size="sm" disabled={invitingMany}>
-                {invitingMany ? <Loader2 className="size-4 animate-spin" /> : <Users className="size-4" />}
-                Send to all
-              </Button>
-            </form>
-          )}
-        </div>
       )}
 
       {invitations.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nobody has been sent this yet.</p>
+        <Empty className="border border-dashed py-8">
+          <EmptyMedia variant="icon">
+            <Users className="size-5" />
+          </EmptyMedia>
+          <EmptyHeader>
+            <EmptyTitle>No invitations yet</EmptyTitle>
+            <EmptyDescription>
+              Invite candidates via email or share the public test link to collect responses.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <>
+        <div className="space-y-2">
           {canWrite && (
             <p className="text-xs text-muted-foreground">
-              Resend sends a new link and withdraws the old one. The two are not the same link.
+              Resending issues a brand new link and immediately revokes the old one.
             </p>
           )}
-          <ul className="space-y-1.5 text-sm">
+
+          <ul className="divide-y divide-border rounded-lg border border-border bg-card">
             {invitations.map((invitation) => {
               const progress = progressOf(invitation);
               const attempt = invitation.attempt;
+              const isFinished = !!attempt?.submittedAt;
+              const isRevoked = !!invitation.revokedAt;
+              const canModify = canWrite && !isFinished && !isRevoked;
 
               return (
                 <li
                   key={invitation.id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2.5"
+                  className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm hover:bg-muted/20 transition-colors"
                 >
-                  <span className="font-medium">{invitation.candidateName}</span>
-                  <Badge
-                    variant={progress.tone === "done" ? "default" : progress.tone === "timeout" ? "destructive" : "outline"}
-                    className="text-xs"
-                  >
-                    {progress.label}
-                  </Badge>
+                  <div className="space-y-0.5 min-w-[180px]">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground">{invitation.candidateName}</span>
+                      <Badge
+                        variant={
+                          progress.tone === "done"
+                            ? "default"
+                            : progress.tone === "timeout"
+                            ? "destructive"
+                            : "outline"
+                        }
+                        className="text-xs capitalize"
+                      >
+                        {progress.label}
+                      </Badge>
+                    </div>
+                    {invitation.candidateEmail && (
+                      <p className="text-xs text-muted-foreground">{invitation.candidateEmail}</p>
+                    )}
+                  </div>
 
-                  {attempt?.submittedAt && (attempt.maxPoints ?? 0) > 0 && (
-                    <span className="text-muted-foreground">
-                      {attempt.scoredPoints}/{attempt.maxPoints} · {Math.round((attempt.scoredPoints! / attempt.maxPoints!) * 100)}%
-                    </span>
-                  )}
+                  {/* Score & Mismatch flags */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isFinished && (attempt.maxPoints ?? 0) > 0 && (
+                      <span className="font-mono text-xs font-semibold text-foreground bg-muted px-2 py-0.5 rounded">
+                        {attempt.scoredPoints}/{attempt.maxPoints} (
+                        {Math.round((attempt.scoredPoints! / attempt.maxPoints!) * 100)}%)
+                      </span>
+                    )}
 
-                  {attempt?.identityMismatch && (
-                    <Badge variant="destructive" className="text-xs">
-                      typed &ldquo;{attempt.declaredName}&rdquo;
-                    </Badge>
-                  )}
+                    {attempt?.identityMismatch && (
+                      <Badge variant="destructive" className="text-xs">
+                        typed &ldquo;{attempt.declaredName}&rdquo;
+                      </Badge>
+                    )}
+                  </div>
 
-                  <div className="ml-auto flex items-center gap-2">
-                    {attempt?.submittedAt && (
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    {isFinished && (
                       <Link
                         href={`/admin/aptitude-tests/${testId}/attempts/${attempt.id}`}
-                        className="text-xs underline underline-offset-4"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline underline-offset-4 px-2 py-1"
                       >
                         See answers
+                        <ExternalLink className="size-3" />
                       </Link>
                     )}
-                    {canWrite && !attempt?.submittedAt && !invitation.revokedAt && (
+
+                    {canModify && (
                       <form action={resend}>
                         <input type="hidden" name="invitationId" value={invitation.id} />
                         <Button
@@ -232,26 +227,61 @@ export function AptitudeInvitePanel({
                           variant="ghost"
                           size="sm"
                           disabled={resending}
-                          title="Sends a new link and withdraws this one"
+                          className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                          title="Sends a new link and invalidates the old one"
                         >
-                          {resending ? <Loader2 className="size-4 animate-spin" /> : <RotateCw className="size-4" />} Resend
+                          {resending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
+                          Resend
                         </Button>
                       </form>
                     )}
-                    {canWrite && !attempt?.submittedAt && !invitation.revokedAt && (
-                      <form action={revoke}>
-                        <input type="hidden" name="invitationId" value={invitation.id} />
-                        <Button type="submit" variant="ghost" size="sm" disabled={revoking}>
-                          <X className="size-4" /> Withdraw
-                        </Button>
-                      </form>
+
+                    {canModify && (
+                      <AlertDialog>
+                        <AlertDialogTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={revoking}
+                              className="h-8 gap-1 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <X className="size-3.5" />
+                              Withdraw
+                            </Button>
+                          }
+                        />
+                        <AlertDialogContent size="sm">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Withdraw invitation?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will immediately revoke access for{" "}
+                              <strong>{invitation.candidateName}</strong>. Their test link will no longer work.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <form action={revoke}>
+                              <input type="hidden" name="invitationId" value={invitation.id} />
+                              <AlertDialogAction
+                                type="submit"
+                                variant="destructive"
+                                disabled={revoking}
+                              >
+                                {revoking ? <Loader2 className="size-4 animate-spin" /> : "Withdraw link"}
+                              </AlertDialogAction>
+                            </form>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     )}
                   </div>
                 </li>
               );
             })}
           </ul>
-        </>
+        </div>
       )}
     </div>
   );

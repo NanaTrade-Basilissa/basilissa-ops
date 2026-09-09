@@ -20,8 +20,8 @@ export function CopyLinkButton({ url }: { url: string }) {
   }
 
   return (
-    <div className="w-full space-y-1.5">
-      <p className="truncate rounded-md border border-border bg-muted px-2.5 py-1.5 font-mono text-xs text-muted-foreground" title={url}>
+    <div className="w-full min-w-0 space-y-1.5">
+      <p className="w-full min-w-0 truncate rounded-md border border-border bg-muted px-2.5 py-1.5 font-mono text-xs text-muted-foreground" title={url}>
         {url}
       </p>
       <Button type="button" variant="outline" size="sm" className="w-full" onClick={handleCopy}>

@@ -41,18 +41,21 @@ function hours(minutes: number): string {
 
 export default async function AttendanceDayPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ employeeId: string; date: string }>;
+  searchParams?: Promise<{ branchId?: string }>;
 }) {
   requireFeature("attendance");
 
   const { employeeId, date } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const { actor, scope } = await requireAnyBranchPermission("attendance:read");
 
-  const result = await getAttendanceDay(scope, employeeId, date);
+  const result = await getAttendanceDay(scope, employeeId, date, resolvedSearchParams?.branchId);
   if (!result) notFound();
 
-  const { day, employee, branchName, events, corrections } = result;
+  const { day, employee, branchName, events, corrections, isRecorded, shiftName } = result;
   const voided = new Set(
     corrections.filter((c) => c.operation !== "INSERT_EVENT").map((c) => c.targetEventId),
   );
@@ -65,7 +68,7 @@ export default async function AttendanceDayPage({
   return (
     <div className="space-y-6">
       <Link
-        href={`/admin/attendance?date=${date}`}
+        href={`/admin/attendance?date=${date}&branchId=${day.branchId}`}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
@@ -81,8 +84,8 @@ export default async function AttendanceDayPage({
           <span className="text-muted-foreground">{formatAccraDate(day.workDate)}</span>
           <span className="text-muted-foreground">· {branchName}</span>
           </div>
-          <Badge variant={day.status === "SETTLED" ? "default" : "outline"}>
-            {day.status.toLowerCase().replace("_", " ")}
+          <Badge variant={isRecorded && day.status === "SETTLED" ? "default" : "outline"}>
+            {!isRecorded ? "No punches" : day.status.toLowerCase().replace("_", " ")}
           </Badge>
           {isAutoClosed && (
             <Badge variant="outline" className="border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300">
@@ -92,7 +95,7 @@ export default async function AttendanceDayPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {day.status === "NEEDS_REVIEW" && canWrite && (
+          {isRecorded && day.status === "NEEDS_REVIEW" && canWrite && (
             <ResolveExceptionDialog
               employeeId={employeeId}
               employeeName={employee ? `${employee.firstName} ${employee.lastName}` : employeeId}
@@ -113,7 +116,7 @@ export default async function AttendanceDayPage({
             />
           )}
 
-          {canWrite && (
+          {canWrite && isRecorded && events.length > 0 && (
             <AttendanceCorrectionDialog
               employeeId={employeeId}
               branchId={day.branchId}
@@ -129,6 +132,31 @@ export default async function AttendanceDayPage({
           )}
         </div>
       </div>
+
+      {!isRecorded && (
+        <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-200">
+          <Clock className="size-4 text-amber-600 dark:text-amber-400" />
+          <AlertTitle className="font-semibold">No Attendance Recorded</AlertTitle>
+          <AlertDescription>
+            {shiftName ? (
+              <span>
+                Employee is scheduled for <strong>{shiftName}</strong>
+                {day.scheduledStart && day.scheduledEnd
+                  ? ` (${time(day.scheduledStart)} – ${time(day.scheduledEnd)})`
+                  : ""}
+                , but no clock-in or clock-out punches have been recorded for this date yet.
+              </span>
+            ) : (
+              <span>
+                No clock-in or clock-out punches have been recorded for this employee on this date.
+              </span>
+            )}
+            {can(actor, "attendance:manual_entry", { branchId: day.branchId }) && (
+              <span> You can record manual attendance using the button above.</span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {isAutoClosed && (
         <Alert className="border-purple-500/30 bg-purple-500/10 text-purple-950 dark:text-purple-200">
@@ -182,7 +210,7 @@ export default async function AttendanceDayPage({
               a stronger record, or set aside by a correction, stays here.
             </CardDescription>
           </div>
-          {canWrite && (
+          {canWrite && isRecorded && events.length > 0 && (
             <AttendanceCorrectionDialog
               employeeId={employeeId}
               branchId={day.branchId}

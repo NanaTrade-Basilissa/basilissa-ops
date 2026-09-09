@@ -1,15 +1,19 @@
 "use client";
 
-import { ClipboardCheck, Link2, Lock, Settings2, Users } from "lucide-react";
+import { ClipboardCheck, Copy, Lock, Settings2, Users } from "lucide-react";
+import { toast } from "sonner";
 import type { AptitudeQuestionKind, IdentityFieldMode } from "@prisma/client";
 import type { AptitudeFormState, BulkInviteState, InviteState } from "@/lib/modules/aptitude/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AptitudeTestBuilder } from "@/components/admin/aptitude-test-builder";
 import { AptitudeInvitePanel } from "@/components/admin/aptitude-invite-panel";
-import { AptitudePublicLinkPanel } from "@/components/admin/aptitude-public-link-panel";
+import { AptitudeInviteDialog } from "@/components/admin/aptitude-invite-dialog";
+import { AptitudePublicLinkDialog } from "@/components/admin/aptitude-public-link-dialog";
 import { AptitudeTestDetailsForm } from "@/components/admin/aptitude-test-details-form";
 
 type Section = {
@@ -135,58 +139,83 @@ export function AptitudeTestWorkspace({
           </Empty>
         ) : (
           <>
-            <div className="flex flex-wrap gap-6 text-sm">
-              <div>
-                <p className="text-2xl font-semibold text-foreground">{summary.invited}</p>
-                <p className="text-muted-foreground">invited</p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
+              <div className="flex flex-wrap items-center gap-6 text-sm">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-semibold tracking-tight text-foreground">{summary.invited}</span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider">invited</span>
+                </div>
+                <div className="h-6 w-px bg-border hidden sm:block" />
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-semibold tracking-tight text-foreground">{summary.submitted}</span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider">completed</span>
+                </div>
+                {summary.averagePercent !== null && (
+                  <>
+                    <div className="h-6 w-px bg-border hidden sm:block" />
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-semibold tracking-tight text-foreground">{summary.averagePercent}%</span>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wider">average</span>
+                    </div>
+                  </>
+                )}
               </div>
-              <div>
-                <p className="text-2xl font-semibold text-foreground">{summary.submitted}</p>
-                <p className="text-muted-foreground">completed</p>
-              </div>
-              {summary.averagePercent !== null && (
-                <div>
-                  <p className="text-2xl font-semibold text-foreground">{summary.averagePercent}%</p>
-                  <p className="text-muted-foreground">average</p>
+
+              {canWrite && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {publicLinkValues.enabled && publicLinkUrl && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-1.5"
+                      onClick={() => {
+                        navigator.clipboard.writeText(publicLinkUrl);
+                        toast.success("Public test link copied to clipboard");
+                      }}
+                    >
+                      <Copy className="size-4" />
+                      Copy public link
+                    </Button>
+                  )}
+
+                  <AptitudePublicLinkDialog
+                    action={publicLinkAction}
+                    linkUrl={publicLinkUrl}
+                    values={publicLinkValues}
+                  />
+
+                  <AptitudeInviteDialog
+                    inviteAction={inviteAction}
+                    inviteManyAction={inviteManyAction}
+                  />
                 </div>
               )}
             </div>
 
-            {canWrite && (
-              <Card>
-                <CardHeader>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                <div>
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <Link2 className="size-4" />
-                    Public link
+                    <Users className="size-4" />
+                    Candidate responses
                   </CardTitle>
                   <CardDescription>
-                    The everyday way to reach candidates — one link, shared however you like.
+                    Track invitation delivery, candidate progress, and test scores.
                   </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <AptitudePublicLinkPanel action={publicLinkAction} linkUrl={publicLinkUrl} values={publicLinkValues} />
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Users className="size-4" />
-                  Who has it
-                </CardTitle>
-                <CardDescription>
-                  Send a personal link by email when you already have a candidate&rsquo;s
-                  address, one at a time or several at once.
-                </CardDescription>
+                </div>
+                {publicLinkValues.enabled && (
+                  <Badge variant="outline" className="text-xs gap-1.5 py-1">
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Public link active
+                  </Badge>
+                )}
               </CardHeader>
               <CardContent>
                 <AptitudeInvitePanel
                   testId={testId}
                   canWrite={canWrite}
                   invitations={invitations}
-                  inviteAction={inviteAction}
-                  inviteManyAction={inviteManyAction}
                   resendAction={resendAction}
                   revokeAction={revokeAction}
                 />

@@ -363,7 +363,7 @@ export function LiveFloorBoard({
                 {/* Footer link to day details */}
                 <div className="mt-4 border-t border-border/60 pt-3 text-right">
                   <Link
-                    href={`/admin/attendance/${staffMember.employeeId}/${todayKey}`}
+                    href={`/admin/attendance/${staffMember.employeeId}/${todayKey}?branchId=${data.branchId}`}
                     className="text-xs font-medium text-primary hover:underline"
                   >
                     Inspect Day Record &rarr;
