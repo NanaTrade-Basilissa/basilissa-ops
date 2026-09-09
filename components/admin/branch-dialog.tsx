@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import type { BranchFormState } from "@/lib/modules/branches/actions";
 import { BranchForm } from "@/components/admin/branch-form";
 import {
@@ -41,7 +42,10 @@ export function BranchDialog({
           action={action}
           defaultValues={defaultValues}
           submitLabel={submitLabel}
-          onSuccess={() => setOpen(false)}
+          onSuccess={() => {
+            setOpen(false);
+            toast.success(defaultValues ? "Branch updated successfully" : "Branch created successfully");
+          }}
         />
       </DialogContent>
     </Dialog>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import type { FormState } from "@/lib/platform/forms";
 import { ShiftForm } from "@/components/admin/shift-form";
 import {
@@ -51,7 +52,10 @@ export function ShiftDialog({
           branches={branches}
           defaultValues={defaultValues}
           submitLabel={submitLabel}
-          onSuccess={() => setOpen(false)}
+          onSuccess={() => {
+            setOpen(false);
+            toast.success(defaultValues ? "Shift updated successfully" : "Shift created successfully");
+          }}
         />
       </DialogContent>
     </Dialog>

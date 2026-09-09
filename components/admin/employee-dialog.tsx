@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import type { FormState } from "@/lib/platform/forms";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import {
@@ -29,7 +30,14 @@ export function EmployeeDialog({
           <DialogTitle>Add employee</DialogTitle>
           <DialogDescription>Assign a branch and shift afterwards.</DialogDescription>
         </DialogHeader>
-        <EmployeeForm action={action} submitLabel="Create employee" onSuccess={() => setOpen(false)} />
+        <EmployeeForm
+          action={action}
+          submitLabel="Create employee"
+          onSuccess={() => {
+            setOpen(false);
+            toast.success("Employee created successfully");
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { Plus } from "lucide-react";
+import { CalendarClock, Plus } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { createShift } from "@/lib/modules/employees/actions";
 import { listShifts } from "@/lib/modules/employees/server";
 import { minutesToTime } from "@/lib/modules/employees/validation";
 import { prisma } from "@/lib/platform/prisma";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription } from "@/components/ui/empty";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { ShiftDialog } from "@/components/admin/shift-dialog";
 import { ShiftsTable } from "@/components/admin/shifts-table";
 import { requireFeature } from "@/lib/platform/features-guard";
@@ -56,11 +56,16 @@ export default async function ShiftsPage() {
       </div>
 
       {shifts.length === 0 ? (
-        <Empty className="border">
-          <EmptyDescription>
-            No shifts yet. Without one, attendance is recorded but flagged unscheduled:
-            there is nothing to measure lateness or overtime against.
-          </EmptyDescription>
+        <Empty className="border py-12">
+          <EmptyMedia variant="icon">
+            <CalendarClock className="size-4" />
+          </EmptyMedia>
+          <EmptyHeader>
+            <EmptyTitle>No shifts defined yet</EmptyTitle>
+            <EmptyDescription>
+              Without a shift template, attendance is recorded but flagged unscheduled with nothing to measure lateness or overtime against.
+            </EmptyDescription>
+          </EmptyHeader>
         </Empty>
       ) : (
         <ShiftsTable

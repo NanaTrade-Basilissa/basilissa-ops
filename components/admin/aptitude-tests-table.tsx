@@ -6,6 +6,7 @@ import type { AptitudeTestStatus } from "@prisma/client";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { formatAccraDateTime } from "@/lib/platform/date";
 
 export type AptitudeTestRow = {
@@ -53,6 +54,20 @@ const columns = columnHelper.columns([
   columnHelper.accessor("createdAt", {
     header: "Created",
     cell: (info) => <span className="text-sm text-muted-foreground">{formatAccraDateTime(info.getValue())}</span>,
+  }),
+  columnHelper.display({
+    id: "actions",
+    header: () => <span className="sr-only">Actions</span>,
+    cell: ({ row }) => (
+      <div className="flex justify-end">
+        <Link
+          href={`/admin/aptitude-tests/${row.original.id}`}
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
+        >
+          Open
+        </Link>
+      </div>
+    ),
   }),
 ]);
 

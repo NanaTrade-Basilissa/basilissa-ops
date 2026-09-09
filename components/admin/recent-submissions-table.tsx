@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { SearchX } from "lucide-react";
 import { Badge, ratingBadgeVariant } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import type { RecentSubmissionRow } from "@/lib/modules/feedback/server";
 import { formatAccraDateTime } from "@/lib/platform/date";
 
@@ -13,9 +15,15 @@ export function RecentSubmissionsTable({
 }) {
   if (submissions.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-        No submissions yet for the selected filters.
-      </div>
+      <Empty className="border-0 py-8">
+        <EmptyMedia variant="icon">
+          <SearchX className="size-4" />
+        </EmptyMedia>
+        <EmptyHeader>
+          <EmptyTitle>No submissions</EmptyTitle>
+          <EmptyDescription>No feedback submissions match the selected filters.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 

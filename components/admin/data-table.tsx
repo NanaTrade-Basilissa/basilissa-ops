@@ -1,7 +1,10 @@
 "use client";
 
+import * as React from "react";
+import { SearchX } from "lucide-react";
 import { tableFeatures, useTable, FlexRender, type ColumnDef, type RowData } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, EmptyContent } from "@/components/ui/empty";
 
 /**
  * No client-side sorting/filtering/pagination features registered —
@@ -18,21 +21,20 @@ export const dataTableFeatures = tableFeatures({});
 export function DataTable<TData extends RowData>({
   columns,
   data,
-  emptyMessage = "No results.",
+  emptyMessage = "No results found.",
+  emptyAction,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[];
   data: TData[];
   emptyMessage?: string;
+  emptyAction?: React.ReactNode;
 }) {
   const table = useTable({ features: dataTableFeatures, columns, data });
 
   return (
     // Same container treatment as `Card` (rounded-xl, bg-card, a 1px ring
     // rather than a hard border) so a table standing on its own looks like
-    // the same design system as one sitting inside a Card — before this, a
-    // bare `<Table>` had no background of its own and just showed the
-    // page's background through every row, which read as unfinished next
-    // to any page that happened to wrap its table in a Card.
+    // the same design system as one sitting inside a Card.
     <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
       <Table>
         <TableHeader>
@@ -59,8 +61,17 @@ export function DataTable<TData extends RowData>({
             ))
           ) : (
             <TableRow>
-              <TableCell colSpan={columns.length} className="h-32 text-center text-sm text-muted-foreground">
-                {emptyMessage}
+              <TableCell colSpan={columns.length} className="p-0">
+                <Empty className="border-0 py-10">
+                  <EmptyMedia variant="icon">
+                    <SearchX className="size-4" />
+                  </EmptyMedia>
+                  <EmptyHeader>
+                    <EmptyTitle>No records</EmptyTitle>
+                    <EmptyDescription>{emptyMessage}</EmptyDescription>
+                  </EmptyHeader>
+                  {emptyAction && <EmptyContent>{emptyAction}</EmptyContent>}
+                </Empty>
               </TableCell>
             </TableRow>
           )}
@@ -69,3 +80,4 @@ export function DataTable<TData extends RowData>({
     </div>
   );
 }
+

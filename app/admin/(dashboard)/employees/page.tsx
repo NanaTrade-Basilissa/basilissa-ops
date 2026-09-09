@@ -1,14 +1,21 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
-import { UserPlus, Upload } from "lucide-react";
+import { UserPlus, Upload, SearchX, RotateCcw } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { countEmployees, listEmployees } from "@/lib/modules/employees/server";
 import { createEmployee } from "@/lib/modules/employees/actions";
 import { employeeListFilterSchema } from "@/lib/modules/employees/validation";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Empty, EmptyDescription } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { EmployeeFilters } from "@/components/admin/employee-filters";
 import { EmployeeDialog } from "@/components/admin/employee-dialog";
 import { EmployeesTable } from "@/components/admin/employees-table";
@@ -95,12 +102,28 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
       </Suspense>
 
       {total === 0 ? (
-        <Empty className="border">
-          <EmptyDescription>
-            {Object.keys(filters).length > 0
-              ? "No employees match the selected filters."
-              : "No employees yet. Attendance cannot be recorded until someone is on record and assigned to a branch."}
-          </EmptyDescription>
+        <Empty className="border py-12">
+          <EmptyMedia variant="icon">
+            <SearchX className="size-4" />
+          </EmptyMedia>
+          <EmptyHeader>
+            <EmptyTitle>
+              {Object.keys(filters).length > 0 ? "No matching employees" : "No employees yet"}
+            </EmptyTitle>
+            <EmptyDescription>
+              {Object.keys(filters).length > 0
+                ? "No employees match your current filter or search criteria."
+                : "No employees yet. Attendance cannot be recorded until someone is on record and assigned to a branch."}
+            </EmptyDescription>
+          </EmptyHeader>
+          {Object.keys(filters).length > 0 && (
+            <EmptyContent>
+              <Link href="/admin/employees" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                <RotateCcw className="size-3.5" />
+                Clear filters
+              </Link>
+            </EmptyContent>
+          )}
         </Empty>
       ) : (
         <EmployeesTable employees={employees} />

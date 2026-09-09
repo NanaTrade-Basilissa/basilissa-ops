@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useState, useTransition } from "react";
-import { Loader2 } from "lucide-react";
 import { getUserDetailAction } from "@/lib/modules/identity/actions";
 import { UserDetailContent } from "@/components/admin/user-detail-content";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Sheet,
   SheetContent,
@@ -13,6 +13,28 @@ import {
 } from "@/components/ui/sheet";
 
 type Detail = NonNullable<Awaited<ReturnType<typeof getUserDetailAction>>>;
+
+function UserDetailSkeleton() {
+  return (
+    <div className="space-y-6 pt-2">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-4 w-64" />
+      </div>
+      <div className="space-y-4 rounded-xl border border-border p-4">
+        <Skeleton className="h-5 w-24" />
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+      <div className="space-y-3 rounded-xl border border-border p-4">
+        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-12 w-full" />
+      </div>
+    </div>
+  );
+}
 
 export function UserDetailSheet({
   userId,
@@ -33,20 +55,20 @@ export function UserDetailSheet({
   return (
     <Sheet
       onOpenChange={(open) => {
-        if (open) load();
+        if (open) {
+          load();
+        } else {
+          setDetail(null);
+        }
       }}
     >
       <SheetTrigger render={trigger} />
-      <SheetContent className="w-full overflow-y-auto sm:w-1/2 sm:max-w-none">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-xl lg:max-w-2xl">
         <SheetHeader>
           <SheetTitle>User</SheetTitle>
         </SheetHeader>
         <div className="px-4 pb-4">
-          {isPending && !detail && (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <Loader2 className="size-5 animate-spin" />
-            </div>
-          )}
+          {(isPending || !detail) && <UserDetailSkeleton />}
           {detail && (
             <UserDetailContent
               user={detail.user}
