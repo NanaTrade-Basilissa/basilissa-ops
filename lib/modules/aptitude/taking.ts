@@ -59,6 +59,14 @@ export type TakingView = {
    * never computes its own deadline. Null means untimed.
    */
   deadlineAt: string | null;
+  /**
+   * The test's configured limit, separate from `deadlineAt` (which is
+   * already ticking down by the time this loads — the attempt, and its
+   * deadline, are created on first open). Shown on the "before you start"
+   * screen so nobody discovers the clock only after starting. Null means
+   * untimed.
+   */
+  timeLimitMinutes: number | null;
   sections: TakingSection[];
 };
 
@@ -202,6 +210,7 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
       declaredName,
       identity,
       deadlineAt: attempt.deadlineAt ? attempt.deadlineAt.toISOString() : null,
+      timeLimitMinutes: invitation.test.timeLimitMinutes,
       sections: invitation.test.sections.map((section) => ({
         id: section.id,
         title: section.title,

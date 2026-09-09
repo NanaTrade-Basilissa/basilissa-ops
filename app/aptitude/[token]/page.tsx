@@ -67,6 +67,7 @@ export default async function TakeAptitudeTestPage({ params }: { params: Promise
             nameMode={view.identity.nameMode}
             emailMode={view.identity.emailMode}
             personal={!view.isPublic}
+            timeLimitMinutes={view.timeLimitMinutes}
           />
         ) : (
           <AptitudeRunner

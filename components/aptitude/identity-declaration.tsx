@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, Timer } from "lucide-react";
 import type { IdentityFieldMode } from "@prisma/client";
 import type { DeclarationState } from "@/lib/modules/aptitude/actions";
 import { Button } from "@/components/ui/button";
@@ -20,12 +20,17 @@ export function IdentityDeclaration({
   nameMode,
   emailMode,
   personal,
+  timeLimitMinutes,
 }: {
   action: (prev: DeclarationState, formData: FormData) => Promise<DeclarationState>;
   nameMode: IdentityFieldMode;
   emailMode: IdentityFieldMode;
   /** A personal, HR-issued link — shows the "please don't pass this on" note. */
   personal: boolean;
+  /** Null means untimed. The clock itself starts on first open, not on this
+   * screen — this is purely so nobody discovers it's timed only after
+   * starting. */
+  timeLimitMinutes: number | null;
 }) {
   const [state, formAction, isPending] = useActionState<DeclarationState, FormData>(action, undefined);
 
@@ -39,7 +44,16 @@ export function IdentityDeclaration({
             : "Confirm who you are so your answers are recorded against the right person."}
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {timeLimitMinutes !== null && (
+          <Alert>
+            <Timer className="size-4" />
+            <AlertDescription>
+              This test is timed: {timeLimitMinutes} {timeLimitMinutes === 1 ? "minute" : "minutes"} once you
+              start. The clock does not pause.
+            </AlertDescription>
+          </Alert>
+        )}
         <form action={formAction} className="space-y-5" noValidate>
           {state?.error && (
             <Alert variant="destructive">
