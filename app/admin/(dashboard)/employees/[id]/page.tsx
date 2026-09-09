@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/platform/prisma";
-import { can, currentBranchScope, requirePermission } from "@/lib/modules/identity/server";
+import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { getEmployee, listShiftAssignments, listShifts } from "@/lib/modules/employees/server";
 import { EmployeeDetailContent } from "@/components/admin/employee-detail-content";
 import { isFeatureEnabled } from "@/lib/platform/features";
@@ -11,8 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EmployeePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const actor = await requirePermission("employee:read");
-  const scope = await currentBranchScope("employee:read");
+  const { actor, scope } = await requireAnyBranchPermission("employee:read");
   const attendanceEnabled = isFeatureEnabled("attendance");
 
   // Scoped lookup, not a fetch-then-check. A manager must not be able to reach
@@ -20,9 +19,22 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
   const employee = await getEmployee(id, scope);
   if (!employee) notFound();
 
+  const branchWhere =
+    scope.kind === "branches"
+      ? { id: { in: scope.branchIds }, isActive: true }
+      : { isActive: true };
+
+  const employeeBranchIds = employee.branchAssignments.map((b) => b.branch.id);
+  const canWrite =
+    can(actor, "employee:write") ||
+    employeeBranchIds.some((branchId) => can(actor, "employee:write", { branchId }));
+  const canSchedule =
+    can(actor, "schedule:write") ||
+    employeeBranchIds.some((branchId) => can(actor, "schedule:write", { branchId }));
+
   const [branches, shifts, shiftAssignments] = await Promise.all([
-    prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    listShifts(),
+    prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    listShifts(scope),
     listShiftAssignments(employee.id),
   ]);
 
@@ -33,8 +45,8 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
         branches={branches}
         shifts={shifts}
         shiftAssignments={shiftAssignments}
-        canWrite={can(actor, "employee:write")}
-        canSchedule={can(actor, "schedule:write")}
+        canWrite={canWrite}
+        canSchedule={canSchedule}
         attendanceEnabled={attendanceEnabled}
       />
     </div>

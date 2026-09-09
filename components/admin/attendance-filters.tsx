@@ -42,7 +42,7 @@ export function AttendanceFilters({
         />
       </div>
 
-      {branches.length > 1 && (
+      {branches.length > 1 ? (
         <div className="space-y-1.5">
           <Label htmlFor="branchId">Branch</Label>
           <NativeSelect
@@ -59,7 +59,14 @@ export function AttendanceFilters({
             ))}
           </NativeSelect>
         </div>
-      )}
+      ) : branches.length === 1 ? (
+        <div className="space-y-1.5">
+          <Label>Branch</Label>
+          <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground">
+            {branches[0].name}
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-2 pb-2">
         <Switch

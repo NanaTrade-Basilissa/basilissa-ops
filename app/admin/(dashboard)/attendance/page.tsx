@@ -1,17 +1,21 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { AlertTriangle, Clock, TriangleAlert, Users } from "lucide-react";
-import { requireAnyBranchPermission } from "@/lib/modules/identity/server";
+import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import {
   employeeLookup,
   listAttendanceDays,
   summariseDay,
 } from "@/lib/modules/attendance/server";
+import { listEmployees } from "@/lib/modules/employees/server";
 import { prisma } from "@/lib/platform/prisma";
 import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { StatCard } from "@/components/admin/stat-card";
 import { AttendanceFilters } from "@/components/admin/attendance-filters";
 import { AttendanceTable } from "@/components/admin/attendance-table";
+import { ManualPunchDialog, type EmployeeOption } from "@/components/admin/manual-punch-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { requireFeature } from "@/lib/platform/features-guard";
 
@@ -41,14 +45,19 @@ function hours(minutes: number): string {
 export default async function AttendancePage({ searchParams }: { searchParams: SearchParams }) {
   requireFeature("attendance");
 
-  const { scope } = await requireAnyBranchPermission("attendance:read");
+  const { actor, scope } = await requireAnyBranchPermission("attendance:read");
   const raw = await searchParams;
 
   const date = first(raw.date) ?? dateKeyInZone(new Date(), DISPLAY_TIMEZONE);
   const branchId = first(raw.branchId);
   const exceptionsOnly = first(raw.exceptions) === "1";
 
-  const [days, summary, branches] = await Promise.all([
+  const canManualEntry =
+    can(actor, "attendance:manual_entry") ||
+    (scope.kind === "branches" &&
+      scope.branchIds.some((id) => can(actor, "attendance:manual_entry", { branchId: id })));
+
+  const [days, summary, branches, activeEmployees] = await Promise.all([
     listAttendanceDays(scope, { date, branchId, exceptionsOnly }),
     summariseDay(scope, { date, branchId }),
     prisma.branch.findMany({
@@ -56,20 +65,62 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    canManualEntry ? listEmployees(scope, { status: "ACTIVE" }) : Promise.resolve([]),
   ]);
 
   const employees = await employeeLookup(days.map((day) => day.employeeId));
   const branchName = new Map(branches.map((b) => [b.id, b.name]));
 
+  const employeeOptions: EmployeeOption[] = activeEmployees.map((e) => ({
+    id: e.id,
+    name: `${e.firstName} ${e.lastName}`.trim(),
+    employeeCode: e.employeeCode,
+    branchAssignments: e.branchAssignments.map((ba) => ({
+      branchId: ba.branch.id,
+      branchName: ba.branch.name,
+      isPrimary: ba.isPrimary,
+    })),
+  }));
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-foreground">Attendance</h1>
-        <p className="text-sm text-muted-foreground">
-          {scope.kind === "branches" ? "Your branches." : "Every branch."} Days needing a
-          person are listed first.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-foreground">Attendance</h1>
+          <p className="text-sm text-muted-foreground">
+            {scope.kind === "branches" ? "Your branches." : "Every branch."} Days needing a
+            person are listed first.
+          </p>
+        </div>
+        {canManualEntry && (
+          <ManualPunchDialog
+            employees={employeeOptions}
+            branches={branches}
+            defaultDate={date}
+            defaultBranchId={branchId || (branches.length === 1 ? branches[0].id : undefined)}
+          />
+        )}
       </div>
+
+      {summary.needingReview > 0 && !exceptionsOnly && (
+        <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200">
+          <TriangleAlert className="size-4 text-amber-600 dark:text-amber-400" />
+          <AlertTitle className="font-semibold">Review needed</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              {summary.needingReview}{" "}
+              {summary.needingReview === 1 ? "day requires" : "days require"} manager review
+              (missing clock-outs, late arrivals, or anomalies).
+            </span>
+            <Link
+              href={`/admin/attendance?date=${date}${branchId ? `&branchId=${branchId}` : ""}&exceptions=1`}
+              className="font-medium underline underline-offset-4 hover:text-foreground"
+            >
+              Filter to days needing attention &rarr;
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <AttendanceFilters
         branches={branches}
@@ -97,6 +148,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
         </Empty>
       ) : (
         <AttendanceTable
+          date={date}
           days={days.map((day) => {
             const employee = employees.get(day.employeeId);
             return {

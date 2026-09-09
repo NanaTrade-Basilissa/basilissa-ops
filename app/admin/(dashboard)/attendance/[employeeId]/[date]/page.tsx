@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, FileClock } from "lucide-react";
-import { can, currentBranchScope, requirePermission } from "@/lib/modules/identity/server";
+import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { getAttendanceDay } from "@/lib/modules/attendance/server";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { formatAccraDate } from "@/lib/platform/date";
@@ -43,8 +43,7 @@ export default async function AttendanceDayPage({
   requireFeature("attendance");
 
   const { employeeId, date } = await params;
-  const actor = await requirePermission("attendance:read");
-  const scope = await currentBranchScope("attendance:read");
+  const { actor, scope } = await requireAnyBranchPermission("attendance:read");
 
   const result = await getAttendanceDay(scope, employeeId, date);
   if (!result) notFound();

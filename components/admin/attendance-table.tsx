@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export type AttendanceRow = {
   id: string;
@@ -86,6 +88,66 @@ const columns = columnHelper.columns([
   }),
 ]);
 
-export function AttendanceTable({ days }: { days: AttendanceRow[] }) {
-  return <DataTable columns={columns} data={days} />;
+export function AttendanceTable({ days, date }: { days: AttendanceRow[]; date?: string }) {
+  const exportDate = date || (days[0]?.date ?? new Date().toISOString().slice(0, 10));
+
+  function handleExportCsv() {
+    const headers = [
+      "Employee Name",
+      "Employee Code",
+      "Branch",
+      "Date",
+      "Clock In",
+      "Clock Out",
+      "Hours Worked",
+      "Overtime",
+      "Late (min)",
+      "Status",
+      "Flags",
+    ];
+    const rows = days.map((day) => [
+      `"${(day.employeeName ?? day.employeeId).replace(/"/g, '""')}"`,
+      `"${(day.employeeCode ?? "").replace(/"/g, '""')}"`,
+      `"${day.branchName.replace(/"/g, '""')}"`,
+      `"${day.date}"`,
+      `"${day.actualInLabel}"`,
+      `"${day.actualOutLabel}"`,
+      `"${day.workedLabel}"`,
+      `"${day.overtimeLabel}"`,
+      day.lateMinutes,
+      `"${day.status}"`,
+      `"${day.flags.join("; ")}"`,
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `attendance-${exportDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <span className="text-sm text-muted-foreground">
+          {days.length} {days.length === 1 ? "day on record" : "days on record"}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportCsv}
+          className="gap-1.5"
+        >
+          <Download className="size-4" />
+          Export CSV
+        </Button>
+      </div>
+      <DataTable columns={columns} data={days} />
+    </div>
+  );
 }

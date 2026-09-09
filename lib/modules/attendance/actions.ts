@@ -171,6 +171,31 @@ export async function recordManualAttendance(
   };
 }
 
+/**
+ * Direct manual attendance recording from the main dashboard.
+ *
+ * Takes employeeId and branchId from the submitted FormData and delegates
+ * to recordManualAttendance with branch authorization checks.
+ */
+export async function recordManualAttendanceDirect(
+  prevState: AttendanceActionState,
+  formData: FormData,
+): Promise<AttendanceActionState> {
+  requireFeature("attendance");
+
+  const employeeId = String(formData.get("employeeId") ?? "");
+  const branchId = String(formData.get("branchId") ?? "");
+
+  if (!employeeId) {
+    return { error: "Please select an employee.", fieldErrors: { employeeId: "Required" } };
+  }
+  if (!branchId) {
+    return { error: "Please select a branch.", fieldErrors: { branchId: "Required" } };
+  }
+
+  return recordManualAttendance(employeeId, branchId, prevState, formData);
+}
+
 /** Adjusts, voids or reassigns a recorded punch. Never edits it. */
 export async function correctAttendance(
   employeeId: string,

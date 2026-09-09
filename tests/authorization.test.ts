@@ -458,3 +458,29 @@ describe("navigation visibility by role", () => {
   });
 });
 
+describe("branch manager operational permissions on detail pages", () => {
+  it("allows branch manager to read employee in branch scope but not globally", () => {
+    const manager = actor([branchRole(Role.BRANCH_MANAGER, "branch_accra")]);
+    // requirePermission("employee:read") demands GLOBAL and fails:
+    expect(can(manager, "employee:read")).toBe(false);
+    // requireAnyBranchPermission("employee:read") checks branchScope and succeeds:
+    const scope = branchScope(manager, "employee:read");
+    expect(scope).toEqual({ kind: "branches", branchIds: ["branch_accra"] });
+  });
+
+  it("allows branch manager to read attendance in branch scope but not globally", () => {
+    const manager = actor([branchRole(Role.BRANCH_MANAGER, "branch_accra")]);
+    expect(can(manager, "attendance:read")).toBe(false);
+    const scope = branchScope(manager, "attendance:read");
+    expect(scope).toEqual({ kind: "branches", branchIds: ["branch_accra"] });
+  });
+
+  it("allows branch manager to record manual attendance and schedule shifts only for assigned branch", () => {
+    const manager = actor([branchRole(Role.BRANCH_MANAGER, "branch_accra")]);
+    expect(can(manager, "attendance:manual_entry", { branchId: "branch_accra" })).toBe(true);
+    expect(can(manager, "attendance:manual_entry", { branchId: "branch_kumasi" })).toBe(false);
+    expect(can(manager, "schedule:write", { branchId: "branch_accra" })).toBe(true);
+    expect(can(manager, "schedule:write", { branchId: "branch_kumasi" })).toBe(false);
+  });
+});
+
