@@ -16,6 +16,8 @@ export type AdminFailure =
   | "BRANCH_NOT_FOUND"
   | "SELF_ACTION_FORBIDDEN"
   | "LAST_SUPER_ADMIN"
+  | "SINGLE_SUPER_ADMIN_ONLY"
+  | "SUPER_ADMIN_PROTECTED"
   | "USER_NOT_FOUND";
 
 export type CreateUserOutcome =
@@ -106,6 +108,34 @@ export type GrantOutcome =
   | { ok: true; assignmentId: string }
   | { ok: false; reason: AdminFailure; message: string };
 
+async function isActorSuperAdmin(actor: AuditActor): Promise<boolean> {
+  if (actor.role === "SYSTEM") return true;
+  if (!actor.userId) return false;
+  if (actor.role && actor.role.includes(Role.SUPER_ADMIN)) return true;
+  const count = await prisma.roleAssignment.count({
+    where: {
+      userId: actor.userId,
+      role: Role.SUPER_ADMIN,
+      validFrom: { lte: new Date() },
+      OR: [{ validTo: null }, { validTo: { gt: new Date() } }],
+      user: { status: UserStatus.ACTIVE },
+    },
+  });
+  return count > 0;
+}
+
+async function isTargetSuperAdmin(userId: string): Promise<boolean> {
+  const count = await prisma.roleAssignment.count({
+    where: {
+      userId,
+      role: Role.SUPER_ADMIN,
+      validFrom: { lte: new Date() },
+      OR: [{ validTo: null }, { validTo: { gt: new Date() } }],
+    },
+  });
+  return count > 0;
+}
+
 /**
  * Grants a role, at global scope or over one branch.
  *
@@ -124,6 +154,50 @@ export async function grantRole(
     select: { id: true, email: true },
   });
   if (!user) return { ok: false, reason: "USER_NOT_FOUND", message: "No such account." };
+
+  const now = new Date();
+
+  // Exactly one Super Admin account is allowed across the entire system.
+  if (input.role === Role.SUPER_ADMIN) {
+    if (input.scopeType !== ScopeType.GLOBAL) {
+      return {
+        ok: false,
+        reason: "SINGLE_SUPER_ADMIN_ONLY",
+        message: "The super admin role must be company-wide (global).",
+      };
+    }
+
+    const existingSuperAdmin = await prisma.roleAssignment.findFirst({
+      where: {
+        role: Role.SUPER_ADMIN,
+        userId: { not: input.userId },
+        validFrom: { lte: now },
+        OR: [{ validTo: null }, { validTo: { gt: now } }],
+        user: { status: UserStatus.ACTIVE },
+      },
+      select: { user: { select: { email: true } } },
+    });
+    if (existingSuperAdmin) {
+      return {
+        ok: false,
+        reason: "SINGLE_SUPER_ADMIN_ONLY",
+        message: `Only one super admin account is allowed. An active super admin (${existingSuperAdmin.user.email}) already exists.`,
+      };
+    }
+  }
+
+  // Super Admin account protection: non-super-admins cannot alter or grant Super Admin
+  const targetIsSuperAdmin = await isTargetSuperAdmin(input.userId);
+  if (input.role === Role.SUPER_ADMIN || targetIsSuperAdmin) {
+    const actorIsSuperAdmin = await isActorSuperAdmin(actor);
+    if (!actorIsSuperAdmin) {
+      return {
+        ok: false,
+        reason: "SUPER_ADMIN_PROTECTED",
+        message: "Only a Super Admin can grant or modify roles on a Super Admin account.",
+      };
+    }
+  }
 
   // GLOBAL stores an empty string, never null: Postgres treats NULLs as
   // distinct in a unique constraint, so a nullable scope would let the same
@@ -145,7 +219,6 @@ export async function grantRole(
     scopeId = branch.id;
   }
 
-  const now = new Date();
   const assignment = await prisma.roleAssignment.upsert({
     where: {
       userId_role_scopeType_scopeId: {
@@ -217,6 +290,19 @@ export async function revokeRole(
 
   // Already revoked: nothing to do, and reporting success is honest.
   if (assignment.validTo !== null && assignment.validTo <= new Date()) return { ok: true };
+
+  const targetIsSuperAdmin =
+    assignment.role === Role.SUPER_ADMIN || (await isTargetSuperAdmin(assignment.userId));
+  if (targetIsSuperAdmin) {
+    const actorIsSuperAdmin = await isActorSuperAdmin(actor);
+    if (!actorIsSuperAdmin) {
+      return {
+        ok: false,
+        reason: "SUPER_ADMIN_PROTECTED",
+        message: "Only a Super Admin can revoke roles on a Super Admin account.",
+      };
+    }
+  }
 
   if (assignment.role === Role.SUPER_ADMIN) {
     /*
@@ -296,6 +382,18 @@ export async function setUserStatus(
   });
   if (!user) return { ok: false, reason: "USER_NOT_FOUND", message: "No such account." };
   if (user.status === status) return { ok: true };
+
+  const targetIsSuperAdmin = await isTargetSuperAdmin(user.id);
+  if (targetIsSuperAdmin) {
+    const actorIsSuperAdmin = await isActorSuperAdmin(actor);
+    if (!actorIsSuperAdmin) {
+      return {
+        ok: false,
+        reason: "SUPER_ADMIN_PROTECTED",
+        message: "Only a Super Admin can alter a Super Admin account.",
+      };
+    }
+  }
 
   // Disabling the last super admin locks everyone out just as surely as
   // revoking the role does.

@@ -119,10 +119,10 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Runs their own branch. Cannot create people, change roles, or see any
   // branch other than the ones they are assigned to.
   BRANCH_MANAGER: [
+    "admin:access",
     "branch:read",
     "feedback:read",
     "question:read",
-    "user:read",
     "policy:read",
     "attendance:read",
     "attendance:write",
@@ -136,11 +136,11 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // assignment for. Until a Region entity exists that means one BRANCH-scoped
   // assignment per covered branch.
   AREA_MANAGER: [
+    "admin:access",
     "branch:read",
     "branch:write",
     "feedback:read",
     "question:read",
-    "user:read",
     "policy:read",
     "attendance:read",
     "attendance:write",
@@ -153,8 +153,6 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Owns people, not systems. No branch or question configuration.
   HR: [
     "admin:access",
-    "user:read",
-    "user:write",
     "assessment:read",
     "assessment:write",
     "aptitude:read",
@@ -172,7 +170,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "schedule:write",
   ],
 
-  // Owns system configuration, not people.
+  // Owns system configuration and user management (except Super Admin).
   ADMINISTRATOR: [
     "admin:access",
     "branch:read",
@@ -181,6 +179,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "question:write",
     "feedback:read",
     "user:read",
+    "user:write",
     // Read only: an administrator can see the rules attendance runs under,
     // but changing them is an employment-terms decision.
     "policy:read",
@@ -243,10 +242,16 @@ export type ResourceScope = {
  * enough. When it is omitted the check is treated as branch-independent and
  * only a GLOBAL grant satisfies it — the safe reading, since "no branch named"
  * must never widen access.
+ *
+ * Special case: "admin:access" is the admin chrome gate. Any active assignment
+ * carrying admin:access (including branch-scoped manager assignments) admits
+ * the actor to the shell; every page inside applies its own specific checks.
  */
 export function can(actor: Actor, permission: Permission, resource?: ResourceScope): boolean {
   const grants = grantsOf(actor).filter((grant) => grant.permission === permission);
   if (grants.length === 0) return false;
+
+  if (permission === "admin:access") return true;
 
   if (grants.some((grant) => grant.scopeType === ScopeType.GLOBAL)) return true;
 
@@ -308,3 +313,43 @@ export function isSuperAdmin(actor: Actor): boolean {
   if (actor.status !== UserStatus.ACTIVE) return false;
   return actor.assignments.some((a) => a.role === Role.SUPER_ADMIN);
 }
+
+/**
+ * Returns true if the actor has either full access (GLOBAL grant) or partial
+ * access (one or more BRANCH grants) to the given permission.
+ *
+ * Used for navigation and UI visibility gating: an item is visible if the
+ * user has full or partial access to it, and hidden if they have none.
+ */
+export function hasAnyPermission(actor: Actor, permission: Permission): boolean {
+  if (actor.status !== UserStatus.ACTIVE) return false;
+
+  const grants = grantsOf(actor).filter((grant) => grant.permission === permission);
+  if (grants.length === 0) return false;
+
+  return grants.some(
+    (grant) =>
+      grant.scopeType === ScopeType.GLOBAL ||
+      (grant.scopeType === ScopeType.BRANCH && grant.scopeId.length > 0),
+  );
+}
+
+/**
+ * Returns all distinct permissions for which the actor has full or partial access.
+ * Useful for passing held permissions to the admin shell / navigation sidebar.
+ */
+export function heldPermissions(actor: Actor): Permission[] {
+  if (actor.status !== UserStatus.ACTIVE) return [];
+
+  const perms = new Set<Permission>();
+  for (const grant of grantsOf(actor)) {
+    if (
+      grant.scopeType === ScopeType.GLOBAL ||
+      (grant.scopeType === ScopeType.BRANCH && grant.scopeId.length > 0)
+    ) {
+      perms.add(grant.permission);
+    }
+  }
+  return [...perms];
+}
+

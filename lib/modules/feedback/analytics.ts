@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { accraDateKey, addDays, getAccraDayEnd, getAccraDayStart, getAccraWeekStart } from "@/lib/platform/date";
+import type { BranchScope } from "@/lib/modules/identity/authorization";
 
 export type DashboardFilters = {
   branchId?: string;
@@ -11,6 +12,8 @@ export type DashboardFilters = {
   rating?: number;
   /** Narrows the question-scoped views (distribution/trend/averages) to one question. */
   questionId?: string;
+  /** User's authorised branch scope for constraining queries. */
+  scope?: BranchScope;
 };
 
 export type RatingBucket = { score: number; count: number };
@@ -52,10 +55,33 @@ function buildSubmissionWhere(filters: {
   from?: Date;
   to?: Date;
   rating?: number;
+  scope?: BranchScope;
 }): Prisma.FeedbackSubmissionWhereInput {
   const where: Prisma.FeedbackSubmissionWhereInput = {};
 
-  if (filters.branchId) where.branchId = filters.branchId;
+  if (filters.scope) {
+    switch (filters.scope.kind) {
+      case "branches":
+        if (filters.branchId) {
+          if (filters.scope.branchIds.includes(filters.branchId)) {
+            where.branchId = filters.branchId;
+          } else {
+            where.branchId = { in: [] };
+          }
+        } else {
+          where.branchId = { in: filters.scope.branchIds };
+        }
+        break;
+      case "none":
+        where.branchId = { in: [] };
+        break;
+      case "all":
+        if (filters.branchId) where.branchId = filters.branchId;
+        break;
+    }
+  } else if (filters.branchId) {
+    where.branchId = filters.branchId;
+  }
 
   if (filters.from || filters.to) {
     where.submittedAt = {
@@ -77,7 +103,7 @@ export function round1(value: number): number {
 
 export async function getDashboardData(filters: DashboardFilters): Promise<DashboardData> {
   const where = buildSubmissionWhere(filters);
-  const nonDateFilters = { branchId: filters.branchId, rating: filters.rating };
+  const nonDateFilters = { branchId: filters.branchId, rating: filters.rating, scope: filters.scope };
   const now = new Date();
   const todayWhere = buildSubmissionWhere({
     ...nonDateFilters,
@@ -94,6 +120,13 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   const trendTo = filters.to ?? getAccraDayEnd(now);
   const trendWhere = buildSubmissionWhere({ ...nonDateFilters, from: trendFrom, to: trendTo });
 
+  const branchQueryWhere =
+    filters.scope?.kind === "branches"
+      ? { id: { in: filters.scope.branchIds } }
+      : filters.scope?.kind === "none"
+        ? { id: { in: [] } }
+        : undefined;
+
   const [
     totalSubmissions,
     avgAgg,
@@ -109,7 +142,7 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     prisma.feedbackSubmission.aggregate({ where, _avg: { overallScore: true } }),
     prisma.feedbackSubmission.count({ where: todayWhere }),
     prisma.feedbackSubmission.count({ where: weekWhere }),
-    prisma.branch.findMany({ orderBy: { name: "asc" } }),
+    prisma.branch.findMany({ where: branchQueryWhere, orderBy: { name: "asc" } }),
     prisma.question.findMany({ where: { isActive: true }, orderBy: { order: "asc" } }),
     prisma.feedbackSubmission.groupBy({
       by: ["branchId"],

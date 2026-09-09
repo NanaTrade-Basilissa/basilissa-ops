@@ -4,6 +4,7 @@ import { prisma } from "@/lib/platform/prisma";
 import {
   MFA_REQUIRED_ROLES,
   can,
+  isSuperAdmin,
   requirePermission,
 } from "@/lib/modules/identity/server";
 import { createUserAccount } from "@/lib/modules/identity/actions";
@@ -19,6 +20,7 @@ export const dynamic = "force-dynamic";
 export default async function UsersPage() {
   const actor = await requirePermission("user:read");
   const canWrite = can(actor, "user:write");
+  const isSuperAdminViewer = isSuperAdmin(actor);
 
   const users = await prisma.user.findMany({
     orderBy: [{ status: "asc" }, { email: "asc" }],
@@ -90,6 +92,7 @@ export default async function UsersPage() {
 
       <UsersTable
         canWrite={canWrite}
+        isSuperAdminViewer={isSuperAdminViewer}
         users={users.map((user) => ({
           id: user.id,
           name: user.name,
@@ -99,6 +102,7 @@ export default async function UsersPage() {
           mfaEnabledAt: user.mfaEnabledAt,
           recoveryCodesLeft: user._count.mfaRecoveryCodes,
           requiresMfa: user.roleAssignments.some((a) => MFA_REQUIRED_ROLES.includes(a.role)),
+          isSuperAdmin: user.roleAssignments.some((a) => a.role === "SUPER_ADMIN"),
           roles: user.roleAssignments.map((a) => ({
             role: a.role,
             scopeType: a.scopeType,

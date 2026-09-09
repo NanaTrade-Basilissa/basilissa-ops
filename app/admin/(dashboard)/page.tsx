@@ -19,7 +19,7 @@ import {
 import { RecentSubmissionsTable } from "@/components/admin/recent-submissions-table";
 import { GeneralQrButton } from "@/components/admin/general-qr-button";
 import { getEnv } from "@/lib/platform/env";
-import { requirePermission } from "@/lib/modules/identity/server";
+import { branchScope, requirePermission } from "@/lib/modules/identity/server";
 
 export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -31,7 +31,8 @@ function first(value: string | string[] | undefined): string | undefined {
 }
 
 export default async function AdminDashboardPage({ searchParams }: { searchParams: SearchParams }) {
-  await requirePermission("admin:access");
+  const actor = await requirePermission("admin:access");
+  const scope = branchScope(actor, "feedback:read");
 
   const raw = await searchParams;
   const parsed = dashboardFilterSchema.safeParse({
@@ -46,6 +47,13 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   const fromDate = filters.from ? new Date(`${filters.from}T00:00:00Z`) : undefined;
   const toDate = filters.to ? getAccraDayEnd(new Date(`${filters.to}T00:00:00Z`)) : undefined;
 
+  const branchQueryWhere =
+    scope.kind === "branches"
+      ? { id: { in: scope.branchIds } }
+      : scope.kind === "none"
+        ? { id: { in: [] } }
+        : undefined;
+
   const [data, branches, questions] = await Promise.all([
     getDashboardData({
       branchId: filters.branchId,
@@ -53,8 +61,13 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
       questionId: filters.questionId,
       from: fromDate,
       to: toDate,
+      scope,
     }),
-    prisma.branch.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.branch.findMany({
+      where: branchQueryWhere,
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
     prisma.question.findMany({
       where: { isActive: true },
       orderBy: { order: "asc" },
@@ -72,7 +85,9 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Customer feedback across every branch, live.
+            {scope.kind === "branches" && branches.length === 1
+              ? `Customer feedback for ${branches[0]?.name}, live.`
+              : "Customer feedback across every branch, live."}
           </p>
         </div>
         <GeneralQrButton feedbackUrl={`${getEnv().NEXT_PUBLIC_APP_URL}/feedback`} />

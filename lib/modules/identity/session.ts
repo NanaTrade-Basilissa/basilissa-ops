@@ -4,7 +4,12 @@ import { cookies } from "next/headers";
 import { getEnv } from "@/lib/platform/env";
 import { prisma } from "@/lib/platform/prisma";
 import { scoped } from "@/lib/platform/logger";
-import { MFA_PENDING_COOKIE_NAME, SESSION_COOKIE_NAME } from "./constants";
+import {
+  MFA_PENDING_COOKIE_NAME,
+  SESSION_COOKIE_NAME,
+  TRUSTED_DEVICE_COOKIE_NAME,
+  TRUSTED_DEVICE_DURATION_MS,
+} from "./constants";
 
 /**
  * Sessions are a signed cookie *plus* a database row.
@@ -27,7 +32,7 @@ import { MFA_PENDING_COOKIE_NAME, SESSION_COOKIE_NAME } from "./constants";
  * its page both ask.
  */
 
-export { SESSION_COOKIE_NAME, MFA_PENDING_COOKIE_NAME };
+export { SESSION_COOKIE_NAME, MFA_PENDING_COOKIE_NAME, TRUSTED_DEVICE_COOKIE_NAME };
 
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours
 
@@ -269,4 +274,71 @@ export async function readMfaPendingUserId(): Promise<string | null> {
 export async function clearMfaPendingToken(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(MFA_PENDING_COOKIE_NAME);
+}
+
+// ---------------------------------------------------------------------------
+// Trusted Devices (30-day MFA bypass)
+// ---------------------------------------------------------------------------
+
+/**
+ * Issues a signed cookie marking the current device as trusted for 30 days.
+ * Includes user.sessionVersion so that a password reset or session revocation
+ * automatically invalidates all trusted devices for that user.
+ */
+export async function trustDevice(userId: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { sessionVersion: true },
+  });
+  if (!user) return;
+
+  const expiresAt = new Date(Date.now() + TRUSTED_DEVICE_DURATION_MS);
+  const token = await new SignJWT({ trustedDevice: true, sv: user.sessionVersion })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
+    .sign(getSecretKey());
+
+  const cookieStore = await cookies();
+  cookieStore.set(TRUSTED_DEVICE_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    expires: expiresAt,
+    path: "/",
+  });
+}
+
+/**
+ * Checks whether the current request presents a valid trusted device cookie
+ * for the given userId and current sessionVersion.
+ */
+export async function isDeviceTrusted(userId: string): Promise<boolean> {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(TRUSTED_DEVICE_COOKIE_NAME)?.value;
+  if (!raw) return false;
+
+  try {
+    const { payload } = await jwtVerify(raw, getSecretKey(), { algorithms: ["HS256"] });
+    if (
+      payload.trustedDevice !== true ||
+      payload.sub !== userId ||
+      typeof payload.sv !== "number"
+    ) {
+      return false;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { sessionVersion: true, status: true },
+    });
+    if (!user || user.status !== "ACTIVE" || user.sessionVersion !== payload.sv) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
 }

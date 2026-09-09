@@ -24,7 +24,9 @@ import {
   createMfaPendingToken,
   createSession,
   deleteSession,
+  isDeviceTrusted,
   readMfaPendingUserId,
+  trustDevice,
 } from "./session";
 import {
   beginMfaEnrolment,
@@ -34,7 +36,7 @@ import {
   verifyMfaChallenge,
 } from "./mfa";
 import { requireAuth, requirePermission, verifySession } from "./dal";
-import { can } from "./authorization";
+import { can, isSuperAdmin } from "./authorization";
 import { MFA_REQUIRED_ROLES } from "./constants";
 import { Role, ScopeType } from "@prisma/client";
 import { formatAccraDateTime } from "@/lib/platform/date";
@@ -106,13 +108,16 @@ export async function login(
     return { error: "Invalid email or password" };
   }
 
-  // Password proven. If this account has a second factor, stop here: issue a
-  // pending token that grants nothing and send them to the challenge. Creating
-  // the session first and "checking MFA later" would mean a password alone had
-  // already opened the door.
+  // Password proven. If this account has a second factor, check whether the device
+  // is trusted. A trusted device bypasses the second factor challenge for 30 days.
+  let mfaBypassedViaTrustedDevice = false;
   if (await hasMfaEnabled(user.id)) {
-    await createMfaPendingToken(user.id);
-    redirect("/admin/login/mfa");
+    const trusted = await isDeviceTrusted(user.id);
+    if (!trusted) {
+      await createMfaPendingToken(user.id);
+      redirect("/admin/login/mfa");
+    }
+    mfaBypassedViaTrustedDevice = true;
   }
 
   const headerList = await headers();
@@ -129,6 +134,7 @@ export async function login(
     action: "user.signed_in",
     entityType: "User",
     entityId: user.id,
+    metadata: mfaBypassedViaTrustedDevice ? { secondFactor: "trusted_device_bypass" } : undefined,
   });
 
   redirect("/admin");
@@ -213,6 +219,14 @@ export async function submitMfaChallenge(
     return { error: "That code is not valid." };
   }
 
+  const trustDeviceValue = String(formData.get("trustDevice") ?? "").toLowerCase();
+  const shouldTrustDevice =
+    trustDeviceValue === "yes" || trustDeviceValue === "on" || trustDeviceValue === "true";
+
+  if (shouldTrustDevice) {
+    await trustDevice(userId);
+  }
+
   const headerList = await headers();
   await createSession(userId, headerList.get("user-agent") ?? undefined);
   await clearMfaPendingToken();
@@ -226,7 +240,10 @@ export async function submitMfaChallenge(
     action: "user.signed_in",
     entityType: "User",
     entityId: userId,
-    metadata: { secondFactor: result.usedRecoveryCode ? "recovery_code" : "totp" },
+    metadata: {
+      secondFactor: result.usedRecoveryCode ? "recovery_code" : "totp",
+      deviceTrusted: shouldTrustDevice,
+    },
   });
 
   redirect("/admin");
@@ -289,6 +306,20 @@ export async function resetUserMfa(
 ): Promise<UserAdminState> {
   const actor = await requirePermission("user:write");
   const targetUserId = String(formData.get("userId") ?? "");
+
+  const isTargetSuperAdmin = await prisma.roleAssignment.count({
+    where: {
+      userId: targetUserId,
+      role: Role.SUPER_ADMIN,
+      validFrom: { lte: new Date() },
+      OR: [{ validTo: null }, { validTo: { gt: new Date() } }],
+    },
+  });
+  if (isTargetSuperAdmin > 0 && !isSuperAdmin(actor)) {
+    return {
+      error: "Only a Super Admin can reset two-step verification for a Super Admin account.",
+    };
+  }
 
   const result = await resetMfa(targetUserId, auditActorFrom(actor));
 
@@ -555,6 +586,25 @@ export async function resendInvite(
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   if (!email) return { error: "No address to send to." };
 
+  const target = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      roleAssignments: {
+        where: {
+          role: Role.SUPER_ADMIN,
+          validFrom: { lte: new Date() },
+          OR: [{ validTo: null }, { validTo: { gt: new Date() } }],
+        },
+      },
+    },
+  });
+  if (target && target.roleAssignments.length > 0 && !isSuperAdmin(actor)) {
+    return {
+      error: "Only a Super Admin can resend invites for a Super Admin account.",
+    };
+  }
+
   if (!isEmailConfigured()) {
     return {
       error:
@@ -622,6 +672,11 @@ export async function getUserDetailAction(userId: string) {
   const now = new Date();
   const activeAssignments = user.roleAssignments.filter((a) => a.validTo === null || a.validTo > now);
   const revokedAssignments = user.roleAssignments.filter((a) => a.validTo !== null && a.validTo <= now);
+
+  const isTargetSuperAdmin = activeAssignments.some((a) => a.role === Role.SUPER_ADMIN);
+  if (isTargetSuperAdmin && !isSuperAdmin(actor)) {
+    return null;
+  }
 
   return {
     user: {

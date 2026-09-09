@@ -1,7 +1,8 @@
 "use client";
 
 import { useTransition } from "react";
-import { EllipsisVerticalIcon, LogOutIcon } from "lucide-react";
+import Link from "next/link";
+import { EllipsisVerticalIcon, LogOutIcon, ShieldCheckIcon } from "lucide-react";
 import { logout } from "@/lib/modules/identity/actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -54,6 +55,13 @@ export function NavUser({ user }: { user: { name: string; email: string } }) {
                   </div>
                 </div>
               </DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem render={<Link href="/admin/security" />}>
+                <ShieldCheckIcon />
+                Security
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>

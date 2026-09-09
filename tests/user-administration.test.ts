@@ -16,15 +16,16 @@ import { MFA_REQUIRED_ROLES } from "@/lib/modules/identity/constants";
  */
 
 describe("separation of duties", () => {
-  /*
-    Creating accounts and deciding what they may do are different powers on
-    purpose. HR onboards staff; if HR could also assign roles, the person who
-    onboards could grant themselves anything and there would be no second pair
-    of eyes anywhere in the system.
-  */
-  it("lets HR create accounts but not assign roles", () => {
-    expect(permissionsForRole(Role.HR)).toContain("user:write");
+  it("keeps HR completely out of user administration", () => {
+    expect(permissionsForRole(Role.HR)).not.toContain("user:read");
+    expect(permissionsForRole(Role.HR)).not.toContain("user:write");
     expect(permissionsForRole(Role.HR)).not.toContain("role:assign");
+  });
+
+  it("lets administrator manage users but not assign roles", () => {
+    expect(permissionsForRole(Role.ADMINISTRATOR)).toContain("user:read");
+    expect(permissionsForRole(Role.ADMINISTRATOR)).toContain("user:write");
+    expect(permissionsForRole(Role.ADMINISTRATOR)).not.toContain("role:assign");
   });
 
   it("keeps role assignment with the super admin alone", () => {
@@ -34,11 +35,9 @@ describe("separation of duties", () => {
     expect(holders).toEqual([Role.SUPER_ADMIN]);
   });
 
-  // Reading the user list is wider than changing it: a branch manager needs to
-  // see who their people are without being able to alter access.
-  it("lets managers read users without writing them", () => {
+  it("keeps branch managers out of user administration", () => {
     for (const role of [Role.BRANCH_MANAGER, Role.AREA_MANAGER]) {
-      expect(permissionsForRole(role)).toContain("user:read");
+      expect(permissionsForRole(role)).not.toContain("user:read");
       expect(permissionsForRole(role)).not.toContain("user:write");
       expect(permissionsForRole(role)).not.toContain("role:assign");
     }

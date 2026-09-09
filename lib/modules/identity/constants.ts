@@ -15,6 +15,13 @@ export const SESSION_COOKIE_NAME = "basilissa_admin_session";
 export const MFA_PENDING_COOKIE_NAME = "basilissa_mfa_pending";
 
 /**
+ * Cookie for remembering a trusted device across sign-ins, bypassing the
+ * second-factor challenge for 30 days unless revoked or sessionVersion is bumped.
+ */
+export const TRUSTED_DEVICE_COOKIE_NAME = "basilissa_trusted_device";
+export const TRUSTED_DEVICE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+/**
  * Multi-factor authentication for roles that can do real damage.
  *
  * Required, not offered, for the roles below. A Super Admin can grant

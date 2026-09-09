@@ -41,9 +41,9 @@ export type NavGroup = {
 
 export const DASHBOARD_ITEM: NavItem = { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true };
 
-// TODO(phase-3): filter this list by permission once every page's specific
-// permission is known here. Hiding a link is presentation, not authorisation —
-// the page and its Server Action both check independently.
+// Navigation links are gated by permission so that users only see features
+// they have full or partial access to. Server actions and pages enforce
+// authorization independently.
 /**
  * Grouped by purpose rather than left as one flat list, so the sidebar reads
  * as "what is this system made of" rather than growing sideways forever.
@@ -54,11 +54,11 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   {
     label: "People",
     items: [
-      { href: "/admin/employees", label: "Employees", icon: Users, exact: false },
-      { href: "/admin/branches", label: "Branches", icon: Store, exact: false },
-      { href: "/admin/attendance", label: "Attendance", icon: ClipboardList, exact: true, feature: "attendance" },
-      { href: "/admin/shifts", label: "Shifts", icon: CalendarRange, exact: false, feature: "attendance" },
-      { href: "/admin/attendance/policy", label: "Attendance policy", icon: CalendarClock, exact: false, feature: "attendance" },
+      { href: "/admin/employees", label: "Employees", icon: Users, exact: false, permission: "employee:read" },
+      { href: "/admin/branches", label: "Branches", icon: Store, exact: false, permission: "branch:read" },
+      { href: "/admin/attendance", label: "Attendance", icon: ClipboardList, exact: true, feature: "attendance", permission: "attendance:read" },
+      { href: "/admin/shifts", label: "Shifts", icon: CalendarRange, exact: false, feature: "attendance", permission: "schedule:read" },
+      { href: "/admin/attendance/policy", label: "Attendance policy", icon: CalendarClock, exact: false, feature: "attendance", permission: "policy:read" },
     ],
   },
   {
@@ -68,22 +68,22 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     // them lands.
     label: "HR",
     items: [
-      { href: "/admin/assessments", label: "Assessments", icon: ClipboardCheck, exact: false },
-      { href: "/admin/aptitude-tests", label: "Aptitude Tests", icon: Brain, exact: false, feature: "aptitude" },
+      { href: "/admin/assessments", label: "Assessments", icon: ClipboardCheck, exact: false, permission: "assessment:read" },
+      { href: "/admin/aptitude-tests", label: "Aptitude Tests", icon: Brain, exact: false, feature: "aptitude", permission: "aptitude:read" },
     ],
   },
   {
     label: "Operations",
     items: [
-      { href: "/admin/feedbacks", label: "Feedbacks", icon: MessageSquareText, exact: false },
-      { href: "/admin/questions", label: "Questions", icon: ListChecks, exact: false },
+      { href: "/admin/feedbacks", label: "Feedbacks", icon: MessageSquareText, exact: false, permission: "feedback:read" },
+      { href: "/admin/questions", label: "Questions", icon: ListChecks, exact: false, permission: "question:read" },
     ],
   },
   {
     label: "Administration",
     items: [
-      { href: "/admin/users", label: "Users", icon: UserCog, exact: false },
-      { href: "/admin/security", label: "Security", icon: ShieldCheck, exact: false },
+      { href: "/admin/users", label: "Users", icon: UserCog, exact: false, permission: "user:read" },
+      { href: "/admin/security", label: "Security", icon: ShieldCheck, exact: false, permission: "user:read" },
       { href: "/admin/email-queue", label: "Email Queue", icon: Mail, exact: false, permission: "email_queue:read" },
     ],
   },

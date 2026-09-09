@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { can, requireAdminShell } from "@/lib/modules/identity/server";
+import { heldPermissions, requireAdminShell } from "@/lib/modules/identity/server";
 import { isFeatureEnabled } from "@/lib/platform/features";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
@@ -11,8 +11,7 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
   // itself. Each page below applies its own permission and MFA check.
   const session = await requireAdminShell();
   const enabledFeatures = { attendance: isFeatureEnabled("attendance"), aptitude: isFeatureEnabled("aptitude") };
-  const userPermissions: string[] = [];
-  if (can(session, "email_queue:read")) userPermissions.push("email_queue:read");
+  const userPermissions = heldPermissions(session);
 
   // Sidebar collapsed/expanded state persists across reloads via a cookie
   // the Sidebar primitive itself writes (see components/ui/sidebar.tsx);

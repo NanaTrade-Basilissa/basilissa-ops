@@ -4,12 +4,15 @@ import {
   branchScope,
   branchWhere,
   can,
+  hasAnyPermission,
+  heldPermissions,
   isSuperAdmin,
   permissionsForRole,
   type Actor,
   type ActorAssignment,
   type Permission,
 } from "@/lib/modules/identity/authorization";
+import { NAV_GROUPS } from "@/components/admin/admin-nav";
 
 /**
  * authorization.ts is pure, so the whole matrix is testable without a database
@@ -73,7 +76,8 @@ describe("can — scope resolution", () => {
   it("denies a permission no held role grants", () => {
     const hr = actor([globalRole(Role.HR)]);
     expect(can(hr, "question:write")).toBe(false);
-    expect(can(hr, "user:write")).toBe(true);
+    expect(can(hr, "user:write")).toBe(false);
+    expect(can(hr, "assessment:write")).toBe(true);
   });
 
   it("denies everything for a user with no assignments", () => {
@@ -170,10 +174,22 @@ describe("role matrix invariants", () => {
     }
   });
 
-  it("keeps HR out of system configuration and ADMINISTRATOR out of user writes", () => {
+  it("keeps HR out of system configuration and user management", () => {
     expect(permissionsForRole(Role.HR)).not.toContain("question:write");
     expect(permissionsForRole(Role.HR)).not.toContain("branch:write");
-    expect(permissionsForRole(Role.ADMINISTRATOR)).not.toContain("user:write");
+    expect(permissionsForRole(Role.HR)).not.toContain("user:read");
+    expect(permissionsForRole(Role.HR)).not.toContain("user:write");
+    expect(permissionsForRole(Role.ADMINISTRATOR)).toContain("user:write");
+  });
+
+  it("admits branch managers to admin shell and keeps them out of user administration", () => {
+    expect(permissionsForRole(Role.BRANCH_MANAGER)).toContain("admin:access");
+    expect(permissionsForRole(Role.AREA_MANAGER)).toContain("admin:access");
+    expect(permissionsForRole(Role.BRANCH_MANAGER)).not.toContain("user:read");
+    expect(permissionsForRole(Role.AREA_MANAGER)).not.toContain("user:read");
+
+    const bm = actor([branchRole(Role.BRANCH_MANAGER, "branch_a")]);
+    expect(can(bm, "admin:access")).toBe(true);
   });
 
   // Attendance policy sets grace periods and overtime thresholds, so it is an
@@ -274,9 +290,9 @@ describe("what moving off admin:access changed", () => {
     expect(permissionsForRole(Role.HR)).not.toContain("question:write");
   });
 
-  it("lets an area manager write branches without giving them the admin shell", () => {
+  it("lets an area manager access admin shell and write branches for their assigned branches", () => {
     expect(permissionsForRole(Role.AREA_MANAGER)).toContain("branch:write");
-    expect(permissionsForRole(Role.AREA_MANAGER)).not.toContain("admin:access");
+    expect(permissionsForRole(Role.AREA_MANAGER)).toContain("admin:access");
   });
 
   // The reason createBranch demands a global grant rather than branch:write:
@@ -326,3 +342,107 @@ describe("isSuperAdmin", () => {
     expect(isSuperAdmin(actor([globalRole(Role.SUPER_ADMIN)], UserStatus.TERMINATED))).toBe(false);
   });
 });
+
+describe("hasAnyPermission and heldPermissions", () => {
+  it("recognises both full (GLOBAL) and partial (BRANCH) grants", () => {
+    const branchMgr = actor([branchRole(Role.BRANCH_MANAGER, "b1")]);
+    expect(hasAnyPermission(branchMgr, "feedback:read")).toBe(true);
+    expect(hasAnyPermission(branchMgr, "employee:read")).toBe(true);
+    expect(hasAnyPermission(branchMgr, "user:read")).toBe(false);
+    expect(hasAnyPermission(branchMgr, "email_queue:read")).toBe(false);
+
+    const admin = actor([globalRole(Role.ADMINISTRATOR)]);
+    expect(hasAnyPermission(admin, "user:read")).toBe(true);
+    expect(hasAnyPermission(admin, "assessment:read")).toBe(false);
+  });
+
+  it("returns nothing for suspended users", () => {
+    const suspended = actor([globalRole(Role.SUPER_ADMIN)], UserStatus.SUSPENDED);
+    expect(hasAnyPermission(suspended, "user:read")).toBe(false);
+    expect(heldPermissions(suspended)).toEqual([]);
+  });
+
+  it("gathers all held permissions into a distinct list", () => {
+    const hr = actor([globalRole(Role.HR)]);
+    const hrPerms = heldPermissions(hr);
+    expect(hrPerms).toContain("assessment:read");
+    expect(hrPerms).toContain("aptitude:read");
+    expect(hrPerms).toContain("employee:read");
+    expect(hrPerms).not.toContain("user:read");
+    expect(hrPerms).not.toContain("email_queue:read");
+    expect(hrPerms).not.toContain("question:read");
+  });
+});
+
+describe("navigation visibility by role", () => {
+  function getVisibleNav(actorUser: Actor) {
+    const permissions = heldPermissions(actorUser);
+    return NAV_GROUPS.map((group) => ({
+      label: group.label,
+      items: group.items.filter((item) => !item.permission || permissions.includes(item.permission)),
+    })).filter((group) => group.items.length > 0);
+  }
+
+  it("shows all sections and all items to SUPER_ADMIN", () => {
+    const superAdmin = actor([globalRole(Role.SUPER_ADMIN)]);
+    const nav = getVisibleNav(superAdmin);
+
+    const groupLabels = nav.map((g) => g.label);
+    expect(groupLabels).toEqual(["People", "HR", "Operations", "Administration"]);
+
+    const adminGroup = nav.find((g) => g.label === "Administration")!;
+    const adminHrefs = adminGroup.items.map((i) => i.href);
+    expect(adminHrefs).toContain("/admin/email-queue");
+    expect(adminHrefs).toContain("/admin/users");
+  });
+
+  it("hides HR and hides Email Queue for ADMINISTRATOR", () => {
+    const admin = actor([globalRole(Role.ADMINISTRATOR)]);
+    const nav = getVisibleNav(admin);
+
+    const groupLabels = nav.map((g) => g.label);
+    expect(groupLabels).toEqual(["People", "Operations", "Administration"]);
+    expect(groupLabels).not.toContain("HR");
+
+    const adminGroup = nav.find((g) => g.label === "Administration")!;
+    const adminHrefs = adminGroup.items.map((i) => i.href);
+    expect(adminHrefs).toContain("/admin/users");
+    expect(adminHrefs).not.toContain("/admin/email-queue");
+  });
+
+  it("hides Administration and Questions for HR", () => {
+    const hr = actor([globalRole(Role.HR)]);
+    const nav = getVisibleNav(hr);
+
+    const groupLabels = nav.map((g) => g.label);
+    expect(groupLabels).toEqual(["People", "HR", "Operations"]);
+    expect(groupLabels).not.toContain("Administration");
+
+    const opsGroup = nav.find((g) => g.label === "Operations")!;
+    const opsHrefs = opsGroup.items.map((i) => i.href);
+    expect(opsHrefs).toContain("/admin/feedbacks");
+    expect(opsHrefs).not.toContain("/admin/questions");
+  });
+
+  it("shows only People and Operations for BRANCH_MANAGER (hiding HR and Administration)", () => {
+    const manager = actor([branchRole(Role.BRANCH_MANAGER, "branch_accra")]);
+    const nav = getVisibleNav(manager);
+
+    const groupLabels = nav.map((g) => g.label);
+    expect(groupLabels).toEqual(["People", "Operations"]);
+    expect(groupLabels).not.toContain("HR");
+    expect(groupLabels).not.toContain("Administration");
+
+    const opsGroup = nav.find((g) => g.label === "Operations")!;
+    const opsHrefs = opsGroup.items.map((i) => i.href);
+    expect(opsHrefs).toContain("/admin/feedbacks");
+    expect(opsHrefs).toContain("/admin/questions");
+  });
+
+  it("hides all navigation groups for EMPLOYEE", () => {
+    const employee = actor([globalRole(Role.EMPLOYEE)]);
+    const nav = getVisibleNav(employee);
+    expect(nav).toEqual([]);
+  });
+});
+

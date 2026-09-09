@@ -5,6 +5,7 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import type { MfaFormState } from "@/lib/modules/identity/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -50,6 +51,16 @@ export function MfaChallengeForm({
             recovery codes instead.
           </FieldDescription>
         </Field>
+
+        <div className="flex items-center gap-2 pt-1">
+          <Checkbox id="trustDevice" name="trustDevice" value="yes" />
+          <label
+            htmlFor="trustDevice"
+            className="text-sm font-medium leading-none cursor-pointer text-muted-foreground select-none"
+          >
+            Trust this device for 30 days
+          </label>
+        </div>
 
         <Field>
           <Button type="submit" size="lg" disabled={isPending}>
