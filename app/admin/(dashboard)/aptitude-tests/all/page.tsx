@@ -4,12 +4,9 @@ import { ChevronLeft, Plus, Timer } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { requireFeature } from "@/lib/platform/features-guard";
 import { listAptitudeTests } from "@/lib/modules/aptitude/server";
-import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatAccraDateTime } from "@/lib/platform/date";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { AptitudeTestsTable } from "@/components/admin/aptitude-tests-table";
 
 export const metadata: Metadata = { title: "All aptitude tests" };
 export const dynamic = "force-dynamic";
@@ -44,54 +41,17 @@ export default async function AllAptitudeTestsPage() {
       </div>
 
       {tests.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <Timer className="size-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Nothing here yet. A test is a set of sections, each with its own questions.
-            </p>
-          </CardContent>
-        </Card>
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Timer />
+            </EmptyMedia>
+            <EmptyTitle>Nothing here yet</EmptyTitle>
+            <EmptyDescription>A test is a set of sections, each with its own questions.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Sections</TableHead>
-              <TableHead>Invited</TableHead>
-              <TableHead>Timer</TableHead>
-              <TableHead>Created</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tests.map((test) => (
-              <TableRow key={test.id}>
-                <TableCell>
-                  <Link
-                    href={`/admin/aptitude-tests/${test.id}`}
-                    className="font-medium underline-offset-4 hover:underline"
-                  >
-                    {test.title}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={test.status === "PUBLISHED" ? "default" : "outline"}>
-                    {STATUS_LABEL[test.status]}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm">{test._count.sections}</TableCell>
-                <TableCell className="text-sm">{test._count.invitations}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {test.timeLimitMinutes ? `${test.timeLimitMinutes} min` : "untimed"}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {formatAccraDateTime(test.createdAt)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <AptitudeTestsTable tests={tests} />
       )}
     </div>
   );

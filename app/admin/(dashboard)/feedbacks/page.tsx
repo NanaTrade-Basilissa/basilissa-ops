@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import Link from "next/link";
 import { prisma } from "@/lib/platform/prisma";
 import { feedbackListFilterSchema } from "@/lib/modules/feedback/validation";
 import { feedbackListWhere } from "@/lib/modules/feedback/server";
-import { getAccraDayEnd, formatAccraDateTime } from "@/lib/platform/date";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge, ratingBadgeVariant } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { buttonVariants } from "@/components/ui/button";
+import { getAccraDayEnd } from "@/lib/platform/date";
 import { FeedbackFilters } from "@/components/admin/feedback-filters";
+import { FeedbackTable } from "@/components/admin/feedback-table";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { requireAnyBranchPermission } from "@/lib/modules/identity/server";
 
 export const metadata: Metadata = { title: "Feedback" };
@@ -96,77 +93,9 @@ export default async function FeedbackListPage({ searchParams }: { searchParams:
         <FeedbackFilters branches={branches.map((b) => ({ id: b.id, label: b.name }))} />
       </Suspense>
 
-      <Card>
-        <CardContent className="px-0 sm:px-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Submission ID</TableHead>
-                <TableHead>Submitted</TableHead>
-                <TableHead>Branch</TableHead>
-                <TableHead className="text-right">Overall</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {submissions.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{s.id}</TableCell>
-                  <TableCell className="text-muted-foreground">{formatAccraDateTime(s.submittedAt)}</TableCell>
-                  <TableCell>
-                    <Link href={`/admin/branches/${s.branch.id}`} className="font-medium text-foreground hover:underline">
-                      {s.branch.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant={ratingBadgeVariant(Math.round(s.overallScore))}>
-                      {s.overallScore.toFixed(1)}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {submissions.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="h-32 text-center text-sm text-muted-foreground">
-                    No submissions match the selected filters.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <FeedbackTable submissions={submissions} />
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            Page {page} of {totalPages} ({total} total)
-          </p>
-          <div className="flex gap-1.5">
-            <Link
-              href={pageHref(page - 1)}
-              aria-disabled={page <= 1}
-              className={buttonVariants({
-                variant: "outline",
-                size: "sm",
-                className: page <= 1 ? "pointer-events-none opacity-50" : undefined,
-              })}
-            >
-              Previous
-            </Link>
-            <Link
-              href={pageHref(page + 1)}
-              aria-disabled={page >= totalPages}
-              className={buttonVariants({
-                variant: "outline",
-                size: "sm",
-                className: page >= totalPages ? "pointer-events-none opacity-50" : undefined,
-              })}
-            >
-              Next
-            </Link>
-          </div>
-        </div>
-      )}
+      <DataTablePagination page={page} totalPages={totalPages} total={total} buildHref={pageHref} />
     </div>
   );
 }

@@ -23,7 +23,7 @@ export function LoginForm({ passwordWasReset = false }: { passwordWasReset?: boo
         <div className="flex flex-col items-center gap-1 text-center">
           <h1 className="text-2xl font-bold">Admin dashboard</h1>
           <p className="text-sm text-balance text-muted-foreground">
-            Sign in to Baislissa Operations
+            Sign in to Basilissa Operations
           </p>
         </div>
 

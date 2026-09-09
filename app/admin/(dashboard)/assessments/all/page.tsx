@@ -3,12 +3,9 @@ import Link from "next/link";
 import { ChevronLeft, ClipboardCheck, Plus } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { listAssessments } from "@/lib/modules/assessments/server";
-import { STATUS_LABEL } from "@/lib/modules/assessments/constants";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatAccraDateTime } from "@/lib/platform/date";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { AssessmentsTable } from "@/components/admin/assessments-table";
 
 export const metadata: Metadata = { title: "All assessments" };
 export const dynamic = "force-dynamic";
@@ -48,55 +45,17 @@ export default async function AllAssessmentsPage() {
       </div>
 
       {assessments.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <ClipboardCheck className="size-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Nothing here yet. An assessment is a set of sections, each with its own
-              questions.
-            </p>
-          </CardContent>
-        </Card>
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ClipboardCheck />
+            </EmptyMedia>
+            <EmptyTitle>Nothing here yet</EmptyTitle>
+            <EmptyDescription>An assessment is a set of sections, each with its own questions.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Sections</TableHead>
-              <TableHead>Invited</TableHead>
-              <TableHead>Score shown</TableHead>
-              <TableHead>Created</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {assessments.map((assessment) => (
-              <TableRow key={assessment.id}>
-                <TableCell>
-                  <Link
-                    href={`/admin/assessments/${assessment.id}`}
-                    className="font-medium underline-offset-4 hover:underline"
-                  >
-                    {assessment.title}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={assessment.status === "PUBLISHED" ? "default" : "outline"}>
-                    {STATUS_LABEL[assessment.status]}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm">{assessment._count.sections}</TableCell>
-                <TableCell className="text-sm">{assessment._count.invitations}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {assessment.showScoreToTaker ? "to the taker" : "HR only"}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {formatAccraDateTime(assessment.createdAt)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <AssessmentsTable assessments={assessments} />
       )}
     </div>
   );

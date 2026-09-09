@@ -6,8 +6,8 @@ import { listShifts } from "@/lib/modules/employees/server";
 import { minutesToTime } from "@/lib/modules/employees/validation";
 import { prisma } from "@/lib/platform/prisma";
 import { buttonVariants } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
+import { ShiftsTable } from "@/components/admin/shifts-table";
 import { requireFeature } from "@/lib/platform/features-guard";
 
 export const metadata: Metadata = { title: "Shifts" };
@@ -17,6 +17,7 @@ export default async function ShiftsPage() {
   requireFeature("attendance");
 
   const actor = await requirePermission("schedule:read");
+  const canWrite = can(actor, "schedule:write");
   const [shifts, branches] = await Promise.all([
     listShifts(),
     prisma.branch.findMany({ select: { id: true, name: true } }),
@@ -33,7 +34,7 @@ export default async function ShiftsPage() {
             branch&rsquo;s timezone on whichever day they apply.
           </p>
         </div>
-        {can(actor, "schedule:write") && (
+        {canWrite && (
           <Link href="/admin/shifts/new" className={buttonVariants()}>
             <Plus className="size-4" />
             New shift
@@ -42,62 +43,26 @@ export default async function ShiftsPage() {
       </div>
 
       {shifts.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          No shifts yet. Without one, attendance is recorded but flagged unscheduled:
-          there is nothing to measure lateness or overtime against.
-        </p>
+        <Empty className="border">
+          <EmptyDescription>
+            No shifts yet. Without one, attendance is recorded but flagged unscheduled:
+            there is nothing to measure lateness or overtime against.
+          </EmptyDescription>
+        </Empty>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Hours</TableHead>
-              <TableHead>Break</TableHead>
-              <TableHead>Branch</TableHead>
-              <TableHead>In use</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {shifts.map((shift) => {
-              const overnight = shift.endMinute <= shift.startMinute;
-              return (
-                <TableRow key={shift.id}>
-                  <TableCell>
-                    {can(actor, "schedule:write") ? (
-                      <Link href={`/admin/shifts/${shift.id}/edit`} className="font-medium underline">
-                        {shift.name}
-                      </Link>
-                    ) : (
-                      <span className="font-medium">{shift.name}</span>
-                    )}
-                    {!shift.isActive && (
-                      <Badge variant="outline" className="ml-2">
-                        inactive
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {minutesToTime(shift.startMinute)}–{minutesToTime(shift.endMinute)}
-                    {overnight && (
-                      <Badge variant="outline" className="ml-2" title="Anchored to the day it starts">
-                        overnight
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {shift.unpaidBreakMinutes === 0 ? "-" : `${shift.unpaidBreakMinutes}m`}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {shift.branchId ? (branchName.get(shift.branchId) ?? "Unknown") : "All branches"}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {shift._count.assignments}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <ShiftsTable
+          shifts={shifts.map((shift) => ({
+            id: shift.id,
+            name: shift.name,
+            isActive: shift.isActive,
+            hoursLabel: `${minutesToTime(shift.startMinute)}–${minutesToTime(shift.endMinute)}`,
+            overnight: shift.endMinute <= shift.startMinute,
+            breakLabel: shift.unpaidBreakMinutes === 0 ? "-" : `${shift.unpaidBreakMinutes}m`,
+            branchLabel: shift.branchId ? (branchName.get(shift.branchId) ?? "Unknown") : "All branches",
+            assignmentCount: shift._count.assignments,
+            canEdit: canWrite,
+          }))}
+        />
       )}
     </div>
   );

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { AlertTriangle, Clock, TriangleAlert, Users } from "lucide-react";
 import { requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import {
@@ -12,8 +11,8 @@ import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { StatCard } from "@/components/admin/stat-card";
 import { AttendanceFilters } from "@/components/admin/attendance-filters";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AttendanceTable } from "@/components/admin/attendance-table";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { requireFeature } from "@/lib/platform/features-guard";
 
 export const metadata: Metadata = { title: "Attendance" };
@@ -91,74 +90,32 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
       </div>
 
       {days.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          {exceptionsOnly
-            ? "Nothing needs attention on this date."
-            : "No attendance recorded for this date."}
-        </p>
+        <Empty className="border">
+          <EmptyDescription>
+            {exceptionsOnly ? "Nothing needs attention on this date." : "No attendance recorded for this date."}
+          </EmptyDescription>
+        </Empty>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Employee</TableHead>
-              <TableHead>Branch</TableHead>
-              <TableHead>In</TableHead>
-              <TableHead>Out</TableHead>
-              <TableHead>Worked</TableHead>
-              <TableHead>Overtime</TableHead>
-              <TableHead>Needs attention</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {days.map((day) => {
-              const employee = employees.get(day.employeeId);
-              return (
-                <TableRow key={day.id}>
-                  <TableCell>
-                    <Link
-                      href={`/admin/attendance/${day.employeeId}/${date}`}
-                      className="font-medium underline"
-                    >
-                      {employee ? `${employee.firstName} ${employee.lastName}` : day.employeeId}
-                    </Link>
-                    {employee && (
-                      <span className="block font-mono text-xs text-muted-foreground">
-                        {employee.employeeCode}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {branchName.get(day.branchId) ?? "-"}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {time(day.actualIn)}
-                    {day.lateMinutes > 0 && (
-                      <Badge variant="outline" className="ml-2">
-                        {day.lateMinutes}m late
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">{time(day.actualOut)}</TableCell>
-                  <TableCell className="text-sm">{hours(day.netWorkedMinutes)}</TableCell>
-                  <TableCell className="text-sm">{hours(day.overtimeMinutes)}</TableCell>
-                  <TableCell>
-                    {day.status === "NEEDS_REVIEW" ? (
-                      <div className="flex flex-wrap gap-1">
-                        {day.flags.map((flag) => (
-                          <Badge key={flag} variant="outline" className="text-xs">
-                            {flag.toLowerCase().replace(/_/g, " ")}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <AttendanceTable
+          days={days.map((day) => {
+            const employee = employees.get(day.employeeId);
+            return {
+              id: day.id,
+              employeeId: day.employeeId,
+              date,
+              employeeName: employee ? `${employee.firstName} ${employee.lastName}` : null,
+              employeeCode: employee?.employeeCode ?? null,
+              branchName: branchName.get(day.branchId) ?? "-",
+              actualInLabel: time(day.actualIn),
+              actualOutLabel: time(day.actualOut),
+              workedLabel: hours(day.netWorkedMinutes),
+              overtimeLabel: hours(day.overtimeMinutes),
+              lateMinutes: day.lateMinutes,
+              status: day.status,
+              flags: day.flags,
+            };
+          })}
+        />
       )}
     </div>
   );

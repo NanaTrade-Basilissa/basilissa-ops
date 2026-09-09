@@ -7,9 +7,10 @@ import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { countEmployees, listEmployees } from "@/lib/modules/employees/server";
 import { employeeListFilterSchema } from "@/lib/modules/employees/validation";
 import { buttonVariants } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
 import { EmployeeFilters } from "@/components/admin/employee-filters";
+import { EmployeesTable } from "@/components/admin/employees-table";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
 
 export const metadata: Metadata = { title: "Employees" };
 export const dynamic = "force-dynamic";
@@ -87,90 +88,18 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
       </Suspense>
 
       {total === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          {Object.keys(filters).length > 0
-            ? "No employees match the selected filters."
-            : "No employees yet. Attendance cannot be recorded until someone is on record and assigned to a branch."}
-        </p>
+        <Empty className="border">
+          <EmptyDescription>
+            {Object.keys(filters).length > 0
+              ? "No employees match the selected filters."
+              : "No employees yet. Attendance cannot be recorded until someone is on record and assigned to a branch."}
+          </EmptyDescription>
+        </Empty>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Branches</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {employees.map((employee) => (
-              <TableRow key={employee.id}>
-                <TableCell className="font-mono text-xs">{employee.employeeCode}</TableCell>
-                <TableCell>
-                  <Link href={`/admin/employees/${employee.id}`} className="font-medium underline">
-                    {employee.firstName} {employee.lastName}
-                  </Link>
-                  {employee.jobTitle && (
-                    <span className="block text-xs text-muted-foreground">{employee.jobTitle}</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {employee.email ?? <span className="italic">none on file</span>}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {employee.branchAssignments.length === 0 ? (
-                    // Without one they cannot clock in anywhere, which is worth
-                    // saying rather than showing an empty cell.
-                    <span className="text-destructive">Not assigned</span>
-                  ) : (
-                    employee.branchAssignments
-                      .map((a) => `${a.branch.name}${a.isPrimary ? " (primary)" : ""}`)
-                      .join(", ")
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={employee.status === "ACTIVE" ? "default" : "outline"}>
-                    {employee.status.toLowerCase()}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <EmployeesTable employees={employees} />
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            Page {page} of {totalPages} ({total} total)
-          </p>
-          <div className="flex gap-1.5">
-            <Link
-              href={pageHref(page - 1)}
-              aria-disabled={page <= 1}
-              className={buttonVariants({
-                variant: "outline",
-                size: "sm",
-                className: page <= 1 ? "pointer-events-none opacity-50" : undefined,
-              })}
-            >
-              Previous
-            </Link>
-            <Link
-              href={pageHref(page + 1)}
-              aria-disabled={page >= totalPages}
-              className={buttonVariants({
-                variant: "outline",
-                size: "sm",
-                className: page >= totalPages ? "pointer-events-none opacity-50" : undefined,
-              })}
-            >
-              Next
-            </Link>
-          </div>
-        </div>
-      )}
+      <DataTablePagination page={page} totalPages={totalPages} total={total} buildHref={pageHref} />
     </div>
   );
 }

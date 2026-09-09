@@ -2,11 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
-import { toggleBranchActive } from "@/lib/modules/branches/actions";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { buttonVariants } from "@/components/ui/button";
+import { BranchesTable } from "@/components/admin/branches-table";
 import { requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { branchWhere } from "@/lib/modules/identity/authorization";
 
@@ -51,66 +48,16 @@ export default async function BranchesPage() {
         </Link>
       </div>
 
-      <Card>
-        <CardContent className="px-0 sm:px-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Branch</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Employees</TableHead>
-                <TableHead className="text-right">Avg score</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {branches.map((branch) => {
-                const avg = avgByBranch.get(branch.id);
-                return (
-                  <TableRow key={branch.id}>
-                    <TableCell>
-                      <Link href={`/admin/branches/${branch.id}`} className="font-medium text-foreground hover:underline">
-                        {branch.name}
-                      </Link>
-                      <p className="text-xs text-muted-foreground">{branch.location}</p>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={branch.isActive ? "default" : "outline"}>
-                        {branch.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{branch._count.employees}</TableCell>
-                    <TableCell className="text-right">{avg != null ? avg.toFixed(1) : "-"}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1.5">
-                        <Link
-                          href={`/admin/branches/${branch.id}`}
-                          className={buttonVariants({ variant: "outline", size: "sm" })}
-                        >
-                          View
-                        </Link>
-                        <Link
-                          href={`/admin/branches/${branch.id}/edit`}
-                          className={buttonVariants({ variant: "outline", size: "sm" })}
-                        >
-                          Edit
-                        </Link>
-                        <form action={toggleBranchActive}>
-                          <input type="hidden" name="id" value={branch.id} />
-                          <input type="hidden" name="nextIsActive" value={(!branch.isActive).toString()} />
-                          <Button size="sm" variant={branch.isActive ? "destructive" : "secondary"} type="submit">
-                            {branch.isActive ? "Deactivate" : "Activate"}
-                          </Button>
-                        </form>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <BranchesTable
+        branches={branches.map((branch) => ({
+          id: branch.id,
+          name: branch.name,
+          location: branch.location,
+          isActive: branch.isActive,
+          _count: branch._count,
+          avgScore: avgByBranch.get(branch.id) ?? null,
+        }))}
+      />
     </div>
   );
 }

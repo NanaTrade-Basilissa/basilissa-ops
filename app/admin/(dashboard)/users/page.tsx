@@ -1,17 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ShieldCheck, ShieldAlert, UserPlus } from "lucide-react";
+import { ShieldAlert, UserPlus } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import {
   MFA_REQUIRED_ROLES,
   can,
   requirePermission,
 } from "@/lib/modules/identity/server";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatAccraDateTime } from "@/lib/platform/date";
+import { UsersTable } from "@/components/admin/users-table";
 
 export const metadata: Metadata = { title: "Users" };
 export const dynamic = "force-dynamic";
@@ -83,85 +81,24 @@ export default async function UsersPage() {
         </Alert>
       )}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Roles</TableHead>
-            <TableHead>Two-step</TableHead>
-            <TableHead>Last signed in</TableHead>
-            {canWrite && <TableHead className="sr-only">Actions</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.map((user) => {
-            const requires = user.roleAssignments.some((a) => MFA_REQUIRED_ROLES.includes(a.role));
-            const enabled = user.mfaEnabledAt !== null;
-
-            return (
-              <TableRow key={user.id}>
-                <TableCell>
-                  <Link
-                    href={`/admin/users/${user.id}`}
-                    className="font-medium underline-offset-4 hover:underline"
-                  >
-                    {user.name}
-                  </Link>
-                  <span className="block text-xs text-muted-foreground">{user.email}</span>
-                  {user.status !== "ACTIVE" && (
-                    <Badge variant="destructive" className="mt-1 text-xs">
-                      {user.status.toLowerCase()}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm">
-                  {user.roleAssignments.length === 0 ? (
-                    <span className="text-muted-foreground">None</span>
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {user.roleAssignments.map((assignment, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {assignment.role.toLowerCase().replace(/_/g, " ")}
-                          {assignment.scopeType === "BRANCH" &&
-                            ` · ${branchName.get(assignment.scopeId) ?? "branch"}`}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm">
-                  {enabled ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <ShieldCheck className="size-4" />
-                      on
-                      <span className="text-xs text-muted-foreground">
-                        ({user._count.mfaRecoveryCodes} codes left)
-                      </span>
-                    </span>
-                  ) : requires ? (
-                    <Badge variant="destructive">required, not set up</Badge>
-                  ) : (
-                    <span className="text-muted-foreground">off</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {user.lastLoginAt ? formatAccraDateTime(user.lastLoginAt) : "Never"}
-                </TableCell>
-                {canWrite && (
-                  <TableCell>
-                    <Link
-                      href={`/admin/users/${user.id}`}
-                      className={buttonVariants({ variant: "ghost", size: "sm" })}
-                    >
-                      Manage
-                    </Link>
-                  </TableCell>
-                )}
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <UsersTable
+        canWrite={canWrite}
+        users={users.map((user) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          status: user.status,
+          lastLoginAt: user.lastLoginAt,
+          mfaEnabledAt: user.mfaEnabledAt,
+          recoveryCodesLeft: user._count.mfaRecoveryCodes,
+          requiresMfa: user.roleAssignments.some((a) => MFA_REQUIRED_ROLES.includes(a.role)),
+          roles: user.roleAssignments.map((a) => ({
+            role: a.role,
+            scopeType: a.scopeType,
+            branchName: a.scopeType === "BRANCH" ? (branchName.get(a.scopeId) ?? null) : null,
+          })),
+        }))}
+      />
     </div>
   );
 }
