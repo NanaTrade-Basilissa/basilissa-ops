@@ -21,6 +21,7 @@ export function ShiftDialog({
   title,
   description,
   trigger,
+  allowGlobal = true,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
   branches: { id: string; name: string }[];
@@ -36,6 +37,7 @@ export function ShiftDialog({
   title: string;
   description: string;
   trigger: React.ReactElement;
+  allowGlobal?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -52,6 +54,7 @@ export function ShiftDialog({
           branches={branches}
           defaultValues={defaultValues}
           submitLabel={submitLabel}
+          allowGlobal={allowGlobal}
           onSuccess={() => {
             setOpen(false);
             toast.success(defaultValues ? "Shift updated successfully" : "Shift created successfully");

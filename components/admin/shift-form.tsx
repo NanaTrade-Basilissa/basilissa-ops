@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useEffect } from "react";
-import Link from "next/link";
 import { Loader2, Save } from "lucide-react";
 import type { FormState } from "@/lib/platform/forms";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,7 @@ export function ShiftForm({
   defaultValues,
   submitLabel,
   onSuccess,
+  allowGlobal = true,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
   branches: { id: string; name: string }[];
@@ -30,6 +30,7 @@ export function ShiftForm({
   };
   submitLabel: string;
   onSuccess?: () => void;
+  allowGlobal?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
   const errors = state?.fieldErrors ?? {};
@@ -93,18 +94,18 @@ export function ShiftForm({
           defaultValue={defaultValues?.unpaidBreakMinutes ?? 0}
         />
         <p className="text-xs text-muted-foreground">
-          Minutes. How this is applied depends on the break policy in{" "}
-          <Link className="underline" href="/admin/attendance/policy">
-            attendance policy
-          </Link>
-          .
+          Minutes. How this is applied depends on the break policy in attendance policy.
         </p>
       </div>
 
       <div className="space-y-1.5">
         <Label htmlFor="branchId">Branch</Label>
-        <NativeSelect id="branchId" name="branchId" defaultValue={defaultValues?.branchId ?? ""}>
-          <option value="">Available to every branch</option>
+        <NativeSelect
+          id="branchId"
+          name="branchId"
+          defaultValue={defaultValues?.branchId ?? (!allowGlobal && branches.length === 1 ? branches[0].id : "")}
+        >
+          {allowGlobal && <option value="">Available to every branch</option>}
           {branches.map((branch) => (
             <option key={branch.id} value={branch.id}>
               {branch.name}

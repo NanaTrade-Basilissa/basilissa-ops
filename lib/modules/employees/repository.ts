@@ -140,8 +140,24 @@ export async function listShiftAssignments(employeeId: string) {
   });
 }
 
-export async function listShifts() {
+export async function listShifts(scope?: BranchScope) {
+  let where: Prisma.ShiftWhereInput | undefined;
+  if (scope) {
+    switch (scope.kind) {
+      case "branches":
+        where = { OR: [{ branchId: { in: scope.branchIds } }, { branchId: null }] };
+        break;
+      case "none":
+        where = { id: "__none__" };
+        break;
+      case "all":
+        where = undefined;
+        break;
+    }
+  }
+
   return prisma.shift.findMany({
+    where,
     orderBy: [{ isActive: "desc" }, { startMinute: "asc" }],
     select: {
       id: true,

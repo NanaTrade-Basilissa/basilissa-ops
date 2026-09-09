@@ -26,7 +26,7 @@ export type ShiftRow = {
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, ShiftRow>();
 
-function buildColumns(branches: { id: string; name: string }[]) {
+function buildColumns(branches: { id: string; name: string }[], allowGlobal: boolean = true) {
   return columnHelper.columns([
   columnHelper.display({
     id: "name",
@@ -37,6 +37,7 @@ function buildColumns(branches: { id: string; name: string }[]) {
           <ShiftDialog
             action={updateShift.bind(null, row.original.id)}
             branches={branches}
+            allowGlobal={allowGlobal}
             submitLabel="Save changes"
             title="Edit shift"
             description="Changes affect future days only. Settled attendance keeps its original schedule."
@@ -100,6 +101,7 @@ function buildColumns(branches: { id: string; name: string }[]) {
           <ShiftDialog
             action={updateShift.bind(null, row.original.id)}
             branches={branches}
+            allowGlobal={allowGlobal}
             submitLabel="Save changes"
             title="Edit shift"
             description="Changes affect future days only. Settled attendance keeps its original schedule."
@@ -126,10 +128,12 @@ function buildColumns(branches: { id: string; name: string }[]) {
 export function ShiftsTable({
   shifts,
   branches,
+  allowGlobal = true,
 }: {
   shifts: ShiftRow[];
   branches: { id: string; name: string }[];
+  allowGlobal?: boolean;
 }) {
-  const columns = useMemo(() => buildColumns(branches), [branches]);
+  const columns = useMemo(() => buildColumns(branches, allowGlobal), [branches, allowGlobal]);
   return <DataTable columns={columns} data={shifts} />;
 }

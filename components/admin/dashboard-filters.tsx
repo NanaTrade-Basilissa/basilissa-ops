@@ -13,9 +13,11 @@ type FilterOption = { id: string; label: string };
 export function DashboardFilters({
   branches,
   questions,
+  isScoped = false,
 }: {
   branches: FilterOption[];
   questions: FilterOption[];
+  isScoped?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -37,23 +39,32 @@ export function DashboardFilters({
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      <div className="space-y-1.5">
-        <Label htmlFor="filter-branch" className="text-xs text-muted-foreground">
-          Branch
-        </Label>
-        <NativeSelect
-          id="filter-branch"
-          value={searchParams.get("branchId") ?? ""}
-          onChange={(e) => setParam("branchId", e.target.value)}
-        >
-          <option value="">All branches</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.label}
-            </option>
-          ))}
-        </NativeSelect>
-      </div>
+      {branches.length === 1 ? (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Branch</Label>
+          <div className="flex h-9 items-center truncate rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
+            {branches[0].label}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <Label htmlFor="filter-branch" className="text-xs text-muted-foreground">
+            Branch
+          </Label>
+          <NativeSelect
+            id="filter-branch"
+            value={searchParams.get("branchId") ?? ""}
+            onChange={(e) => setParam("branchId", e.target.value)}
+          >
+            <option value="">{isScoped ? "All assigned branches" : "All branches"}</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="filter-rating" className="text-xs text-muted-foreground">

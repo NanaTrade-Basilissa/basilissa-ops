@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
-import { auditActorFrom, can, currentBranchScope, requirePermission } from "@/lib/modules/identity/server";
+import { auditActorFrom, can, currentBranchScope, requireBranchPermission, requirePermission } from "@/lib/modules/identity/server";
 import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { isFeatureEnabled } from "@/lib/platform/features";
@@ -432,12 +432,14 @@ export async function createShift(_prevState: FormState, formData: FormData): Pr
   // Scheduling travels with attendance, not with the employee record.
   requireFeature("attendance");
 
-  const actor = await requirePermission("schedule:write");
-
   const parsed = parseShift(formData);
   if (!parsed.success) {
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
   }
+
+  const actor = parsed.data.branchId
+    ? await requireBranchPermission("schedule:write", parsed.data.branchId)
+    : await requirePermission("schedule:write");
 
   await prisma.$transaction(async (tx) => {
     const shift = await tx.shift.create({ data: parsed.data });
@@ -465,11 +467,18 @@ export async function updateShift(
   // Scheduling travels with attendance, not with the employee record.
   requireFeature("attendance");
 
-  const actor = await requirePermission("schedule:write");
-
   const parsed = parseShift(formData);
   if (!parsed.success) {
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  const existing = await prisma.shift.findUniqueOrThrow({ where: { id: shiftId } });
+  const actor = existing.branchId
+    ? await requireBranchPermission("schedule:write", existing.branchId)
+    : await requirePermission("schedule:write");
+
+  if (parsed.data.branchId && parsed.data.branchId !== existing.branchId) {
+    await requireBranchPermission("schedule:write", parsed.data.branchId);
   }
 
   await prisma.$transaction(async (tx) => {

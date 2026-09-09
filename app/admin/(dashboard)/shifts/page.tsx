@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { CalendarClock, Plus } from "lucide-react";
-import { can, requirePermission } from "@/lib/modules/identity/server";
+import { can, hasAnyPermission, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { createShift } from "@/lib/modules/employees/actions";
 import { listShifts } from "@/lib/modules/employees/server";
 import { minutesToTime } from "@/lib/modules/employees/validation";
@@ -17,17 +17,28 @@ export const dynamic = "force-dynamic";
 export default async function ShiftsPage() {
   requireFeature("attendance");
 
-  const actor = await requirePermission("schedule:read");
-  const canWrite = can(actor, "schedule:write");
-  const [shifts, branches] = await Promise.all([
-    listShifts(),
-    prisma.branch.findMany({ select: { id: true, name: true, isActive: true } }),
+  const { actor, scope } = await requireAnyBranchPermission("schedule:read");
+  const canWriteAny = hasAnyPermission(actor, "schedule:write");
+  const allowGlobal = can(actor, "schedule:write");
+
+  const branchFilter =
+    scope.kind === "branches"
+      ? { id: { in: scope.branchIds } }
+      : scope.kind === "none"
+        ? { id: { in: [] } }
+        : undefined;
+
+  const [shifts, branches, allBranchesForNames] = await Promise.all([
+    listShifts(scope),
+    prisma.branch.findMany({
+      where: branchFilter,
+      select: { id: true, name: true, isActive: true },
+    }),
+    prisma.branch.findMany({ select: { id: true, name: true } }),
   ]);
-  const branchName = new Map(branches.map((b) => [b.id, b.name]));
-  // Only active branches can be picked for a shift, matching the old
-  // standalone new/edit pages — a shift already pointed at an inactive
-  // branch still shows its name via `branchName` above.
+  const branchName = new Map(allBranchesForNames.map((b) => [b.id, b.name]));
   const assignableBranches = branches.filter((b) => b.isActive).map((b) => ({ id: b.id, name: b.name }));
+  const canCreate = canWriteAny && (allowGlobal || assignableBranches.length > 0);
 
   return (
     <div className="space-y-6">
@@ -38,10 +49,11 @@ export default async function ShiftsPage() {
             Reusable templates, resolved against each branch&rsquo;s timezone.
           </p>
         </div>
-        {canWrite && (
+        {canCreate && (
           <ShiftDialog
             action={createShift}
             branches={assignableBranches}
+            allowGlobal={allowGlobal}
             submitLabel="Create shift"
             title="New shift"
             description="Reusable templates, resolved against each branch's timezone."
@@ -70,6 +82,7 @@ export default async function ShiftsPage() {
       ) : (
         <ShiftsTable
           branches={assignableBranches}
+          allowGlobal={allowGlobal}
           shifts={shifts.map((shift) => ({
             id: shift.id,
             name: shift.name,
@@ -79,7 +92,11 @@ export default async function ShiftsPage() {
             breakLabel: shift.unpaidBreakMinutes === 0 ? "-" : `${shift.unpaidBreakMinutes}m`,
             branchLabel: shift.branchId ? (branchName.get(shift.branchId) ?? "Unknown") : "All branches",
             assignmentCount: shift._count.assignments,
-            canEdit: canWrite,
+            canEdit:
+              canWriteAny &&
+              (shift.branchId === null
+                ? allowGlobal
+                : can(actor, "schedule:write", { branchId: shift.branchId })),
             branchId: shift.branchId ?? "",
             startTime: minutesToTime(shift.startMinute),
             endTime: minutesToTime(shift.endMinute),

@@ -187,6 +187,10 @@ describe("role matrix invariants", () => {
     expect(permissionsForRole(Role.AREA_MANAGER)).toContain("admin:access");
     expect(permissionsForRole(Role.BRANCH_MANAGER)).not.toContain("user:read");
     expect(permissionsForRole(Role.AREA_MANAGER)).not.toContain("user:read");
+    expect(permissionsForRole(Role.BRANCH_MANAGER)).not.toContain("policy:read");
+    expect(permissionsForRole(Role.BRANCH_MANAGER)).not.toContain("question:read");
+    expect(permissionsForRole(Role.AREA_MANAGER)).not.toContain("policy:read");
+    expect(permissionsForRole(Role.AREA_MANAGER)).not.toContain("question:read");
 
     const bm = actor([branchRole(Role.BRANCH_MANAGER, "branch_a")]);
     expect(can(bm, "admin:access")).toBe(true);
@@ -424,7 +428,7 @@ describe("navigation visibility by role", () => {
     expect(opsHrefs).not.toContain("/admin/questions");
   });
 
-  it("shows only People and Operations for BRANCH_MANAGER (hiding HR and Administration)", () => {
+  it("shows only branch operational items for BRANCH_MANAGER (hiding HR, Administration, Policy, Questions)", () => {
     const manager = actor([branchRole(Role.BRANCH_MANAGER, "branch_accra")]);
     const nav = getVisibleNav(manager);
 
@@ -433,10 +437,18 @@ describe("navigation visibility by role", () => {
     expect(groupLabels).not.toContain("HR");
     expect(groupLabels).not.toContain("Administration");
 
+    const peopleGroup = nav.find((g) => g.label === "People")!;
+    const peopleHrefs = peopleGroup.items.map((i) => i.href);
+    expect(peopleHrefs).toContain("/admin/employees");
+    expect(peopleHrefs).toContain("/admin/branches");
+    expect(peopleHrefs).toContain("/admin/attendance");
+    expect(peopleHrefs).toContain("/admin/shifts");
+    expect(peopleHrefs).not.toContain("/admin/attendance/policy");
+
     const opsGroup = nav.find((g) => g.label === "Operations")!;
     const opsHrefs = opsGroup.items.map((i) => i.href);
     expect(opsHrefs).toContain("/admin/feedbacks");
-    expect(opsHrefs).toContain("/admin/questions");
+    expect(opsHrefs).not.toContain("/admin/questions");
   });
 
   it("hides all navigation groups for EMPLOYEE", () => {

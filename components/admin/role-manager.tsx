@@ -108,10 +108,19 @@ export function RoleManager({
         <form action={grant} className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
           <input type="hidden" name="userId" value={userId} />
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className={`grid gap-3 ${scopeType === "BRANCH" ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
             <div className="space-y-1.5">
               <Label htmlFor="role">Role</Label>
-              <NativeSelect id="role" name="role" defaultValue="">
+              <NativeSelect
+                id="role"
+                name="role"
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value === "BRANCH_MANAGER" || e.target.value === "SHIFT_SUPERVISOR") {
+                    setScopeType("BRANCH");
+                  }
+                }}
+              >
                 <option value="" disabled>
                   Choose…
                 </option>

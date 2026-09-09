@@ -97,10 +97,17 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         <DashboardFilters
           branches={branches.map((b) => ({ id: b.id, label: b.name }))}
           questions={questions.map((q) => ({ id: q.id, label: `Q${q.order} - ${q.text}` }))}
+          isScoped={scope.kind === "branches"}
         />
       </Suspense>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+      <div
+        className={
+          branches.length > 1
+            ? "grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6"
+            : "grid grid-cols-2 gap-3 sm:grid-cols-4"
+        }
+      >
         <StatCard label="Total submissions" value={data.totalSubmissions} icon={MessageSquareText} />
         <StatCard
           label="Average rating"
@@ -110,22 +117,26 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         />
         <StatCard label="Received today" value={data.todayCount} icon={CalendarDays} />
         <StatCard label="Received this week" value={data.weekCount} icon={CalendarRange} />
-        <StatCard
-          label="Highest-rated branch"
-          value={data.bestBranch?.branchName ?? "-"}
-          tooltip={data.bestBranch?.branchName}
-          subtext={data.bestBranch ? `${data.bestBranch.avgScore} / 5 avg` : undefined}
-          icon={Trophy}
-          tone="good"
-        />
-        <StatCard
-          label="Lowest-rated branch"
-          value={data.worstBranch?.branchName ?? "-"}
-          tooltip={data.worstBranch?.branchName}
-          subtext={data.worstBranch ? `${data.worstBranch.avgScore} / 5 avg` : undefined}
-          icon={TrendingDown}
-          tone="critical"
-        />
+        {branches.length > 1 && (
+          <>
+            <StatCard
+              label="Highest-rated branch"
+              value={data.bestBranch?.branchName ?? "-"}
+              tooltip={data.bestBranch?.branchName}
+              subtext={data.bestBranch ? `${data.bestBranch.avgScore} / 5 avg` : undefined}
+              icon={Trophy}
+              tone="good"
+            />
+            <StatCard
+              label="Lowest-rated branch"
+              value={data.worstBranch?.branchName ?? "-"}
+              tooltip={data.worstBranch?.branchName}
+              subtext={data.worstBranch ? `${data.worstBranch.avgScore} / 5 avg` : undefined}
+              icon={TrendingDown}
+              tone="critical"
+            />
+          </>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -151,17 +162,19 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Branch comparison</CardTitle>
-            <CardDescription>Average overall score by branch, highest first</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <BranchComparisonChart data={data.branchComparison} />
-          </CardContent>
-        </Card>
+        {branches.length > 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Branch comparison</CardTitle>
+              <CardDescription>Average overall score by branch, highest first</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BranchComparisonChart data={data.branchComparison} />
+            </CardContent>
+          </Card>
+        )}
 
-        <Card>
+        <Card className={branches.length <= 1 ? "lg:col-span-2" : undefined}>
           <CardHeader>
             <CardTitle>Average score per question</CardTitle>
             <CardDescription>Where customers are happiest and where they&apos;re not</CardDescription>
