@@ -47,6 +47,7 @@ export function AssessmentWorkspace({
   assessmentId,
   sections,
   addSectionAction,
+  updateSectionAction,
   addQuestionAction,
   deleteQuestionAction,
   summary,
@@ -69,6 +70,7 @@ export function AssessmentWorkspace({
   assessmentId: string;
   sections: Section[];
   addSectionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
+  updateSectionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   addQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   deleteQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   summary: { invited: number; submitted: number; averagePercent: number | null };
@@ -123,6 +125,7 @@ export function AssessmentWorkspace({
           editable={canWrite && isDraft}
           sections={sections}
           addSectionAction={addSectionAction}
+          updateSectionAction={updateSectionAction}
           addQuestionAction={addQuestionAction}
           deleteQuestionAction={deleteQuestionAction}
         />

@@ -1,9 +1,23 @@
-import { Check, Timer, TriangleAlert, X } from "lucide-react";
-import type { getAttemptDetail } from "@/lib/modules/aptitude/server";
+import { Check, LogOut, Timer, TriangleAlert, X } from "lucide-react";
+import type { getAttemptDetail, TabAbsence } from "@/lib/modules/aptitude/server";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatAccraDateTime } from "@/lib/platform/date";
+import { cn } from "@/lib/utils";
+
+/** Below this, an absence reads as a glance away, not a real gap — long
+ * enough that copy/paste being blocked already makes it hard to have done
+ * much with it. At or above, it's called out for HR to weigh. */
+const NOTABLE_ABSENCE_MS = 30_000;
+
+function formatAbsenceDuration(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+}
 
 /**
  * The actual answers-vs-key rendering, shared by the full page
@@ -18,6 +32,7 @@ export function AttemptDetailContent({
   const percent =
     (attempt.maxPoints ?? 0) > 0 ? Math.round((attempt.scoredPoints! / attempt.maxPoints!) * 100) : null;
   const passMark = attempt.invitation.test.passMarkPercent;
+  const tabAbsences = (Array.isArray(attempt.tabAbsences) ? attempt.tabAbsences : []) as TabAbsence[];
 
   return (
     <div className="space-y-6">
@@ -51,6 +66,42 @@ export function AttemptDetailContent({
             recorded. Worth asking about before using this result.
           </AlertDescription>
         </Alert>
+      )}
+
+      {tabAbsences.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Left the test tab</CardTitle>
+            <CardDescription>
+              {tabAbsences.length} {tabAbsences.length === 1 ? "time" : "times"} during the attempt. Not
+              blocked, only recorded — worth a look if any of these run long.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1.5 text-sm">
+              {tabAbsences.map((absence, index) => {
+                const notable = absence.durationMs >= NOTABLE_ABSENCE_MS;
+                return (
+                  <li
+                    key={index}
+                    className={cn(
+                      "flex items-center gap-2",
+                      notable ? "font-medium text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    {notable ? (
+                      <TriangleAlert className="size-3.5 shrink-0" />
+                    ) : (
+                      <LogOut className="size-3.5 shrink-0" />
+                    )}
+                    {formatAccraDateTime(new Date(absence.leftAt))} · away for{" "}
+                    {formatAbsenceDuration(absence.durationMs)}
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
       )}
 
       {attempt.submittedAt && (

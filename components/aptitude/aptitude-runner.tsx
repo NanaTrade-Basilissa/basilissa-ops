@@ -98,18 +98,66 @@ function CountdownBar({ deadlineAt, onExpire }: { deadlineAt: string; onExpire: 
  * independently) — this is what tells the candidate that happened, and
  * finalises whatever they got to.
  */
+/**
+ * Anti-cheating deterrents, not enforcement: nothing here blocks the
+ * candidate or changes the attempt's status. Disclosed up front on the
+ * "before you start" screen, not covert.
+ *
+ * - Copy, cut, paste, and the right-click menu are suppressed on this
+ *   screen. A browser still lets text be selected and edited inside the
+ *   candidate's own answer fields regardless of `select-none` on an
+ *   ancestor — that's native form-control behaviour, not something this
+ *   overrides — so typing and fixing typos is unaffected.
+ * - Every time the tab goes hidden and comes back, one record is sent:
+ *   when it happened and how long it lasted. Paired client-side from two
+ *   Visibility API events, not a guess — an attempt that's abandoned
+ *   entirely (closed, never reopened) never produces a "came back" half,
+ *   so nothing is recorded for it beyond what the deadline mechanism
+ *   already tells HR (unsubmitted, or auto-submitted at the deadline).
+ */
+function useTabAbsenceTracking(recordAbsence: (leftAt: string, durationMs: number) => void) {
+  const recordAbsenceRef = useRef(recordAbsence);
+  useEffect(() => {
+    recordAbsenceRef.current = recordAbsence;
+  }, [recordAbsence]);
+
+  useEffect(() => {
+    let hiddenAt: number | null = null;
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        hiddenAt = Date.now();
+      } else if (hiddenAt !== null) {
+        const leftAtIso = new Date(hiddenAt).toISOString();
+        const durationMs = Date.now() - hiddenAt;
+        hiddenAt = null;
+        recordAbsenceRef.current(leftAtIso, durationMs);
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+}
+
+function blockClipboardEvent(e: React.ClipboardEvent | React.MouseEvent) {
+  e.preventDefault();
+}
+
 export function AptitudeRunner({
   sections,
   declaredName,
   deadlineAt,
   saveAction,
   submitAction,
+  recordAbsenceAction,
 }: {
   sections: Section[];
   declaredName: string;
   deadlineAt: string | null;
   saveAction: (prev: AnswerState, formData: FormData) => Promise<AnswerState>;
   submitAction: (prev: SubmitState) => Promise<SubmitState>;
+  recordAbsenceAction: (leftAt: string, durationMs: number) => Promise<void>;
 }) {
   const [answers, setAnswers] = useState<Record<string, { options: string[]; text: string }>>(() =>
     Object.fromEntries(
@@ -125,6 +173,8 @@ export function AptitudeRunner({
   const [submitState, setSubmitState] = useState<SubmitState>(undefined);
   const [isSubmitting, startSubmit] = useTransition();
   const [timeUp, setTimeUp] = useState(false);
+
+  useTabAbsenceTracking((leftAt, durationMs) => void recordAbsenceAction(leftAt, durationMs));
 
   const allQuestions = sections.flatMap((s) => s.questions);
   const unanswered = new Set(submitState?.unanswered ?? []);
@@ -175,7 +225,13 @@ export function AptitudeRunner({
   }).length;
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6 select-none"
+      onCopy={blockClipboardEvent}
+      onCut={blockClipboardEvent}
+      onPaste={blockClipboardEvent}
+      onContextMenu={blockClipboardEvent}
+    >
       {deadlineAt && (
         <CountdownBar
           deadlineAt={deadlineAt}

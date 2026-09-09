@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { ArrowRight, Loader2, Timer } from "lucide-react";
+import { ArrowRight, Loader2, ShieldAlert, Timer } from "lucide-react";
 import type { IdentityFieldMode } from "@prisma/client";
 import type { DeclarationState } from "@/lib/modules/aptitude/actions";
 import { Button } from "@/components/ui/button";
@@ -54,6 +54,13 @@ export function IdentityDeclaration({
             </AlertDescription>
           </Alert>
         )}
+        <Alert>
+          <ShieldAlert className="size-4" />
+          <AlertDescription>
+            Once you start, copying, pasting, and selecting text are turned off. Leaving this
+            tab is recorded and shown with your result.
+          </AlertDescription>
+        </Alert>
         <form action={formAction} className="space-y-5" noValidate>
           {state?.error && (
             <Alert variant="destructive">

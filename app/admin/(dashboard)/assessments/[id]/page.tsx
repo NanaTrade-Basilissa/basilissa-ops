@@ -23,6 +23,7 @@ import {
   revokeInvitationAction,
   updateAssessmentAction,
   updatePublicLinkAction,
+  updateSectionAction,
 } from "@/lib/modules/assessments/actions";
 import { AssessmentLifecycle } from "@/components/admin/assessment-lifecycle";
 import { AssessmentWorkspace } from "@/components/admin/assessment-workspace";
@@ -95,6 +96,7 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
         assessmentId={assessment.id}
         sections={assessment.sections}
         addSectionAction={addSectionAction.bind(null, assessment.id)}
+        updateSectionAction={updateSectionAction.bind(null, assessment.id)}
         addQuestionAction={addQuestionAction.bind(null, assessment.id)}
         deleteQuestionAction={deleteQuestionAction.bind(null, assessment.id)}
         summary={summary}

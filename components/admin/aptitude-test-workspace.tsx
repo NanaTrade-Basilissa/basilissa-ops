@@ -43,6 +43,7 @@ export function AptitudeTestWorkspace({
   testId,
   sections,
   addSectionAction,
+  updateSectionAction,
   addQuestionAction,
   deleteQuestionAction,
   summary,
@@ -64,6 +65,7 @@ export function AptitudeTestWorkspace({
   testId: string;
   sections: Section[];
   addSectionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
+  updateSectionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   addQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   deleteQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   summary: { invited: number; submitted: number; averagePercent: number | null };
@@ -120,6 +122,7 @@ export function AptitudeTestWorkspace({
           editable={canWrite && isDraft}
           sections={sections}
           addSectionAction={addSectionAction}
+          updateSectionAction={updateSectionAction}
           addQuestionAction={addQuestionAction}
           deleteQuestionAction={deleteQuestionAction}
         />

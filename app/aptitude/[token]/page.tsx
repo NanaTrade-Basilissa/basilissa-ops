@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import { requireFeature } from "@/lib/platform/features-guard";
 import { loadForTaking } from "@/lib/modules/aptitude/server";
-import { declareIdentityAction, saveAnswerAction, submitAptitudeTestAction } from "@/lib/modules/aptitude/actions";
+import {
+  declareIdentityAction,
+  recordTabAbsenceAction,
+  saveAnswerAction,
+  submitAptitudeTestAction,
+} from "@/lib/modules/aptitude/actions";
 import { AptitudeRunner } from "@/components/aptitude/aptitude-runner";
 import { IdentityDeclaration } from "@/components/aptitude/identity-declaration";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -76,6 +81,7 @@ export default async function TakeAptitudeTestPage({ params }: { params: Promise
             deadlineAt={view.deadlineAt}
             saveAction={saveAnswerAction.bind(null, decodeURIComponent(token))}
             submitAction={submitAptitudeTestAction.bind(null, decodeURIComponent(token))}
+            recordAbsenceAction={recordTabAbsenceAction.bind(null, decodeURIComponent(token))}
           />
         )}
       </div>

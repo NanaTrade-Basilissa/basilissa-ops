@@ -108,6 +108,7 @@ export async function getAttemptDetail(attemptId: string) {
       submittedAt: true,
       deadlineAt: true,
       autoSubmitted: true,
+      tabAbsences: true,
       scoredPoints: true,
       maxPoints: true,
       invitation: {

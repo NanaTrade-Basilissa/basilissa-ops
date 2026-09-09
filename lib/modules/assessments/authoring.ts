@@ -184,6 +184,37 @@ export async function addSection(
   return { ok: true, value: section.id };
 }
 
+export async function updateSection(
+  sectionId: string,
+  input: { title: string; description?: string | null },
+  actor: AuditActor,
+): Promise<AuthoringOutcome> {
+  const section = await prisma.assessmentSection.findUnique({
+    where: { id: sectionId },
+    select: { id: true, title: true, description: true, assessmentId: true },
+  });
+  if (!section) return fail("NOT_FOUND", "No such section.");
+
+  const refusal = await refuseUnlessDraft(section.assessmentId);
+  if (refusal) return refusal;
+
+  const after = await prisma.assessmentSection.update({
+    where: { id: sectionId },
+    data: { title: input.title.trim(), description: input.description?.trim() || null },
+    select: { title: true, description: true },
+  });
+
+  await recordAudit({
+    actor,
+    action: "assessment.section_updated",
+    entityType: "Assessment",
+    entityId: section.assessmentId,
+    before: { title: section.title, description: section.description },
+    after,
+  });
+  return DONE;
+}
+
 export async function addQuestion(
   sectionId: string,
   input: {

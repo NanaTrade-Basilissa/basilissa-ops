@@ -1561,6 +1561,14 @@ model AptitudeAttempt {
   /// from "finished".
   autoSubmitted Boolean @default(false)
 
+  /// Anti-cheating signal, not enforcement: every time the candidate's tab
+  /// went hidden and came back during the attempt, recorded as
+  /// `{leftAt: ISO string, durationMs: number}[]`. Nothing here blocks or
+  /// auto-submits — same "flag it, let HR decide" shape as identityMismatch.
+  /// The candidate is told on the "before you start" screen that this
+  /// happens, so it is disclosed, not covert.
+  tabAbsences Json @default("[]")
+
   /// Computed at submission from the answers, then stored. Recomputing later
   /// against an edited test would silently restate somebody's result.
   scoredPoints Int?

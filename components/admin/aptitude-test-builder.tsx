@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { AlignLeft, Check, CheckSquare, Circle, Loader2, Plus, Trash2, X } from "lucide-react";
+import { AlignLeft, Check, CheckSquare, Circle, Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import type { AptitudeQuestionKind } from "@prisma/client";
 import type { AptitudeFormState } from "@/lib/modules/aptitude/actions";
 import { QUESTION_KIND_LABEL, MAX_OPTIONS_PER_QUESTION } from "@/lib/modules/aptitude/constants";
@@ -13,6 +13,13 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const KIND_ICON: Record<AptitudeQuestionKind, typeof Circle> = {
   SINGLE_CHOICE: Circle,
@@ -38,6 +45,7 @@ export function AptitudeTestBuilder({
   editable,
   sections,
   addSectionAction,
+  updateSectionAction,
   addQuestionAction,
   deleteQuestionAction,
 }: {
@@ -45,6 +53,7 @@ export function AptitudeTestBuilder({
   editable: boolean;
   sections: Section[];
   addSectionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
+  updateSectionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   addQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   deleteQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
 }) {
@@ -65,12 +74,15 @@ export function AptitudeTestBuilder({
 
       {sections.map((section, index) => (
         <div key={section.id} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="border-b border-border bg-muted/40 px-5 py-3">
-            <h3 className="font-heading font-semibold text-foreground">
-              <span className="text-muted-foreground">Section {index + 1} · </span>
-              {section.title}
-            </h3>
-            {section.description && <p className="mt-0.5 text-sm text-muted-foreground">{section.description}</p>}
+          <div className="flex items-start justify-between gap-2 border-b border-border bg-muted/40 px-5 py-3">
+            <div>
+              <h3 className="font-heading font-semibold text-foreground">
+                <span className="text-muted-foreground">Section {index + 1} · </span>
+                {section.title}
+              </h3>
+              {section.description && <p className="mt-0.5 text-sm text-muted-foreground">{section.description}</p>}
+            </div>
+            {editable && <EditSectionButton section={section} action={updateSectionAction} />}
           </div>
 
           <div className="space-y-3 p-4">
@@ -203,6 +215,63 @@ function DeleteQuestionButton({
         {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
       </Button>
     </form>
+  );
+}
+
+function EditSectionButton({
+  section,
+  action,
+}: {
+  section: { id: string; title: string; description: string | null };
+  action: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, formAction, isPending] = useActionState<AptitudeFormState, FormData>(
+    async (prev, formData) => {
+      const result = await action(prev, formData);
+      if (result?.saved) setOpen(false);
+      return result;
+    },
+    undefined,
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Edit section" />}>
+        <Pencil className="size-3.5" />
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit section</DialogTitle>
+        </DialogHeader>
+        <form action={formAction} className="space-y-4">
+          <input type="hidden" name="sectionId" value={section.id} />
+          {state?.error && (
+            <Alert variant="destructive">
+              <AlertDescription>{state.error}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor={`edit-title-${section.id}`}>Title</Label>
+            <Input id={`edit-title-${section.id}`} name="title" required defaultValue={section.title} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`edit-description-${section.id}`}>
+              Description <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id={`edit-description-${section.id}`}
+              name="description"
+              defaultValue={section.description ?? ""}
+            />
+          </div>
+          <Button type="submit" size="sm" disabled={isPending}>
+            {isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            Save changes
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

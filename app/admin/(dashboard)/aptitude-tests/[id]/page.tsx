@@ -19,6 +19,7 @@ import {
   revokeInvitationAction,
   updateAptitudeTestAction,
   updatePublicLinkAction,
+  updateSectionAction,
 } from "@/lib/modules/aptitude/actions";
 import { AptitudeTestLifecycle } from "@/components/admin/aptitude-test-lifecycle";
 import { AptitudeTestWorkspace } from "@/components/admin/aptitude-test-workspace";
@@ -86,6 +87,7 @@ export default async function AptitudeTestPage({ params }: { params: Promise<{ i
         testId={test.id}
         sections={test.sections}
         addSectionAction={addSectionAction.bind(null, test.id)}
+        updateSectionAction={updateSectionAction.bind(null, test.id)}
         addQuestionAction={addQuestionAction.bind(null, test.id)}
         deleteQuestionAction={deleteQuestionAction.bind(null, test.id)}
         summary={summary}

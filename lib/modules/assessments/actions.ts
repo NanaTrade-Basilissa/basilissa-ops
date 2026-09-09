@@ -34,6 +34,7 @@ import {
   deleteQuestion,
   publishAssessment,
   updateAssessmentDetails,
+  updateSection,
 } from "./authoring";
 import {
   issueInvitation,
@@ -137,6 +138,32 @@ export async function addSectionAction(
   }
 
   const outcome = await addSection(assessmentId, parsed.data, auditActorFrom(actor));
+  if (!outcome.ok) return { error: outcome.message };
+
+  revalidatePath(`/admin/assessments/${assessmentId}`);
+  return { saved: true };
+}
+
+export async function updateSectionAction(
+  assessmentId: string,
+  _prev: AssessmentFormState,
+  formData: FormData,
+): Promise<AssessmentFormState> {
+  const actor = await requirePermission("assessment:write");
+
+  const parsed = sectionSchema.safeParse({
+    title: formData.get("title"),
+    description: formData.get("description") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  const outcome = await updateSection(
+    String(formData.get("sectionId") ?? ""),
+    parsed.data,
+    auditActorFrom(actor),
+  );
   if (!outcome.ok) return { error: outcome.message };
 
   revalidatePath(`/admin/assessments/${assessmentId}`);

@@ -27,6 +27,7 @@ import {
   deleteQuestion,
   publishAptitudeTest,
   updateAptitudeTestDetails,
+  updateSection,
 } from "./authoring";
 import {
   issueInvitation,
@@ -37,7 +38,7 @@ import {
   type IssuedInvitation,
 } from "./invitations";
 import { APTITUDE_INVITATION_SEND } from "./jobs";
-import { declareIdentity, saveAnswer, submitResponse } from "./taking";
+import { declareIdentity, recordTabAbsence, saveAnswer, submitResponse } from "./taking";
 
 export type AptitudeFormState = (NonNullable<FormState> & { saved?: boolean }) | undefined;
 
@@ -136,6 +137,33 @@ export async function addSectionAction(
   }
 
   const outcome = await addSection(testId, parsed.data, auditActorFrom(actor));
+  if (!outcome.ok) return { error: outcome.message };
+
+  revalidatePath(`/admin/aptitude-tests/${testId}`);
+  return { saved: true };
+}
+
+export async function updateSectionAction(
+  testId: string,
+  _prev: AptitudeFormState,
+  formData: FormData,
+): Promise<AptitudeFormState> {
+  requireFeature("aptitude");
+  const actor = await requirePermission("aptitude:write");
+
+  const parsed = sectionSchema.safeParse({
+    title: formData.get("title"),
+    description: formData.get("description") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  const outcome = await updateSection(
+    String(formData.get("sectionId") ?? ""),
+    parsed.data,
+    auditActorFrom(actor),
+  );
   if (!outcome.ok) return { error: outcome.message };
 
   revalidatePath(`/admin/aptitude-tests/${testId}`);
@@ -412,6 +440,25 @@ export async function saveAnswerAction(
   if (!outcome.ok) return { error: "This link is no longer usable." };
 
   return { savedQuestionId: parsed.data.questionId };
+}
+
+/**
+ * Fire-and-forget from the client whenever the tab has been hidden and comes
+ * back — not tied to `useActionState`, since there's no form and nothing for
+ * the candidate to see happen. Same rate limit budget as answer saves: this
+ * is called far less often than that in practice, so it's generous, not a
+ * real cap.
+ */
+export async function recordTabAbsenceAction(
+  token: string,
+  leftAt: string,
+  durationMs: number,
+): Promise<void> {
+  requireFeature("aptitude");
+  const limit = await rateLimit(`aptitude-tab-absence:${await clientIp()}`, 600, 60 * 60 * 1000);
+  if (!limit.success) return;
+
+  await recordTabAbsence(token, { leftAt, durationMs });
 }
 
 export type SubmitState = { error?: string; unanswered?: string[] } | undefined;

@@ -348,6 +348,51 @@ export async function saveAnswer(
   return { ok: true };
 }
 
+export type TabAbsence = { leftAt: string; durationMs: number };
+
+/** Sanity cap, not a real limit anyone should hit — stops a stuck or
+ * malicious client from growing this column without bound. */
+const MAX_TAB_ABSENCES = 200;
+
+/**
+ * Anti-cheating signal, not enforcement — see the schema note on
+ * `AptitudeAttempt.tabAbsences`. Called once per hidden-then-visible-again
+ * cycle, from the client; nothing here blocks the attempt or changes its
+ * deadline. Silently no-ops on bad input rather than erroring, since a
+ * rejected call here would just look like a dropped request to the
+ * candidate and isn't worth surfacing to them either way.
+ */
+export async function recordTabAbsence(
+  token: string,
+  input: { leftAt: string; durationMs: number },
+): Promise<{ ok: boolean }> {
+  if (!Number.isFinite(input.durationMs) || input.durationMs <= 0 || input.durationMs > 24 * 60 * 60_000) {
+    return { ok: false };
+  }
+  const leftAt = new Date(input.leftAt);
+  if (Number.isNaN(leftAt.getTime())) return { ok: false };
+
+  const invitation = await prisma.aptitudeInvitation.findUnique({
+    where: { tokenHash: hashInvitationToken(token) },
+    select: { attempt: { select: { id: true, submittedAt: true, tabAbsences: true } } },
+  });
+  if (!invitation?.attempt || invitation.attempt.submittedAt) return { ok: false };
+
+  const existing = (
+    Array.isArray(invitation.attempt.tabAbsences) ? invitation.attempt.tabAbsences : []
+  ) as TabAbsence[];
+  const next = [...existing, { leftAt: leftAt.toISOString(), durationMs: Math.round(input.durationMs) }].slice(
+    -MAX_TAB_ABSENCES,
+  );
+
+  await prisma.aptitudeAttempt.update({
+    where: { id: invitation.attempt.id },
+    data: { tabAbsences: next },
+  });
+
+  return { ok: true };
+}
+
 export type SubmitOutcome =
   | { ok: true; showScore: boolean; scoredPoints: number; maxPoints: number; percent: number | null }
   | { ok: false; reason: TakingFailure | "INCOMPLETE"; message: string; unanswered?: string[] };
