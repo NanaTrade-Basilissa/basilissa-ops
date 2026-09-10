@@ -7,7 +7,7 @@ import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
-export const mobilePunchSchema = z.object({
+const mobilePunchSchema = z.object({
   employeeId: z.string().min(1, "Employee ID is required"),
   branchId: z.string().min(1, "Branch ID is required"),
   direction: z.enum(["IN", "OUT"]),

@@ -424,8 +424,9 @@ describe("navigation visibility by role", () => {
 
     const opsGroup = nav.find((g) => g.label === "Operations")!;
     const opsHrefs = opsGroup.items.map((i) => i.href);
-    expect(opsHrefs).toContain("/admin/feedbacks");
-    expect(opsHrefs).not.toContain("/admin/questions");
+    expect(opsHrefs).toContain("/admin/feedback");
+    expect(opsHrefs).toContain("/admin/feedback/all");
+    expect(opsHrefs).not.toContain("/admin/feedback/questions");
   });
 
   it("shows only branch operational items for BRANCH_MANAGER (hiding HR, Administration, Policy, Questions)", () => {
@@ -447,8 +448,9 @@ describe("navigation visibility by role", () => {
 
     const opsGroup = nav.find((g) => g.label === "Operations")!;
     const opsHrefs = opsGroup.items.map((i) => i.href);
-    expect(opsHrefs).toContain("/admin/feedbacks");
-    expect(opsHrefs).not.toContain("/admin/questions");
+    expect(opsHrefs).toContain("/admin/feedback");
+    expect(opsHrefs).toContain("/admin/feedback/all");
+    expect(opsHrefs).not.toContain("/admin/feedback/questions");
   });
 
   it("hides all navigation groups for EMPLOYEE", () => {

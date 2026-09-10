@@ -70,7 +70,7 @@ export async function createQuestion(
     );
   });
 
-  revalidatePath("/admin/questions");
+  revalidatePath("/admin/feedback/questions");
   return { success: true };
 }
 
@@ -109,7 +109,7 @@ export async function updateQuestion(
     );
   });
 
-  revalidatePath("/admin/questions");
+  revalidatePath("/admin/feedback/questions");
   return { success: true };
 }
 
@@ -123,7 +123,7 @@ export async function toggleQuestionActive(formData: FormData): Promise<void> {
   const nextIsActive = formData.get("nextIsActive") === "true";
 
   if (nextIsActive && (await countActive(id)) >= ACTIVE_CAP) {
-    redirect(`/admin/questions?error=${encodeURIComponent(CAP_MESSAGE)}`);
+    redirect(`/admin/feedback/questions?error=${encodeURIComponent(CAP_MESSAGE)}`);
   }
 
   await prisma.$transaction(async (tx) => {
@@ -144,7 +144,7 @@ export async function toggleQuestionActive(formData: FormData): Promise<void> {
     );
   });
 
-  revalidatePath("/admin/questions");
+  revalidatePath("/admin/feedback/questions");
 }
 
 /** Swaps this question's display order with its immediate neighbor. `order`
@@ -199,5 +199,5 @@ export async function moveQuestion(formData: FormData): Promise<void> {
     );
   });
 
-  revalidatePath("/admin/questions");
+  revalidatePath("/admin/feedback/questions");
 }

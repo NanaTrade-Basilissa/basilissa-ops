@@ -27,11 +27,11 @@ export function GeneralQrButton({ feedbackUrl }: { feedbackUrl: string }) {
         <div className="flex flex-col items-center gap-3">
           <div className="overflow-hidden rounded-lg border border-border">
             {/* eslint-disable-next-line @next/next/no-img-element -- dynamically generated PNG, not a static asset next/image can optimize */}
-            <img src="/api/admin/qr" alt="QR code for general feedback link" width={200} height={200} />
+            <img src="/api/admin/feedback/qr" alt="QR code for general feedback link" width={200} height={200} />
           </div>
           <CopyLinkButton url={feedbackUrl} />
           <a
-            href="/api/admin/qr?download=1"
+            href="/api/admin/feedback/qr?download=1"
             className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
           >
             <Download className="size-4" /> Download QR PNG

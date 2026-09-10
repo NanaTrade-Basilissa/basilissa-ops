@@ -137,11 +137,11 @@ export default async function BranchDetailPage({
           <CardContent className="flex flex-col items-center gap-3">
             <div className="overflow-hidden rounded-lg border border-border">
               {/* eslint-disable-next-line @next/next/no-img-element -- dynamically generated PNG, not a static asset next/image can optimize */}
-              <img src={`/api/admin/branches/${branch.id}/qr`} alt={`QR code for ${branch.name}`} width={160} height={160} />
+              <img src={`/api/admin/branches/${branch.id}/feedback/qr`} alt={`QR code for ${branch.name}`} width={160} height={160} />
             </div>
             <CopyLinkButton url={feedbackUrl} />
             <a
-              href={`/api/admin/branches/${branch.id}/qr?download=1`}
+              href={`/api/admin/branches/${branch.id}/feedback/qr?download=1`}
               className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
             >
               <Download className="size-4" /> Download QR PNG

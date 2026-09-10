@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   Brain,
   CalendarClock,
   CalendarRange,
@@ -75,8 +76,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { href: "/admin/feedbacks", label: "Feedbacks", icon: MessageSquareText, exact: false, permission: "feedback:read" },
-      { href: "/admin/questions", label: "Questions", icon: ListChecks, exact: false, permission: "question:read" },
+      { href: "/admin/feedback", label: "Feedback Overview", icon: BarChart3, exact: true, permission: "feedback:read" },
+      { href: "/admin/feedback/all", label: "All Submissions", icon: MessageSquareText, exact: false, permission: "feedback:read" },
+      { href: "/admin/feedback/questions", label: "Questions", icon: ListChecks, exact: false, permission: "question:read" },
     ],
   },
   {
