@@ -42,6 +42,7 @@ const PUBLIC_ENTRIES = [
   "providers",
   "scoring",
   "events",
+  "geofence",
   "schedule",
   "projection",
   "manual",

@@ -21,6 +21,7 @@ import { LiveFloorBoard } from "@/components/admin/live-floor-board";
 import { TimesheetFilters } from "@/components/admin/timesheet-filters";
 import { TimesheetsTable } from "@/components/admin/timesheets-table";
 import { ManualPunchDialog, type EmployeeOption } from "@/components/admin/manual-punch-dialog";
+import { MobileClockInDialog } from "@/components/admin/mobile-clock-in-dialog";
 import { AttendanceSweepButton } from "@/components/admin/attendance-sweep-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
@@ -82,7 +83,14 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
   const branches = await prisma.branch.findMany({
     where: scope.kind === "branches" ? { id: { in: scope.branchIds } } : {},
     orderBy: { name: "asc" },
-    select: { id: true, name: true },
+    select: {
+      id: true,
+      name: true,
+      latitude: true,
+      longitude: true,
+      geofenceRadiusMeters: true,
+      geofenceEnabled: true,
+    },
   });
 
   const activeEmployees = canManualEntry
@@ -118,12 +126,24 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
         <div className="flex flex-wrap items-center gap-2">
           {canWrite && <AttendanceSweepButton />}
           {canManualEntry && (
-            <ManualPunchDialog
-              employees={employeeOptions}
-              branches={branches}
-              defaultDate={date}
-              defaultBranchId={defaultBranchId}
-            />
+            <>
+              <MobileClockInDialog
+                employees={employeeOptions.map((e) => ({
+                  id: e.id,
+                  name: e.name,
+                  employeeCode: e.employeeCode,
+                  branchIds: e.branchAssignments.map((ba) => ba.branchId),
+                }))}
+                branches={branches}
+                defaultBranchId={defaultBranchId}
+              />
+              <ManualPunchDialog
+                employees={employeeOptions}
+                branches={branches}
+                defaultDate={date}
+                defaultBranchId={defaultBranchId}
+              />
+            </>
           )}
         </div>
       </div>

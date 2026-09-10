@@ -40,17 +40,19 @@ describe("every provider is described", () => {
 });
 
 describe("what is actually buildable today", () => {
-  it("is manual entry and auto-close, and nothing else", () => {
+  it("includes manual entry, mobile app, and auto-close", () => {
     expect(implementedProviders().map((p) => p.type).sort()).toEqual(
-      [ProviderType.MANAGER_MANUAL, ProviderType.SYSTEM_AUTO_CLOSE].sort(),
+      [
+        ProviderType.MANAGER_MANUAL,
+        ProviderType.MOBILE_APP,
+        ProviderType.SYSTEM_AUTO_CLOSE,
+      ].sort(),
     );
   });
 
-  it("registers the two unbuilt providers rather than omitting them", () => {
-    // Registered early on purpose: the shape is agreed while changing it is
-    // free, and ingest can refuse them explicitly instead of by accident.
+  it("registers fingerprint as unbuilt provider and mobile app as implemented", () => {
     expect(isProviderImplemented(ProviderType.FINGERPRINT)).toBe(false);
-    expect(isProviderImplemented(ProviderType.MOBILE_APP)).toBe(false);
+    expect(isProviderImplemented(ProviderType.MOBILE_APP)).toBe(true);
   });
 });
 
@@ -122,11 +124,10 @@ describe("device identity", () => {
     expect(needsDevice).toEqual([ProviderType.FINGERPRINT, ProviderType.MOBILE_APP].sort());
   });
 
-  // Both are unbuilt, so nothing can currently produce an event needing one —
-  // which is what makes the empty table correct rather than an oversight.
-  it("is required by no provider that is implemented yet", () => {
-    for (const p of implementedProviders()) {
-      expect(p.capabilities.deviceIdentity).toBe("NONE");
-    }
+  it("is required only by mobile app among currently implemented providers", () => {
+    const implementedNeedingDevice = implementedProviders()
+      .filter((p) => p.capabilities.deviceIdentity === "REQUIRED")
+      .map((p) => p.type);
+    expect(implementedNeedingDevice).toEqual([ProviderType.MOBILE_APP]);
   });
 });

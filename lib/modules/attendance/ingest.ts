@@ -1,6 +1,7 @@
 import "server-only";
 import {
   AttendanceDirection,
+  GeofenceDecision,
   ManualEntryReason,
   Prisma,
   ProviderType,
@@ -45,6 +46,8 @@ export type IngestEvidence = {
   accuracyMeters?: number;
   distanceMeters?: number;
   isMockLocation?: boolean;
+  geofenceDecision?: GeofenceDecision;
+  geofenceSnapshot?: Prisma.InputJsonValue;
   deviceRawPayload?: Prisma.InputJsonValue;
   manualReasonCode?: ManualEntryReason;
   manualReasonText?: string;

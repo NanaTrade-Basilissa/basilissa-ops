@@ -133,8 +133,8 @@ export const PROVIDERS: Record<ProviderType, ProviderDescriptor> = {
   [ProviderType.MOBILE_APP]: {
     type: ProviderType.MOBILE_APP,
     label: "Mobile app",
-    status: "PLANNED",
-    plannedFor: "Phase 5",
+    status: "IMPLEMENTED",
+    plannedFor: null,
     baseline: PROVIDER_BASELINE[ProviderType.MOBILE_APP],
     capabilities: {
       // Server time, deliberately: a phone's clock is trivially changed by its
