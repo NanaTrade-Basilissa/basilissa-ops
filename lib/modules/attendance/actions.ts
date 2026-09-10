@@ -23,6 +23,7 @@ import { supersedePolicy } from "./policy-repository";
 import { attendancePolicySchema } from "./validation";
 import { canAuthorizeOvertime } from "./overtime-auth";
 import { autoCloseStaleDays, type AutoCloseSummary } from "./auto-close";
+import { shiftDateKey } from "@/lib/platform/date";
 
 // `FormState` already includes undefined, so intersecting with it would make
 // the whole type non-optional. Extend the non-null half and re-add undefined.
@@ -491,3 +492,228 @@ export async function runDailyAttendanceSweepAction(): Promise<AutoCloseSummary>
   revalidatePath("/admin/attendance");
   return result;
 }
+
+export type CopyWeeklyScheduleResult = {
+  ok: boolean;
+  copiedCount?: number;
+  skippedCount?: number;
+  error?: string;
+  message?: string;
+};
+
+/**
+ * Copies schedule exceptions / customized shifts from a source week into a target week for all active employees of a branch.
+ */
+export async function copyWeeklyScheduleAction(
+  sourceWeekStart: string,
+  targetWeekStart: string,
+  branchId: string,
+  overwriteExisting: boolean = false,
+): Promise<CopyWeeklyScheduleResult> {
+  requireFeature("attendance");
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sourceWeekStart) || !/^\d{4}-\d{2}-\d{2}$/.test(targetWeekStart)) {
+    return { ok: false, error: "Invalid week date format. Expected YYYY-MM-DD." };
+  }
+
+  if (sourceWeekStart === targetWeekStart) {
+    return { ok: false, error: "Source and target weeks cannot be the same week." };
+  }
+
+  const actor = await requirePermission("schedule:write", { branchId });
+
+  const sourceStart = new Date(`${sourceWeekStart}T00:00:00.000Z`);
+  const targetStart = new Date(`${targetWeekStart}T00:00:00.000Z`);
+  const dayDelta = Math.round((targetStart.getTime() - sourceStart.getTime()) / (24 * 60 * 60 * 1000));
+
+  const sourceEnd = new Date(`${shiftDateKey(sourceWeekStart, 6)}T23:59:59.999Z`);
+
+  const branchAssignments = await prisma.employeeBranchAssignment.findMany({
+    where: {
+      branchId,
+      validTo: null,
+      employee: { status: "ACTIVE" },
+    },
+    select: { employeeId: true },
+  });
+
+  const employeeIds = branchAssignments.map((b) => b.employeeId);
+  if (employeeIds.length === 0) {
+    return { ok: false, error: "No active employees assigned to this branch." };
+  }
+
+  const sourceExceptions = await prisma.scheduleException.findMany({
+    where: {
+      employeeId: { in: employeeIds },
+      date: { gte: sourceStart, lte: sourceEnd },
+    },
+  });
+
+  if (sourceExceptions.length === 0) {
+    return {
+      ok: true,
+      copiedCount: 0,
+      skippedCount: 0,
+      message: "No custom shift overrides found in the source week to copy.",
+    };
+  }
+
+  let copiedCount = 0;
+  let skippedCount = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const ex of sourceExceptions) {
+      const sourceDateKey = ex.date.toISOString().slice(0, 10);
+      const targetDateKey = shiftDateKey(sourceDateKey, dayDelta);
+      const targetDate = new Date(`${targetDateKey}T00:00:00.000Z`);
+
+      const existing = await tx.scheduleException.findUnique({
+        where: {
+          employeeId_date: {
+            employeeId: ex.employeeId,
+            date: targetDate,
+          },
+        },
+      });
+
+      if (existing && !overwriteExisting) {
+        skippedCount++;
+        continue;
+      }
+
+      await tx.scheduleException.upsert({
+        where: {
+          employeeId_date: {
+            employeeId: ex.employeeId,
+            date: targetDate,
+          },
+        },
+        create: {
+          employeeId: ex.employeeId,
+          date: targetDate,
+          type: ex.type,
+          shiftId: ex.shiftId,
+          reason: `Copied from week ${sourceWeekStart}: ${ex.reason || "Scheduled rota"}`,
+          createdBy: actor.userId,
+        },
+        update: {
+          type: ex.type,
+          shiftId: ex.shiftId,
+          reason: `Copied from week ${sourceWeekStart}: ${ex.reason || "Scheduled rota"}`,
+        },
+      });
+
+      copiedCount++;
+    }
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "schedule.week_copied",
+        entityType: "BranchSchedule",
+        entityId: branchId,
+        metadata: {
+          sourceWeekStart,
+          targetWeekStart,
+          copiedCount,
+          skippedCount,
+          overwriteExisting,
+        },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/admin/shifts");
+  return {
+    ok: true,
+    copiedCount,
+    skippedCount,
+    message: `Copied ${copiedCount} shift override(s) from week of ${sourceWeekStart}${skippedCount > 0 ? ` (${skippedCount} existing preserved)` : ""}.`,
+  };
+}
+
+export type BulkAssignShiftInput = {
+  employeeIds: string[];
+  shiftId: string;
+  daysOfWeek: number[];
+  validFrom: string;
+  validTo?: string | null;
+  branchId: string;
+};
+
+/**
+ * Assigns a recurring shift pattern to multiple employees in bulk.
+ */
+export async function bulkAssignShiftAction(
+  input: BulkAssignShiftInput,
+): Promise<{ ok: boolean; count?: number; error?: string; message?: string }> {
+  requireFeature("attendance");
+
+  const { employeeIds, shiftId, daysOfWeek, validFrom, validTo, branchId } = input;
+
+  if (!employeeIds || employeeIds.length === 0) {
+    return { ok: false, error: "Please select at least one employee." };
+  }
+
+  if (!shiftId) {
+    return { ok: false, error: "Please select a shift template." };
+  }
+
+  if (!daysOfWeek || daysOfWeek.length === 0) {
+    return { ok: false, error: "Please select at least one day of the week." };
+  }
+
+  if (!validFrom || !/^\d{4}-\d{2}-\d{2}$/.test(validFrom)) {
+    return { ok: false, error: "Invalid start date. Expected YYYY-MM-DD." };
+  }
+
+  const actor = await requirePermission("schedule:write", { branchId });
+
+  const fromDate = new Date(`${validFrom}T00:00:00.000Z`);
+  const toDate = validTo && /^\d{4}-\d{2}-\d{2}$/.test(validTo)
+    ? new Date(`${validTo}T23:59:59.999Z`)
+    : null;
+
+  let createdCount = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const empId of employeeIds) {
+      await tx.employeeShiftAssignment.create({
+        data: {
+          employeeId: empId,
+          shiftId,
+          daysOfWeek,
+          validFrom: fromDate,
+          validTo: toDate,
+        },
+      });
+      createdCount++;
+    }
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "schedule.bulk_assigned",
+        entityType: "EmployeeShiftAssignment",
+        entityId: branchId,
+        metadata: {
+          employeeCount: createdCount,
+          shiftId,
+          daysOfWeek,
+          validFrom,
+          validTo,
+        },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/admin/shifts");
+  return {
+    ok: true,
+    count: createdCount,
+    message: `Successfully assigned shift to ${createdCount} staff member(s).`,
+  };
+}
+

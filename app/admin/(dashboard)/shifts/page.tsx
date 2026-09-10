@@ -12,6 +12,8 @@ import { ShiftDialog } from "@/components/admin/shift-dialog";
 import { ShiftsTable } from "@/components/admin/shifts-table";
 import { WeeklyScheduleGrid } from "@/components/admin/weekly-schedule-grid";
 import { ScheduleBranchSelect } from "@/components/admin/schedule-branch-select";
+import { ScheduleCopyWeekDialog } from "@/components/admin/schedule-copy-week-dialog";
+import { ScheduleBulkAssignDialog } from "@/components/admin/schedule-bulk-assign-dialog";
 import { requireFeature } from "@/lib/platform/features-guard";
 import { accraDateKey, getAccraWeekStart, shiftDateKey } from "@/lib/platform/date";
 import { cn } from "@/lib/utils";
@@ -189,6 +191,28 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
                 </Link>
               )}
             </div>
+
+            {/* Quick schedule management actions */}
+            {canManageBranch && weeklyData && (
+              <div className="flex flex-wrap items-center gap-2">
+                <ScheduleCopyWeekDialog
+                  branchId={selectedBranchId}
+                  branchName={weeklyData.branchName}
+                  activeWeekStart={weekStartKey}
+                />
+                <ScheduleBulkAssignDialog
+                  branchId={selectedBranchId}
+                  branchName={weeklyData.branchName}
+                  employees={weeklyData.employees.map((e) => ({
+                    id: e.employeeId,
+                    name: e.name,
+                    employeeCode: e.employeeCode,
+                  }))}
+                  shifts={weeklyData.shifts}
+                  activeWeekStart={weekStartKey}
+                />
+              </div>
+            )}
           </div>
 
           {weeklyData ? (

@@ -58,6 +58,10 @@ Welcome to the Basilissa Operations Platform API documentation.
       name: "Branch Administration",
       description: "Administrative utilities, branch assets, and QR code generation.",
     },
+    {
+      name: "Notifications",
+      description: "Push notification token registration and staff messaging alerts.",
+    },
   ],
   paths: {
     "/api/health": {
@@ -301,6 +305,195 @@ Ingests mobile clock-in/out punches from branch staff.
                 },
               },
             },
+          },
+        },
+      },
+    },
+
+    "/api/v1/attendance/status": {
+      get: {
+        tags: ["Attendance"],
+        summary: "Current Staff Attendance Status & Today's Schedule",
+        description: "Returns the employee's live clock-in state, recent punch, today's resolved shift schedule, and assigned branch geofence coordinates.",
+        operationId: "getAttendanceStatus",
+        security: [{ DeviceTokenAuth: [] }],
+        responses: {
+          "200": {
+            description: "Employee current status retrieved successfully.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    employee: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        name: { type: "string" },
+                        employeeCode: { type: "string", nullable: true },
+                        jobTitle: { type: "string", nullable: true },
+                      },
+                    },
+                    currentStatus: { type: "string", enum: ["CLOCKED_IN", "CLOCKED_OUT"], example: "CLOCKED_IN" },
+                    lastPunch: { type: "object", nullable: true },
+                    todaySchedule: { type: "object", nullable: true },
+                    todayRecord: { type: "object", nullable: true },
+                    assignedBranches: { type: "array", items: { type: "object" } },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized: Missing, invalid, or expired device token.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          },
+        },
+      },
+    },
+
+    "/api/v1/attendance/history": {
+      get: {
+        tags: ["Attendance"],
+        summary: "Staff Personal Attendance History",
+        description: "Returns the authenticated employee's chronological attendance logs, worked hours breakdown, and period summary totals.",
+        operationId: "getAttendanceHistory",
+        security: [{ DeviceTokenAuth: [] }],
+        parameters: [
+          { name: "limit", in: "query", schema: { type: "integer", default: 14 }, description: "Max days to return (1-60)." },
+          { name: "startDate", in: "query", schema: { type: "string", format: "date" }, description: "Filter start date (YYYY-MM-DD)." },
+          { name: "endDate", in: "query", schema: { type: "string", format: "date" }, description: "Filter end date (YYYY-MM-DD)." },
+        ],
+        responses: {
+          "200": {
+            description: "Attendance history retrieved successfully.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    summary: { type: "object" },
+                    days: { type: "array", items: { type: "object" } },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized: Missing, invalid, or expired device token.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          },
+        },
+      },
+    },
+
+    "/api/v1/attendance/punch/sync": {
+      post: {
+        tags: ["Attendance"],
+        summary: "Batch Ingest Offline Mobile Punches",
+        description: "Synchronizes an array of locally queued offline clock-in and clock-out punches from a mobile device with chronological sorting and deduplication.",
+        operationId: "syncOfflinePunches",
+        security: [{ DeviceTokenAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["punches"],
+                properties: {
+                  punches: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      required: ["clientPunchId", "branchId", "direction", "occurredAt", "latitude", "longitude", "accuracyMeters"],
+                      properties: {
+                        clientPunchId: { type: "string" },
+                        branchId: { type: "string" },
+                        direction: { type: "string", enum: ["IN", "OUT"] },
+                        occurredAt: { type: "string", format: "date-time" },
+                        latitude: { type: "number" },
+                        longitude: { type: "number" },
+                        accuracyMeters: { type: "number" },
+                        isMockLocation: { type: "boolean", default: false },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Offline batch processed successfully.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    total: { type: "integer" },
+                    accepted: { type: "integer" },
+                    duplicates: { type: "integer" },
+                    rejected: { type: "integer" },
+                    results: { type: "array", items: { type: "object" } },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized: Missing, invalid, or expired device token.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          },
+        },
+      },
+    },
+
+    "/api/v1/notifications/push-token": {
+      post: {
+        tags: ["Notifications"],
+        summary: "Register Mobile Device Push Notification Token",
+        description: "Pairs an Expo or APNs/FCM push notification token with the authenticated staff member's device for shift reminders and alerts.",
+        operationId: "registerPushToken",
+        security: [{ DeviceTokenAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["pushToken"],
+                properties: {
+                  pushToken: { type: "string", example: "ExponentPushToken[xxxxxxxxxxxxxx]" },
+                  platform: { type: "string", enum: ["ios", "android", "web"], default: "android" },
+                  deviceName: { type: "string", example: "Kofi's Galaxy S24" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Push token successfully registered.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    message: { type: "string", example: "Push notification token registered successfully." },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized: Missing, invalid, or expired device token.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
           },
         },
       },

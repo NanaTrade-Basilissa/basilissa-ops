@@ -19,6 +19,8 @@ export type RecordMobilePunchInput = {
   coordinates: PunchCoordinates;
   deviceId?: string;
   idempotencyKey?: string;
+  occurredAt?: Date;
+  isOffline?: boolean;
   actor?: AuditActor;
   _ingestFn?: typeof ingestEvent;
 };
@@ -64,6 +66,8 @@ export async function recordMobilePunch(
     coordinates,
     deviceId,
     idempotencyKey,
+    occurredAt,
+    isOffline,
     actor,
     _ingestFn,
   } = input;
@@ -149,18 +153,23 @@ export async function recordMobilePunch(
     idempotencyKey || `mobile:${employeeId}:${direction}:${windowBucket}`;
 
   // 5. Ingest command construction
+  const now = new Date();
+  const effectiveOccurredAt = isOffline && occurredAt ? occurredAt : now;
+  const timeAssurance = isOffline ? TimeAssurance.DEVICE_UNVERIFIED : TimeAssurance.SERVER;
+
   const command: IngestCommand = {
     providerType: ProviderType.MOBILE_APP,
     idempotencyKey: stableIdempotencyKey,
     employeeId,
     branchId,
-    occurredAt: new Date(),
+    occurredAt: effectiveOccurredAt,
+    sourceReportedAt: isOffline && occurredAt ? occurredAt : undefined,
     directionHint: direction,
     deviceId: deviceId || "web-mobile-client",
     assurance: {
       identity: IdentityAssurance.DEVICE_BOUND,
       location: geofenceResult.locationAssurance,
-      time: TimeAssurance.SERVER,
+      time: timeAssurance,
     },
     evidence: {
       latitude: coordinates.latitude,
@@ -199,6 +208,6 @@ export async function recordMobilePunch(
     day: result.day,
     geofenceDecision: geofenceResult.decision,
     distanceMeters: geofenceResult.distanceMeters,
-    flags: geofenceResult.flags,
+    flags: isOffline ? [...geofenceResult.flags, "OFFLINE_SYNCED"] : geofenceResult.flags,
   };
 }
