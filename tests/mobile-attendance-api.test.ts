@@ -76,13 +76,16 @@ describe("Mobile Attendance APIs", () => {
         flags: ["LATE_ARRIVAL"],
       } as never);
 
-      // Mock last AttendanceEvent
-      vi.spyOn(prisma.attendanceEvent, "findFirst").mockResolvedValueOnce({
-        id: "evt_1",
-        direction: AttendanceDirection.IN,
-        occurredAt: new Date("2026-09-10T08:05:00.000Z"),
-        branchId: "branch_1",
-      } as never);
+      // Mock last AttendanceEvent and Corrections
+      vi.spyOn(prisma.attendanceEvent, "findMany").mockResolvedValueOnce([
+        {
+          id: "evt_1",
+          direction: AttendanceDirection.IN,
+          occurredAt: new Date("2026-09-10T08:05:00.000Z"),
+          branchId: "branch_1",
+        },
+      ] as never);
+      vi.spyOn(prisma.attendanceCorrection, "findMany").mockResolvedValueOnce([] as never);
 
       // Mock shifts, shiftAssignments, exceptions, branchMapRecords
       vi.spyOn(prisma.shift, "findMany").mockResolvedValueOnce([

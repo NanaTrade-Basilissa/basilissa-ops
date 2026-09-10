@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { AttendanceDirection } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
-import { verifyDeviceToken } from "@/lib/modules/attendance/server";
+import { verifyDeviceToken, classifyLiveFloorStatus } from "@/lib/modules/attendance/server";
 import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
       status: true,
       branchAssignments: {
         where: { validTo: null },
+        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
         include: {
           branch: {
             select: {
@@ -99,26 +100,35 @@ export async function GET(request: NextRequest) {
   const todayKey = dateKeyInZone(now, timeZone);
   const todayDate = new Date(`${todayKey}T00:00:00.000Z`);
 
-  // 3. Fetch today's attendance day and recent punch event concurrently
-  const [todayDay, lastEvent, shifts, shiftAssignments, exceptions, branchMapRecords] = await Promise.all([
+  // 3. Fetch today's attendance day, recent punch events, corrections, and schedules concurrently
+  const [todayDay, recentEvents, corrections, shifts, shiftAssignments, exceptions, branchMapRecords] = await Promise.all([
     prisma.attendanceDay.findFirst({
       where: {
         employeeId,
         workDate: todayDate,
       },
     }),
-    prisma.attendanceEvent.findFirst({
+    prisma.attendanceEvent.findMany({
       where: {
         employeeId,
         supersededByEventId: null,
       },
       orderBy: { occurredAt: "desc" },
+      take: 10,
       select: {
         id: true,
         direction: true,
         occurredAt: true,
         branchId: true,
       },
+    }),
+    prisma.attendanceCorrection.findMany({
+      where: {
+        employeeId,
+        workDate: todayDate,
+        operation: "VOID_EVENT",
+      },
+      select: { targetEventId: true },
     }),
     prisma.shift.findMany({
       where: { isActive: true },
@@ -144,16 +154,15 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
+  const voidedIds = new Set(
+    corrections.map((c) => c.targetEventId).filter(Boolean) as string[],
+  );
+  // Pick the latest event that was NOT voided by a manager correction
+  const lastEvent = recentEvents.find((e) => !voidedIds.has(e.id)) ?? null;
+
   const branchNameLookup = new Map(branchMapRecords.map((b) => [b.id, b.name]));
 
-  // 4. Determine current clock-in state
-  const isCurrentlyIn =
-    lastEvent?.direction === AttendanceDirection.IN &&
-    (!todayDay || todayDay.actualOut === null);
-
-  const currentStatus = isCurrentlyIn ? "CLOCKED_IN" : "CLOCKED_OUT";
-
-  // 5. Resolve today's scheduled shift
+  // 4. Resolve today's scheduled shift
   const resolvedSchedule = resolveScheduleForDate(todayKey, {
     timeZone,
     shifts,
@@ -164,6 +173,32 @@ export async function GET(request: NextRequest) {
       type: ex.type,
     })),
   });
+
+  // 5. Determine canonical live duty state aligned identically with live floor dashboard
+  const canonicalActualIn =
+    todayDay?.actualIn ??
+    (lastEvent &&
+    lastEvent.direction === AttendanceDirection.IN &&
+    dateKeyInZone(lastEvent.occurredAt, timeZone) === todayKey
+      ? lastEvent.occurredAt
+      : null);
+  const canonicalActualOut = todayDay?.actualOut ?? null;
+  const canonicalScheduledStart =
+    todayDay?.scheduledStart ?? resolvedSchedule?.scheduledStart ?? null;
+  const canonicalScheduledEnd =
+    todayDay?.scheduledEnd ?? resolvedSchedule?.scheduledEnd ?? null;
+
+  const { status: liveStatus } = classifyLiveFloorStatus({
+    now,
+    actualIn: canonicalActualIn,
+    actualOut: canonicalActualOut,
+    scheduledStart: canonicalScheduledStart,
+    scheduledEnd: canonicalScheduledEnd,
+  });
+
+  const isCurrentlyIn = liveStatus === "ON_DUTY";
+  const currentStatus = isCurrentlyIn ? "CLOCKED_IN" : "CLOCKED_OUT";
+  const dutyStatus = liveStatus;
 
   const matchingShift = resolvedSchedule
     ? shifts.find((s) => s.id === resolvedSchedule.shiftId)
@@ -183,6 +218,24 @@ export async function GET(request: NextRequest) {
       jobTitle: employee.jobTitle,
     },
     currentStatus,
+    dutyStatus: isCurrentlyIn ? "ON_DUTY" : "OFF_DUTY",
+    todayKey,
+    currentShift: matchingShift
+      ? {
+          id: matchingShift.id,
+          name: resolvedSchedule?.shiftName || matchingShift.name,
+          startTime:
+            matchingShift.startMinute !== null
+              ? `${String(Math.floor(matchingShift.startMinute / 60)).padStart(2, "0")}:${String(matchingShift.startMinute % 60).padStart(2, "0")}`
+              : "08:00",
+          endTime:
+            matchingShift.endMinute !== null
+              ? `${String(Math.floor(matchingShift.endMinute / 60)).padStart(2, "0")}:${String(matchingShift.endMinute % 60).padStart(2, "0")}`
+              : "17:00",
+          branchName: primaryBranch?.name || "",
+          branchId: primaryBranch?.id || "",
+        }
+      : null,
     lastPunch: lastEvent
       ? {
           eventId: lastEvent.id,
@@ -236,6 +289,7 @@ export async function GET(request: NextRequest) {
       longitude: ba.branch.longitude,
       geofenceRadiusMeters: ba.branch.geofenceRadiusMeters,
       geofenceEnabled: ba.branch.geofenceEnabled,
+      isPrimary: ba.isPrimary,
     })),
   });
 }

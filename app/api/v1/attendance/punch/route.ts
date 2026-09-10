@@ -3,12 +3,14 @@ import { z } from "zod";
 import { AttendanceDirection } from "@prisma/client";
 import { recordMobilePunch, verifyDeviceToken } from "@/lib/modules/attendance/server";
 import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
+import { scoped } from "@/lib/platform/logger";
 
+const log = scoped("attendance-punch");
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 const mobilePunchSchema = z.object({
-  employeeId: z.string().min(1, "Employee ID is required"),
+  employeeId: z.string().optional(),
   branchId: z.string().min(1, "Branch ID is required"),
   direction: z.enum(["IN", "OUT"]),
   latitude: z.number().min(-90, "Invalid latitude").max(90, "Invalid latitude"),
@@ -89,21 +91,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (tokenVerification.payload.employeeId !== employeeId) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "FORBIDDEN",
-        message: "Device token does not match employee ID.",
-      },
-      { status: 403 },
-    );
+  const effectiveEmployeeId = tokenVerification.payload.employeeId;
+  if (employeeId && employeeId !== effectiveEmployeeId) {
+    log.warn("Device token employeeId mismatch in mobile punch payload, using token identity", {
+      tokenEmployeeId: effectiveEmployeeId,
+      payloadEmployeeId: employeeId,
+    });
   }
 
   const effectiveDeviceId = deviceId || tokenVerification.payload.deviceId;
 
   const result = await recordMobilePunch({
-    employeeId,
+    employeeId: effectiveEmployeeId,
     branchId,
     direction: direction as AttendanceDirection,
     coordinates: {
@@ -117,6 +116,16 @@ export async function POST(request: NextRequest) {
   });
 
   if (!result.ok) {
+    log.warn("Mobile attendance punch rejected", {
+      employeeId: effectiveEmployeeId,
+      branchId,
+      direction,
+      error: result.error,
+      message: result.message,
+      distanceMeters: (result as any).distanceMeters,
+      radiusMeters: (result as any).radiusMeters,
+    });
+
     const status =
       result.error === "OUTSIDE_GEOFENCE"
         ? 422
@@ -128,6 +137,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status });
   }
+
+  log.info("Mobile attendance punch recorded successfully", {
+    employeeId: effectiveEmployeeId,
+    branchId,
+    direction,
+    eventId: result.eventId,
+    replayed: result.replayed,
+  });
 
   return NextResponse.json(result, { status: 200 });
 }

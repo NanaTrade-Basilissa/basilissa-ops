@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { recordMobilePunch, verifyDeviceToken } from "@/lib/modules/attendance/server";
 import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
+import { scoped } from "@/lib/platform/logger";
 
+const log = scoped("attendance-punch-sync");
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
@@ -162,6 +164,20 @@ export async function POST(request: NextRequest) {
       });
     }
   }
+
+  log.info("Mobile offline batch sync processed", {
+    employeeId,
+    total: sortedPunches.length,
+    accepted: acceptedCount,
+    duplicates: duplicateCount,
+    rejected: rejectedCount,
+    results: results.map((r) => ({
+      id: r.clientPunchId,
+      status: r.status,
+      error: r.error,
+      msg: r.message,
+    })),
+  });
 
   return NextResponse.json({
     ok: true,
