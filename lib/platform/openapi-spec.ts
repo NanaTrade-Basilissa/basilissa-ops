@@ -592,7 +592,7 @@ Initiates phone number authentication for a staff member.
 
 **Process**:
 1. Checks that the provided phone number matches an active employee record in the platform.
-2. Generates a secure, single-use 4-digit verification code.
+2. Generates a secure, single-use 6-digit verification code.
 3. Dispatches SMS to the employee via the configured SMS gateway.
 4. Returns an encrypted, tamper-evident \`challengeToken\` (valid for 5 minutes).
 
@@ -675,7 +675,7 @@ Initiates phone number authentication for a staff member.
         tags: ["Mobile Authentication"],
         summary: "Verify OTP & Pair Mobile Device",
         description: `
-Verifies the 4-digit SMS OTP code against the challenge token and binds the smartphone device identifier to the employee record.
+Verifies the 6-digit SMS OTP code against the challenge token and binds the smartphone device identifier to the employee record.
 
 **Process**:
 1. Decrypts and authenticates the \`challengeToken\`.
@@ -1147,7 +1147,7 @@ Verifies the 4-digit SMS OTP code against the challenge token and binds the smar
         type: "object",
         properties: {
           phone: { type: "string", example: "0241234567" },
-          code: { type: "string", description: "4-digit verification code received via SMS.", example: "4819" },
+          code: { type: "string", description: "6-digit verification code received via SMS.", example: "481920" },
           challengeToken: { type: "string", description: "Challenge token received from /otp/request." },
           deviceId: { type: "string", description: "Unique device identifier.", example: "device_ios_88192" },
           deviceName: { type: "string", description: "Human-readable device model.", example: "Kwame's iPhone 13" },

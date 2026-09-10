@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual, randomInt } from "node:crypto";
 import { ProviderType } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { seal, open } from "@/lib/platform/secret-box";
@@ -14,13 +14,14 @@ export interface RequestOtpResult {
   challengeToken?: string;
   expiresInSeconds?: number;
   error?: "EMPLOYEE_NOT_FOUND" | "EMPLOYEE_NOT_ACTIVE" | "SMS_FAILED";
+  debugOtp?: string;
 }
 
 export interface VerifyOtpInput {
   phone: string;
   code: string;
-  challengeToken: string;
-  deviceId: string;
+  challengeToken?: string;
+  deviceId?: string;
   deviceName?: string;
 }
 
@@ -39,7 +40,9 @@ export interface MobileEmployeeProfile {
   employeeCode: string;
   firstName: string;
   lastName: string;
+  name: string;
   phone: string | null;
+  jobTitle?: string | null;
   branches: MobileBranchInfo[];
 }
 
@@ -47,6 +50,8 @@ export interface VerifyOtpResult {
   ok: boolean;
   message: string;
   employee?: MobileEmployeeProfile;
+  assignedBranches?: MobileBranchInfo[];
+  branches?: MobileBranchInfo[];
   deviceToken?: string;
   error?: "INVALID_CHALLENGE" | "OTP_EXPIRED" | "INVALID_CODE" | "EMPLOYEE_NOT_FOUND" | "EMPLOYEE_NOT_ACTIVE";
 }
@@ -56,6 +61,20 @@ interface OtpChallengePayload {
   phone: string;
   codeHash: string;
   expiresAt: number;
+}
+
+// In-memory cache of recent challenges keyed by normalized phone (TTL 5 mins)
+const recentChallenges = new Map<string, { challengeToken: string; expiresAt: number }>();
+
+export function getRecentChallengeToken(phone: string): string | null {
+  const normalized = normalizePhoneNumber(phone);
+  const entry = recentChallenges.get(normalized);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    recentChallenges.delete(normalized);
+    return null;
+  }
+  return entry.challengeToken;
 }
 
 function hashCode(code: string): string {
@@ -100,8 +119,8 @@ export async function requestMobileOtp(rawPhone: string): Promise<RequestOtpResu
     };
   }
 
-  // Generate 4-digit code (e.g. 1000 - 9999)
-  const code = Math.floor(1000 + Math.random() * 9000).toString();
+  // Generate 6-digit code (e.g. 100000 - 999999) using cryptographically secure randomness
+  const code = randomInt(100_000, 1_000_000).toString();
   const codeHash = hashCode(code);
   const expiresInSeconds = 300; // 5 minutes
   const expiresAt = Date.now() + expiresInSeconds * 1000;
@@ -130,6 +149,7 @@ export async function requestMobileOtp(rawPhone: string): Promise<RequestOtpResu
   };
 
   const challengeToken = seal(JSON.stringify(challengePayload), "mobile-otp");
+  recentChallenges.set(normalized, { challengeToken, expiresAt });
 
   log.info("Mobile OTP challenge issued", {
     employeeId: employee.id,
@@ -142,19 +162,31 @@ export async function requestMobileOtp(rawPhone: string): Promise<RequestOtpResu
     message: "Verification code sent to your mobile phone.",
     challengeToken,
     expiresInSeconds,
+    ...(smsResult.simulated ? { debugOtp: code } : {}),
   };
 }
 
 /**
- * Verifies a 4-digit OTP code against the issued challenge token and binds the device.
+ * Verifies a 6-digit OTP code against the issued challenge token and binds the device.
  */
 export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpResult> {
-  const { phone, code, challengeToken, deviceId, deviceName } = input;
+  const { phone, code, deviceName } = input;
+  const deviceId = input.deviceId || `device_mobile_${phone.replace(/\D/g, "")}`;
+  const effectiveChallengeToken = input.challengeToken || getRecentChallengeToken(phone);
+
+  if (!effectiveChallengeToken) {
+    log.warn("No challenge token provided and none cached for phone", { phone });
+    return {
+      ok: false,
+      error: "INVALID_CHALLENGE",
+      message: "Session challenge expired or missing. Please request a new code.",
+    };
+  }
 
   // 1. Decrypt and validate the challenge token
   let payload: OtpChallengePayload;
   try {
-    const json = open(challengeToken, "mobile-otp");
+    const json = open(effectiveChallengeToken, "mobile-otp");
     payload = JSON.parse(json) as OtpChallengePayload;
   } catch (err) {
     log.warn("Invalid mobile OTP challenge token submitted", { error: err });
@@ -298,6 +330,8 @@ export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpR
     branchCount: branches.length,
   });
 
+  const fullName = `${employee.firstName} ${employee.lastName}`.trim();
+
   return {
     ok: true,
     message: "Device registered and authenticated successfully.",
@@ -306,9 +340,13 @@ export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpR
       employeeCode: employee.employeeCode,
       firstName: employee.firstName,
       lastName: employee.lastName,
+      name: fullName,
       phone: employee.phone,
+      jobTitle: employee.jobTitle,
       branches,
     },
+    assignedBranches: branches,
+    branches,
     deviceToken,
   };
 }

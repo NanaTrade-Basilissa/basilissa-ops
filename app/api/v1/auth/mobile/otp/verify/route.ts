@@ -2,17 +2,42 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { verifyMobileOtp } from "@/lib/modules/attendance/server";
 import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
+import { scoped } from "@/lib/platform/logger";
 
-const RATE_LIMIT_MAX = 15;
+const log = scoped("mobile-auth-verify");
+const RATE_LIMIT_MAX = 25;
 const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
 
-const verifyOtpSchema = z.object({
-  phone: z.string().min(8, "Phone number is required"),
-  code: z.string().min(4, "Verification code is required").max(8),
-  challengeToken: z.string().min(1, "Challenge token is required"),
-  deviceId: z.string().min(1, "Device ID is required"),
-  deviceName: z.string().optional(),
-});
+const verifyOtpSchema = z
+  .object({
+    phone: z.string().min(8, "Phone number is required"),
+    code: z.string().optional(),
+    otp: z.string().optional(),
+    challengeToken: z.string().optional(),
+    deviceId: z.string().optional(),
+    deviceName: z.string().optional(),
+    platform: z.string().optional(),
+  })
+  .transform((data) => {
+    const rawCode = (data.code || data.otp || "").trim();
+    const rawDeviceId =
+      data.deviceId ||
+      (data.platform
+        ? `device_${data.platform}_${data.phone.replace(/\D/g, "")}`
+        : `device_mobile_${data.phone.replace(/\D/g, "")}`);
+
+    return {
+      phone: data.phone,
+      code: rawCode,
+      challengeToken: data.challengeToken || undefined,
+      deviceId: rawDeviceId,
+      deviceName: data.deviceName,
+    };
+  })
+  .refine((data) => data.code.length >= 4, {
+    message: "Verification code is required",
+    path: ["code"],
+  });
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -44,6 +69,10 @@ export async function POST(request: NextRequest) {
 
   const parsed = verifyOtpSchema.safeParse(body);
   if (!parsed.success) {
+    log.warn("Mobile OTP verify validation failed", {
+      errors: parsed.error.issues,
+      receivedKeys: body && typeof body === "object" ? Object.keys(body) : [],
+    });
     return NextResponse.json(
       {
         ok: false,
