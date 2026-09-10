@@ -21,4 +21,13 @@ export const branchInputSchema = z.object({
   geofenceEnabled: z.boolean().default(false),
 });
 
+export const branchGeofenceUpdateSchema = z.object({
+  latitude: z.number().min(-90, "Latitude must be between -90 and 90").max(90, "Latitude must be between -90 and 90").nullable().optional(),
+  longitude: z.number().min(-180, "Longitude must be between -180 and 180").max(180, "Longitude must be between -180 and 180").nullable().optional(),
+  geofenceRadiusMeters: z.coerce.number().int().min(10, "Radius must be at least 10 meters").max(5000, "Radius must be under 5000 meters").default(150),
+  maxAcceptableAccuracyMeters: z.coerce.number().int().min(10).max(500).default(100),
+  geofenceEnabled: z.boolean().default(false),
+});
+
 export type BranchInput = z.infer<typeof branchInputSchema>;
+export type BranchGeofenceUpdateInput = z.infer<typeof branchGeofenceUpdateSchema>;

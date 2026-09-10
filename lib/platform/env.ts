@@ -49,6 +49,12 @@ const envSchema = z.object({
   RESEND_API_KEY: optional(z.string()),
   RESEND_FROM_EMAIL: optional(z.string().email("RESEND_FROM_EMAIL must be a valid email address")),
   FEEDBACK_NOTIFICATION_EMAILS: optional(z.string()),
+
+  // Optional: SMS gateway REST endpoint for mobile staff OTP verification.
+  // If unset, OTPs are logged to stdout in development.
+  SMS_GATEWAY_URL: optional(z.string().url("SMS_GATEWAY_URL must be a valid URL")),
+  SMS_GATEWAY_AUTH_TOKEN: optional(z.string()),
+  SMS_SENDER_ID: optional(z.string()),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -73,6 +79,11 @@ export function getEnv(): Env {
   return cached;
 }
 
+/** Internal helper to invalidate cached env during testing. */
+export function _resetEnvCache(): void {
+  cached = null;
+}
+
 /** Parsed, trimmed, de-duplicated notification recipient list. Empty if unset. */
 export function getNotificationEmails(): string[] {
   const { FEEDBACK_NOTIFICATION_EMAILS } = getEnv();
@@ -91,4 +102,10 @@ export function getNotificationEmails(): string[] {
 export function isEmailConfigured(): boolean {
   const env = getEnv();
   return Boolean(env.RESEND_API_KEY && env.RESEND_FROM_EMAIL);
+}
+
+/** Whether an outbound SMS gateway endpoint is configured. */
+export function isSmsConfigured(): boolean {
+  const env = getEnv();
+  return Boolean(env.SMS_GATEWAY_URL);
 }

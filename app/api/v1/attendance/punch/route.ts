@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { AttendanceDirection } from "@prisma/client";
-import { recordMobilePunch } from "@/lib/modules/attendance/server";
+import { recordMobilePunch, verifyDeviceToken } from "@/lib/modules/attendance/server";
 import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
 
 const RATE_LIMIT_MAX = 30;
@@ -16,6 +16,7 @@ const mobilePunchSchema = z.object({
   accuracyMeters: z.number().min(0, "Accuracy cannot be negative").max(5000, "Unrealistic accuracy"),
   isMockLocation: z.boolean().optional().default(false),
   deviceId: z.string().optional(),
+  deviceToken: z.string().optional(),
   idempotencyKey: z.string().optional(),
 });
 
@@ -65,8 +66,41 @@ export async function POST(request: NextRequest) {
     accuracyMeters,
     isMockLocation,
     deviceId,
+    deviceToken,
     idempotencyKey,
   } = parsed.data;
+
+  // Verify mobile device session token from Authorization header or request body
+  const authHeader = request.headers.get("authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : null;
+  const tokenToVerify = bearerToken || deviceToken;
+
+  const tokenVerification = verifyDeviceToken(tokenToVerify);
+  if (!tokenVerification.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "UNAUTHORIZED",
+        message: tokenVerification.message,
+      },
+      { status: 401 },
+    );
+  }
+
+  if (tokenVerification.payload.employeeId !== employeeId) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "FORBIDDEN",
+        message: "Device token does not match employee ID.",
+      },
+      { status: 403 },
+    );
+  }
+
+  const effectiveDeviceId = deviceId || tokenVerification.payload.deviceId;
 
   const result = await recordMobilePunch({
     employeeId,
@@ -78,7 +112,7 @@ export async function POST(request: NextRequest) {
       accuracyMeters,
       isMockLocation,
     },
-    deviceId,
+    deviceId: effectiveDeviceId,
     idempotencyKey,
   });
 

@@ -52,6 +52,27 @@ const columns = columnHelper.columns([
     header: "Status",
     cell: (info) => <Badge variant={info.getValue() ? "default" : "outline"}>{info.getValue() ? "Active" : "Inactive"}</Badge>,
   }),
+  columnHelper.accessor("geofenceEnabled", {
+    header: "Geofence",
+    cell: ({ row }) => {
+      const { geofenceEnabled, latitude, longitude, geofenceRadiusMeters } = row.original;
+      if (geofenceEnabled) {
+        return (
+          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-medium">
+            {geofenceRadiusMeters ?? 150}m Enforced
+          </Badge>
+        );
+      }
+      if (latitude != null && longitude != null) {
+        return (
+          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 text-xs">
+            Disabled
+          </Badge>
+        );
+      }
+      return <span className="text-xs text-muted-foreground">—</span>;
+    },
+  }),
   columnHelper.accessor((row) => row._count.employees, {
     id: "employees",
     header: () => <div className="text-right">Employees</div>,

@@ -10,7 +10,7 @@ import {
   auditActorFrom,
 } from "@/lib/modules/identity/server";
 import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
-import { branchInputSchema } from "./validation";
+import { branchInputSchema, branchGeofenceUpdateSchema } from "./validation";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 
 export type BranchFormState = FormState;
@@ -169,3 +169,114 @@ export async function toggleBranchActive(formData: FormData): Promise<void> {
   revalidatePath(`/admin/branches/${id}`);
   revalidatePath("/admin");
 }
+
+export async function toggleGeofenceEnabled(formData: FormData): Promise<void> {
+  const id = String(formData.get("id"));
+  const actor = await requireAuth();
+  await requireMfaIfNeeded(actor);
+  if (!can(actor, "branch:write", { branchId: id })) {
+    throw new Error("Unauthorized to modify branch geofence");
+  }
+
+  const nextGeofenceEnabled = formData.get("nextGeofenceEnabled") === "true";
+
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.branch.findUniqueOrThrow({ where: { id } });
+
+    if (nextGeofenceEnabled && (before.latitude == null || before.longitude == null)) {
+      throw new Error("Cannot enable geofencing without branch coordinates. Set latitude and longitude first.");
+    }
+
+    const after = await tx.branch.update({
+      where: { id },
+      data: { geofenceEnabled: nextGeofenceEnabled },
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: nextGeofenceEnabled ? "branch.geofence.enabled" : "branch.geofence.disabled",
+        entityType: "Branch",
+        entityId: id,
+        before: auditSnapshot(before, AUDITED_FIELDS),
+        after: auditSnapshot(after, AUDITED_FIELDS),
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/admin/branches");
+  revalidatePath(`/admin/branches/${id}`);
+  revalidatePath("/admin");
+}
+
+export async function updateBranchGeofence(
+  branchId: string,
+  _prevState: BranchFormState,
+  formData: FormData,
+): Promise<BranchFormState> {
+  const actor = await requireAuth();
+  await requireMfaIfNeeded(actor);
+  if (!can(actor, "branch:write", { branchId })) {
+    return { error: "You do not have permission to update branch geofencing." };
+  }
+
+  const rawRadius = formData.get("geofenceRadiusMeters");
+  const radius = rawRadius ? Number(rawRadius) : 150;
+  const rawMaxAcc = formData.get("maxAcceptableAccuracyMeters");
+  const maxAcc = rawMaxAcc ? Number(rawMaxAcc) : 100;
+
+  const parsed = branchGeofenceUpdateSchema.safeParse({
+    latitude: parseCoord(formData.get("latitude")),
+    longitude: parseCoord(formData.get("longitude")),
+    geofenceRadiusMeters: radius,
+    maxAcceptableAccuracyMeters: maxAcc,
+    geofenceEnabled: formData.get("geofenceEnabled") === "on" || formData.get("geofenceEnabled") === "true",
+  });
+
+  if (!parsed.success) {
+    return { error: "Please fix the coordinate errors.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  if (parsed.data.geofenceEnabled && (parsed.data.latitude == null || parsed.data.longitude == null)) {
+    return {
+      error: "Coordinates required",
+      fieldErrors: {
+        latitude: "Latitude is required when geofencing is enabled",
+        longitude: "Longitude is required when geofencing is enabled",
+      },
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.branch.findUniqueOrThrow({ where: { id: branchId } });
+    const after = await tx.branch.update({
+      where: { id: branchId },
+      data: {
+        latitude: parsed.data.latitude,
+        longitude: parsed.data.longitude,
+        geofenceRadiusMeters: parsed.data.geofenceRadiusMeters,
+        maxAcceptableAccuracyMeters: parsed.data.maxAcceptableAccuracyMeters,
+        geofenceEnabled: parsed.data.geofenceEnabled,
+      },
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "branch.geofence.updated",
+        entityType: "Branch",
+        entityId: branchId,
+        before: auditSnapshot(before, AUDITED_FIELDS),
+        after: auditSnapshot(after, AUDITED_FIELDS),
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/admin/branches");
+  revalidatePath(`/admin/branches/${branchId}`);
+  revalidatePath("/admin");
+  return { success: true };
+}
+

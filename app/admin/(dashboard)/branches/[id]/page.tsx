@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction }
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { BranchDialog } from "@/components/admin/branch-dialog";
+import { BranchGeofenceCard } from "@/components/admin/branch-geofence-card";
 import { StatCard } from "@/components/admin/stat-card";
 import { CopyLinkButton } from "@/components/admin/copy-link-button";
 import {
@@ -149,6 +150,8 @@ export default async function BranchDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      <BranchGeofenceCard branch={branch} canWrite={canWrite} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

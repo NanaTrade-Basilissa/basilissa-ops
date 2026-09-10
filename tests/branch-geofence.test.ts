@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { branchInputSchema } from "@/lib/modules/branches/validation";
+import { branchInputSchema, branchGeofenceUpdateSchema } from "@/lib/modules/branches/validation";
 
 describe("branchInputSchema geofence fields", () => {
   const baseValid = {
@@ -69,3 +69,46 @@ describe("branchInputSchema geofence fields", () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe("branchGeofenceUpdateSchema", () => {
+  it("validates partial geofence updates", () => {
+    const result = branchGeofenceUpdateSchema.safeParse({
+      latitude: 5.6037,
+      longitude: -0.187,
+      geofenceRadiusMeters: 100,
+      maxAcceptableAccuracyMeters: 50,
+      geofenceEnabled: true,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.latitude).toBe(5.6037);
+      expect(result.data.longitude).toBe(-0.187);
+      expect(result.data.geofenceRadiusMeters).toBe(100);
+      expect(result.data.geofenceEnabled).toBe(true);
+    }
+  });
+
+  it("coerces string radius and applies default 150m", () => {
+    const result = branchGeofenceUpdateSchema.safeParse({
+      latitude: 5.6037,
+      longitude: -0.187,
+      geofenceRadiusMeters: "250",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.geofenceRadiusMeters).toBe(250);
+    }
+  });
+
+  it("rejects non-numeric coordinates", () => {
+    const result = branchGeofenceUpdateSchema.safeParse({
+      latitude: "invalid",
+      longitude: -0.187,
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+

@@ -51,6 +51,10 @@ Welcome to the Basilissa Operations Platform API documentation.
       description: "GPS-geofenced mobile punch ingestion and clock-in/out processing.",
     },
     {
+      name: "Mobile Authentication",
+      description: "SMS OTP phone verification and device binding for staff mobile app.",
+    },
+    {
       name: "Branch Administration",
       description: "Administrative utilities, branch assets, and QR code generation.",
     },
@@ -209,6 +213,7 @@ Ingests mobile clock-in/out punches from branch staff.
 **Rate Limit**: 30 requests per minute per IP address.
         `.trim(),
         operationId: "recordMobilePunch",
+        security: [{ DeviceTokenAuth: [] }],
         requestBody: {
           required: true,
           description: "Mobile punch telemetry including employee, branch, direction, GPS coordinates, and accuracy.",
@@ -241,8 +246,18 @@ Ingests mobile clock-in/out punches from branch staff.
               },
             },
           },
+          "401": {
+            description: "Unauthorized: Missing, invalid, or expired device token.",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+          },
           "403": {
-            description: "Forbidden: Employee is inactive or not assigned to the specified branch.",
+            description: "Forbidden: Device token does not match employee ID, employee is inactive, or not assigned to branch.",
             content: {
               "application/json": {
                 schema: {
@@ -284,6 +299,180 @@ Ingests mobile clock-in/out punches from branch staff.
                 schema: {
                   $ref: "#/components/schemas/ErrorResponse",
                 },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    "/api/v1/auth/mobile/otp/request": {
+      post: {
+        tags: ["Mobile Authentication"],
+        summary: "Request Mobile SMS Verification Code",
+        description: `
+Initiates phone number authentication for a staff member.
+
+**Process**:
+1. Checks that the provided phone number matches an active employee record in the platform.
+2. Generates a secure, single-use 4-digit verification code.
+3. Dispatches SMS to the employee via the configured SMS gateway.
+4. Returns an encrypted, tamper-evident \`challengeToken\` (valid for 5 minutes).
+
+**Rate Limit**: 10 requests per 10 minutes per IP.
+        `.trim(),
+        operationId: "requestMobileOtp",
+        requestBody: {
+          required: true,
+          description: "Staff mobile phone number.",
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/MobileOtpRequestInput",
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Verification code sent to employee phone.",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/MobileOtpRequestResponse",
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid phone number or malformed request payload.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "403": {
+            description: "Employee account is not active.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Phone number not recognized in active employee directory.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "429": {
+            description: "Too many verification requests.",
+            headers: {
+              "Retry-After": {
+                schema: { type: "integer" },
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "502": {
+            description: "SMS delivery provider error.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    "/api/v1/auth/mobile/otp/verify": {
+      post: {
+        tags: ["Mobile Authentication"],
+        summary: "Verify OTP & Pair Mobile Device",
+        description: `
+Verifies the 4-digit SMS OTP code against the challenge token and binds the smartphone device identifier to the employee record.
+
+**Process**:
+1. Decrypts and authenticates the \`challengeToken\`.
+2. Validates code hash using timing-safe comparison.
+3. Binds the \`deviceId\` in \`EmployeeDeviceIdentity\` under \`MOBILE_APP\` provider.
+4. Returns employee profile, assigned branches (with GPS geofences), and a 30-day \`deviceToken\`.
+
+**Rate Limit**: 15 attempts per 5 minutes per IP.
+        `.trim(),
+        operationId: "verifyMobileOtp",
+        requestBody: {
+          required: true,
+          description: "Verification code, challenge token, and client device identity.",
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/MobileOtpVerifyInput",
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Device successfully paired and authenticated.",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/MobileOtpVerifyResponse",
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Expired code or invalid challenge token.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Incorrect verification code.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "403": {
+            description: "Employee account is inactive.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Employee record no longer exists.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "429": {
+            description: "Too many verification attempts.",
+            headers: {
+              "Retry-After": {
+                schema: { type: "integer" },
+              },
+            },
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
               },
             },
           },
@@ -470,6 +659,12 @@ Ingests mobile clock-in/out punches from branch staff.
         name: "auth_session",
         description: "Encrypted HTTP-only session cookie issued upon successful administrative authentication.",
       },
+      DeviceTokenAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "DeviceToken",
+        description: "Signed 30-day mobile device session token issued by /api/v1/auth/mobile/otp/verify.",
+      },
     },
     schemas: {
       HealthOkResponse: {
@@ -588,6 +783,11 @@ Ingests mobile clock-in/out punches from branch staff.
             description: "Optional persistent device identifier.",
             example: "device_ios_a1b2c3",
           },
+          deviceToken: {
+            type: "string",
+            description: "Signed 30-day mobile device authentication token (if not sent in Authorization header).",
+            example: "iv.ciphertext.tag",
+          },
           idempotencyKey: {
             type: "string",
             description: "Optional client idempotency key to prevent accidental duplicate punch taps.",
@@ -640,6 +840,82 @@ Ingests mobile clock-in/out punches from branch staff.
           radiusMeters: { type: "number", example: 100 },
         },
         required: ["ok", "error", "message"],
+      },
+      MobileOtpRequestInput: {
+        type: "object",
+        properties: {
+          phone: {
+            type: "string",
+            description: "Mobile phone number of the employee (local Ghana or international E.164).",
+            example: "0241234567",
+          },
+        },
+        required: ["phone"],
+      },
+      MobileOtpRequestResponse: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean", example: true },
+          message: { type: "string", example: "Verification code sent to your mobile phone." },
+          challengeToken: {
+            type: "string",
+            description: "Encrypted, tamper-evident challenge token to submit back with the verification code.",
+            example: "eyJpdiI6...",
+          },
+          expiresInSeconds: { type: "integer", example: 300 },
+        },
+        required: ["ok", "message", "challengeToken", "expiresInSeconds"],
+      },
+      MobileOtpVerifyInput: {
+        type: "object",
+        properties: {
+          phone: { type: "string", example: "0241234567" },
+          code: { type: "string", description: "4-digit verification code received via SMS.", example: "4819" },
+          challengeToken: { type: "string", description: "Challenge token received from /otp/request." },
+          deviceId: { type: "string", description: "Unique device identifier.", example: "device_ios_88192" },
+          deviceName: { type: "string", description: "Human-readable device model.", example: "Kwame's iPhone 13" },
+        },
+        required: ["phone", "code", "challengeToken", "deviceId"],
+      },
+      MobileOtpVerifyResponse: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean", example: true },
+          message: { type: "string", example: "Device registered and authenticated successfully." },
+          employee: {
+            type: "object",
+            properties: {
+              id: { type: "string", example: "emp_123" },
+              employeeCode: { type: "string", example: "BAS-042" },
+              firstName: { type: "string", example: "Kwame" },
+              lastName: { type: "string", example: "Mensah" },
+              phone: { type: "string", example: "+233241234567" },
+              branches: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string", example: "branch_spintex" },
+                    name: { type: "string", example: "Spintex Road" },
+                    slug: { type: "string", example: "spintex-road" },
+                    latitude: { type: "number", example: 5.6037 },
+                    longitude: { type: "number", example: -0.187 },
+                    geofenceRadiusMeters: { type: "number", example: 100 },
+                    geofenceEnabled: { type: "boolean", example: true },
+                  },
+                  required: ["id", "name", "slug", "geofenceRadiusMeters", "geofenceEnabled"],
+                },
+              },
+            },
+            required: ["id", "employeeCode", "firstName", "lastName", "branches"],
+          },
+          deviceToken: {
+            type: "string",
+            description: "Encrypted device session token valid for 30 days.",
+            example: "eyJpdiI6...",
+          },
+        },
+        required: ["ok", "message", "employee", "deviceToken"],
       },
       ErrorResponse: {
         type: "object",
