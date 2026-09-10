@@ -8,6 +8,7 @@ import {
   summariseDay,
   getTimesheetSummary,
   getLiveFloorStatus,
+  listPendingExceptions,
 } from "@/lib/modules/attendance/server";
 import { listEmployees } from "@/lib/modules/employees/server";
 import { prisma } from "@/lib/platform/prisma";
@@ -20,6 +21,8 @@ import { AttendanceTable } from "@/components/admin/attendance-table";
 import { LiveFloorBoard } from "@/components/admin/live-floor-board";
 import { TimesheetFilters } from "@/components/admin/timesheet-filters";
 import { TimesheetsTable } from "@/components/admin/timesheets-table";
+import { ExceptionsFilters } from "@/components/admin/exceptions-filters";
+import { ExceptionsTable } from "@/components/admin/exceptions-table";
 import { ManualPunchDialog, type EmployeeOption } from "@/components/admin/manual-punch-dialog";
 import { MobileClockInDialog } from "@/components/admin/mobile-clock-in-dialog";
 import { AttendanceSweepButton } from "@/components/admin/attendance-sweep-button";
@@ -63,6 +66,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
   const branchId = first(raw.branchId);
   const exceptionsOnly = first(raw.exceptions) === "1";
   const search = first(raw.search);
+  const flag = first(raw.flag);
 
   // Default timesheet range: Monday of this week to today
   const dayOfWeek = now.getDay();
@@ -92,6 +96,16 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
       geofenceEnabled: true,
     },
   });
+
+  const exceptionsCount =
+    scope.kind === "none"
+      ? 0
+      : await prisma.attendanceDay.count({
+          where: {
+            status: "NEEDS_REVIEW",
+            ...(scope.kind === "branches" ? { branchId: { in: scope.branchIds } } : {}),
+          },
+        });
 
   const activeEmployees = canManualEntry
     ? await listEmployees(scope, { status: "ACTIVE" })
@@ -149,7 +163,12 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
       </div>
 
       {/* Tabs */}
-      <AttendanceTabs activeView={view} branchId={branchId} date={date} />
+      <AttendanceTabs
+        activeView={view}
+        branchId={branchId}
+        date={date}
+        exceptionsCount={exceptionsCount}
+      />
 
       {/* View 1: Daily Roster */}
       {view === "daily" && (
@@ -159,6 +178,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
           branchId={branchId}
           exceptionsOnly={exceptionsOnly}
           branches={branches}
+          canWrite={canWrite}
         />
       )}
 
@@ -182,6 +202,18 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
           search={search}
         />
       )}
+
+      {/* View 4: Review Queue */}
+      {view === "exceptions" && (
+        <ExceptionsQueueView
+          scope={scope}
+          branches={branches}
+          branchId={branchId}
+          flag={flag}
+          search={search}
+          canWrite={canWrite}
+        />
+      )}
     </div>
   );
 }
@@ -192,12 +224,14 @@ async function DailyRosterView({
   branchId,
   exceptionsOnly,
   branches,
+  canWrite = true,
 }: {
   scope: Parameters<typeof listAttendanceDays>[0];
   date: string;
   branchId?: string;
   exceptionsOnly: boolean;
   branches: { id: string; name: string }[];
+  canWrite?: boolean;
 }) {
   const [days, summary] = await Promise.all([
     listAttendanceDays(scope, { date, branchId, exceptionsOnly }),
@@ -261,6 +295,7 @@ async function DailyRosterView({
             return {
               id: day.id,
               employeeId: day.employeeId,
+              branchId: day.branchId,
               date,
               employeeName: employee ? `${employee.firstName} ${employee.lastName}` : null,
               employeeCode: employee?.employeeCode ?? null,
@@ -269,9 +304,12 @@ async function DailyRosterView({
               actualOutLabel: time(day.actualOut),
               workedLabel: hours(day.netWorkedMinutes),
               overtimeLabel: hours(day.overtimeMinutes),
+              calculatedOvertimeMinutes: day.overtimeMinutes,
+              payableOvertimeMinutes: day.payableOvertimeMinutes,
               lateMinutes: day.lateMinutes,
               status: day.status,
               flags: day.flags,
+              canWrite,
             };
           })}
         />
@@ -344,3 +382,78 @@ async function TimesheetsView({
     </div>
   );
 }
+
+async function ExceptionsQueueView({
+  scope,
+  branches,
+  branchId,
+  flag,
+  search,
+  canWrite,
+}: {
+  scope: Parameters<typeof listPendingExceptions>[0];
+  branches: { id: string; name: string }[];
+  branchId?: string;
+  flag?: string;
+  search?: string;
+  canWrite: boolean;
+}) {
+  const exceptions = await listPendingExceptions(scope, {
+    branchId,
+    flag,
+    search,
+  });
+
+  const missingPunchCount = exceptions.filter(
+    (e) => e.flags.includes("MISSING_CLOCK_OUT") || e.flags.includes("MISSING_CLOCK_IN"),
+  ).length;
+  const overtimeCount = exceptions.filter((e) => e.overtimeMinutes > 0).length;
+  const geofenceAnomalyCount = exceptions.filter((e) =>
+    e.flags.includes("OUTSIDE_GEOFENCE"),
+  ).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Pending Review"
+          value={String(exceptions.length)}
+          icon={TriangleAlert}
+        />
+        <StatCard
+          label="Missing Punches"
+          value={String(missingPunchCount)}
+          icon={Clock}
+        />
+        <StatCard
+          label="Overtime Awaiting Auth"
+          value={String(overtimeCount)}
+          icon={AlertTriangle}
+        />
+        <StatCard
+          label="Off-Site Punches"
+          value={String(geofenceAnomalyCount)}
+          icon={Users}
+        />
+      </div>
+
+      <ExceptionsFilters
+        branches={branches}
+        branchId={branchId}
+        flag={flag}
+        search={search}
+      />
+
+      {exceptions.length === 0 ? (
+        <Empty className="border">
+          <EmptyDescription>
+            No attendance exceptions pending review. Everything looks clear!
+          </EmptyDescription>
+        </Empty>
+      ) : (
+        <ExceptionsTable exceptions={exceptions} canWrite={canWrite} />
+      )}
+    </div>
+  );
+}
+

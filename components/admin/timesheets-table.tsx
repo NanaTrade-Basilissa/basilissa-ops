@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Download, Users, Clock, AlertTriangle, TriangleAlert, CalendarClock } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Download, Users, Clock, AlertTriangle, TriangleAlert, CalendarClock, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/admin/stat-card";
@@ -83,6 +84,20 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
     URL.revokeObjectURL(url);
   }
 
+  const searchParams = useSearchParams();
+
+  function exportPayrollExcel() {
+    const params = new URLSearchParams(searchParams ? searchParams.toString() : "");
+    params.set("startDate", startDate);
+    params.set("endDate", endDate);
+    const link = document.createElement("a");
+    link.href = `/api/admin/attendance/export/excel?${params.toString()}`;
+    link.setAttribute("download", `payroll-timesheet-${startDate}-to-${endDate}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   return (
     <div className="space-y-6">
       {/* Summary Stat Cards */}
@@ -122,17 +137,30 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
           <span className="font-medium text-foreground">{startDate}</span> to{" "}
           <span className="font-medium text-foreground">{endDate}</span>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={exportPayrollCsv}
-          disabled={rows.length === 0}
-          className="gap-2"
-        >
-          <Download className="size-4" />
-          Export Payroll CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={exportPayrollCsv}
+            disabled={rows.length === 0}
+            className="gap-1.5 text-xs"
+          >
+            <Download className="size-3.5" />
+            CSV
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={exportPayrollExcel}
+            disabled={rows.length === 0}
+            className="gap-1.5 text-xs border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+          >
+            <FileSpreadsheet className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+            Export Excel (.xlsx)
+          </Button>
+        </div>
       </div>
 
       {/* Table */}

@@ -2,18 +2,21 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Clock, FileSpreadsheet } from "lucide-react";
+import { AlertTriangle, CalendarDays, Clock, FileSpreadsheet } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
-export type AttendanceView = "daily" | "live" | "timesheets";
+export type AttendanceView = "daily" | "live" | "timesheets" | "exceptions";
 
 export function AttendanceTabs({
   activeView = "daily",
   branchId,
   date,
+  exceptionsCount = 0,
 }: {
   activeView: AttendanceView;
   branchId?: string;
   date?: string;
+  exceptionsCount?: number;
 }) {
   const searchParams = useSearchParams();
 
@@ -25,10 +28,21 @@ export function AttendanceTabs({
     return `?${params.toString()}`;
   }
 
-  const tabs: { id: AttendanceView; label: string; icon: typeof CalendarDays }[] = [
+  const tabs: {
+    id: AttendanceView;
+    label: string;
+    icon: typeof CalendarDays;
+    badge?: number;
+  }[] = [
     { id: "daily", label: "Daily Roster", icon: CalendarDays },
     { id: "live", label: "Live Floor Board", icon: Clock },
     { id: "timesheets", label: "Timesheets & Payroll", icon: FileSpreadsheet },
+    {
+      id: "exceptions",
+      label: "Review Queue",
+      icon: AlertTriangle,
+      badge: exceptionsCount,
+    },
   ];
 
   return (
@@ -49,6 +63,14 @@ export function AttendanceTabs({
             >
               <Icon className="size-4" />
               <span>{tab.label}</span>
+              {tab.badge !== undefined && tab.badge > 0 && (
+                <Badge
+                  variant="outline"
+                  className="ml-0.5 h-5 border-amber-300 bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+                >
+                  {tab.badge}
+                </Badge>
+              )}
             </Link>
           );
         })}

@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { ArrowRight, Download } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { ResolveExceptionDialog } from "@/components/admin/resolve-exception-dialog";
 
 export type AttendanceRow = {
   id: string;
   employeeId: string;
+  branchId?: string;
   date: string;
   employeeName: string | null;
   employeeCode: string | null;
@@ -18,9 +20,12 @@ export type AttendanceRow = {
   actualOutLabel: string;
   workedLabel: string;
   overtimeLabel: string;
+  calculatedOvertimeMinutes?: number;
+  payableOvertimeMinutes?: number;
   lateMinutes: number;
   status: string;
   flags: string[];
+  canWrite?: boolean;
 };
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, AttendanceRow>();
@@ -85,6 +90,32 @@ const columns = columnHelper.columns([
       ) : (
         <span className="text-sm text-muted-foreground">-</span>
       ),
+  }),
+  columnHelper.display({
+    id: "actions",
+    header: () => <div className="text-right">Actions</div>,
+    cell: ({ row }) => (
+      <div className="flex items-center justify-end gap-1.5">
+        {row.original.status === "NEEDS_REVIEW" && row.original.branchId && row.original.canWrite !== false && (
+          <ResolveExceptionDialog
+            employeeId={row.original.employeeId}
+            employeeName={row.original.employeeName ?? "Staff Member"}
+            branchId={row.original.branchId}
+            dateKey={row.original.date}
+            flags={row.original.flags}
+            calculatedOvertimeMinutes={row.original.calculatedOvertimeMinutes ?? 0}
+            payableOvertimeMinutes={row.original.payableOvertimeMinutes ?? 0}
+            canAuthorizeOvertime={true}
+          />
+        )}
+        <Link
+          href={`/admin/attendance/${row.original.employeeId}/${row.original.date}`}
+          className={buttonVariants({ variant: "ghost", size: "sm", className: "h-8 px-2 text-xs" })}
+        >
+          View <ArrowRight className="size-3.5 ml-1" />
+        </Link>
+      </div>
+    ),
   }),
 ]);
 

@@ -93,6 +93,7 @@ export async function listAttendanceDays(scope: BranchScope, filters: DayFilters
       actualOut: true,
       netWorkedMinutes: true,
       overtimeMinutes: true,
+      payableOvertimeMinutes: true,
       lateMinutes: true,
       earlyDepartureMinutes: true,
       lowestIdentityAssurance: true,
@@ -422,6 +423,7 @@ export type EmployeeTimesheetRow = {
   netWorkedMinutes: number;
   regularMinutes: number;
   overtimeMinutes: number;
+  payableOvertimeMinutes: number;
   lateCount: number;
   lateMinutes: number;
   earlyDepartureMinutes: number;
@@ -436,6 +438,7 @@ export type TimesheetSummaryData = {
   totalWorkedMinutes: number;
   totalRegularMinutes: number;
   totalOvertimeMinutes: number;
+  totalPayableOvertimeMinutes: number;
   totalLateMinutes: number;
   totalExceptions: number;
   rows: EmployeeTimesheetRow[];
@@ -525,6 +528,7 @@ export async function getTimesheetSummary(
     totalWorkedMinutes: 0,
     totalRegularMinutes: 0,
     totalOvertimeMinutes: 0,
+    totalPayableOvertimeMinutes: 0,
     totalLateMinutes: 0,
     totalExceptions: 0,
     rows: [],
@@ -547,6 +551,7 @@ export async function getTimesheetSummary(
       netWorkedMinutes: true,
       regularMinutes: true,
       overtimeMinutes: true,
+      payableOvertimeMinutes: true,
       lateMinutes: true,
       earlyDepartureMinutes: true,
       actualIn: true,
@@ -623,6 +628,7 @@ export async function getTimesheetSummary(
     const netWorkedMinutes = empDays.reduce((acc, d) => acc + d.netWorkedMinutes, 0);
     const regularMinutes = empDays.reduce((acc, d) => acc + d.regularMinutes, 0);
     const overtimeMinutes = empDays.reduce((acc, d) => acc + d.overtimeMinutes, 0);
+    const payableOvertimeMinutes = empDays.reduce((acc, d) => acc + d.payableOvertimeMinutes, 0);
     const lateCount = empDays.filter((d) => d.lateMinutes > 0).length;
     const lateMinutes = empDays.reduce((acc, d) => acc + d.lateMinutes, 0);
     const earlyDepartureMinutes = empDays.reduce((acc, d) => acc + d.earlyDepartureMinutes, 0);
@@ -640,6 +646,7 @@ export async function getTimesheetSummary(
       netWorkedMinutes,
       regularMinutes,
       overtimeMinutes,
+      payableOvertimeMinutes,
       lateCount,
       lateMinutes,
       earlyDepartureMinutes,
@@ -657,6 +664,7 @@ export async function getTimesheetSummary(
     totalWorkedMinutes: rows.reduce((acc, r) => acc + r.netWorkedMinutes, 0),
     totalRegularMinutes: rows.reduce((acc, r) => acc + r.regularMinutes, 0),
     totalOvertimeMinutes: rows.reduce((acc, r) => acc + r.overtimeMinutes, 0),
+    totalPayableOvertimeMinutes: rows.reduce((acc, r) => acc + r.payableOvertimeMinutes, 0),
     totalLateMinutes: rows.reduce((acc, r) => acc + r.lateMinutes, 0),
     totalExceptions: rows.reduce((acc, r) => acc + r.exceptionsCount, 0),
     rows,
@@ -1033,4 +1041,282 @@ export async function getEmployeeAttendanceHistory(
 
   return { summary, days: rows };
 }
+
+export type TimesheetDetailedLog = {
+  id: string;
+  workDate: string;
+  employeeId: string;
+  employeeCode: string | null;
+  employeeName: string;
+  branchId: string;
+  branchName: string;
+  shiftName: string;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  actualIn: string | null;
+  actualOut: string | null;
+  scheduledMinutes: number;
+  grossMinutes: number;
+  netWorkedMinutes: number;
+  regularMinutes: number;
+  overtimeMinutes: number;
+  payableOvertimeMinutes: number;
+  lateMinutes: number;
+  earlyDepartureMinutes: number;
+  status: string;
+  flags: string[];
+};
+
+export async function getTimesheetDetailedLogs(
+  scope: BranchScope,
+  filters: TimesheetFilters,
+): Promise<TimesheetDetailedLog[]> {
+  const where = timesheetWhere(scope, filters);
+  if (where === null) return [];
+
+  const days = await prisma.attendanceDay.findMany({
+    where,
+    orderBy: [{ workDate: "asc" }, { employeeId: "asc" }],
+    select: {
+      id: true,
+      employeeId: true,
+      branchId: true,
+      workDate: true,
+      status: true,
+      shiftIdSnapshot: true,
+      scheduledStart: true,
+      scheduledEnd: true,
+      scheduledMinutes: true,
+      actualIn: true,
+      actualOut: true,
+      grossMinutes: true,
+      netWorkedMinutes: true,
+      regularMinutes: true,
+      overtimeMinutes: true,
+      payableOvertimeMinutes: true,
+      lateMinutes: true,
+      earlyDepartureMinutes: true,
+      flags: true,
+    },
+  });
+
+  if (days.length === 0) return [];
+
+  const employeeIds = [...new Set(days.map((d) => d.employeeId))];
+  const branchIds = [...new Set(days.map((d) => d.branchId))];
+
+  const [employees, branches] = await Promise.all([
+    prisma.employee.findMany({
+      where: { id: { in: employeeIds } },
+      select: { id: true, employeeCode: true, firstName: true, lastName: true },
+    }),
+    prisma.branch.findMany({
+      where: { id: { in: branchIds } },
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const empMap = new Map(employees.map((e) => [e.id, e]));
+  const branchMap = new Map(branches.map((b) => [b.id, b.name]));
+  const searchLower = filters.search?.trim().toLowerCase();
+
+  const logs: TimesheetDetailedLog[] = [];
+
+  for (const day of days) {
+    const emp = empMap.get(day.employeeId);
+    const fullName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : "Unknown Employee";
+    const code = emp?.employeeCode ?? null;
+
+    if (searchLower) {
+      if (!fullName.toLowerCase().includes(searchLower) && !code?.toLowerCase().includes(searchLower)) {
+        continue;
+      }
+    }
+
+    const workDateStr = day.workDate.toISOString().slice(0, 10);
+    const formatTime = (d: Date | null) =>
+      d
+        ? new Intl.DateTimeFormat("en-GB", {
+            timeZone: DISPLAY_TIMEZONE,
+            hour: "2-digit",
+            minute: "2-digit",
+          }).format(d)
+        : null;
+
+    logs.push({
+      id: day.id,
+      workDate: workDateStr,
+      employeeId: day.employeeId,
+      employeeCode: code,
+      employeeName: fullName,
+      branchId: day.branchId,
+      branchName: branchMap.get(day.branchId) ?? "Unknown Branch",
+      shiftName: day.shiftIdSnapshot ? "Scheduled Shift" : "Unscheduled",
+      scheduledStart: formatTime(day.scheduledStart),
+      scheduledEnd: formatTime(day.scheduledEnd),
+      actualIn: formatTime(day.actualIn),
+      actualOut: formatTime(day.actualOut),
+      scheduledMinutes: day.scheduledMinutes,
+      grossMinutes: day.grossMinutes,
+      netWorkedMinutes: day.netWorkedMinutes,
+      regularMinutes: day.regularMinutes,
+      overtimeMinutes: day.overtimeMinutes,
+      payableOvertimeMinutes: day.payableOvertimeMinutes,
+      lateMinutes: day.lateMinutes,
+      earlyDepartureMinutes: day.earlyDepartureMinutes,
+      status: day.status,
+      flags: day.flags,
+    });
+  }
+
+  return logs;
+}
+
+export type AttendanceExceptionItem = {
+  id: string;
+  employeeId: string;
+  employeeCode: string | null;
+  employeeName: string;
+  branchId: string;
+  branchName: string;
+  workDate: string;
+  shiftName: string;
+  scheduledStart: Date | null;
+  scheduledEnd: Date | null;
+  scheduledMinutes: number;
+  actualIn: Date | null;
+  actualOut: Date | null;
+  netWorkedMinutes: number;
+  overtimeMinutes: number;
+  payableOvertimeMinutes: number;
+  lateMinutes: number;
+  status: string;
+  flags: string[];
+};
+
+export type ExceptionFilters = {
+  branchId?: string;
+  startDate?: string;
+  endDate?: string;
+  flag?: string;
+  search?: string;
+};
+
+export async function listPendingExceptions(
+  scope: BranchScope,
+  filters: ExceptionFilters = {},
+): Promise<AttendanceExceptionItem[]> {
+  const scoped = scopeWhere(scope);
+  if (scoped === null) return [];
+
+  const clauses: Prisma.AttendanceDayWhereInput[] = [
+    scoped,
+    { status: "NEEDS_REVIEW" },
+  ];
+
+  if (filters.branchId) {
+    clauses.push({ branchId: filters.branchId });
+  }
+
+  if (filters.startDate && filters.endDate) {
+    const start = filters.startDate <= filters.endDate ? filters.startDate : filters.endDate;
+    const end = filters.startDate <= filters.endDate ? filters.endDate : filters.startDate;
+    clauses.push({
+      workDate: {
+        gte: new Date(`${start}T00:00:00.000Z`),
+        lte: new Date(`${end}T23:59:59.999Z`),
+      },
+    });
+  } else if (filters.startDate) {
+    clauses.push({
+      workDate: { gte: new Date(`${filters.startDate}T00:00:00.000Z`) },
+    });
+  }
+
+  if (filters.flag) {
+    clauses.push({ flags: { has: filters.flag } });
+  }
+
+  const days = await prisma.attendanceDay.findMany({
+    where: { AND: clauses },
+    orderBy: [{ workDate: "desc" }, { actualIn: "desc" }],
+    select: {
+      id: true,
+      employeeId: true,
+      branchId: true,
+      workDate: true,
+      status: true,
+      shiftIdSnapshot: true,
+      scheduledStart: true,
+      scheduledEnd: true,
+      scheduledMinutes: true,
+      actualIn: true,
+      actualOut: true,
+      netWorkedMinutes: true,
+      overtimeMinutes: true,
+      payableOvertimeMinutes: true,
+      lateMinutes: true,
+      flags: true,
+    },
+  });
+
+  if (days.length === 0) return [];
+
+  const employeeIds = [...new Set(days.map((d) => d.employeeId))];
+  const branchIds = [...new Set(days.map((d) => d.branchId))];
+
+  const [employees, branches] = await Promise.all([
+    prisma.employee.findMany({
+      where: { id: { in: employeeIds } },
+      select: { id: true, employeeCode: true, firstName: true, lastName: true },
+    }),
+    prisma.branch.findMany({
+      where: { id: { in: branchIds } },
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const empMap = new Map(employees.map((e) => [e.id, e]));
+  const branchMap = new Map(branches.map((b) => [b.id, b.name]));
+  const searchLower = filters.search?.trim().toLowerCase();
+
+  const items: AttendanceExceptionItem[] = [];
+
+  for (const day of days) {
+    const emp = empMap.get(day.employeeId);
+    const fullName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : "Unknown Employee";
+    const code = emp?.employeeCode ?? null;
+
+    if (searchLower) {
+      if (!fullName.toLowerCase().includes(searchLower) && !code?.toLowerCase().includes(searchLower)) {
+        continue;
+      }
+    }
+
+    items.push({
+      id: day.id,
+      employeeId: day.employeeId,
+      employeeCode: code,
+      employeeName: fullName,
+      branchId: day.branchId,
+      branchName: branchMap.get(day.branchId) ?? "Unknown Branch",
+      workDate: day.workDate.toISOString().slice(0, 10),
+      shiftName: day.shiftIdSnapshot ? "Scheduled Shift" : "Unscheduled",
+      scheduledStart: day.scheduledStart,
+      scheduledEnd: day.scheduledEnd,
+      scheduledMinutes: day.scheduledMinutes,
+      actualIn: day.actualIn,
+      actualOut: day.actualOut,
+      netWorkedMinutes: day.netWorkedMinutes,
+      overtimeMinutes: day.overtimeMinutes,
+      payableOvertimeMinutes: day.payableOvertimeMinutes,
+      lateMinutes: day.lateMinutes,
+      status: day.status,
+      flags: day.flags,
+    });
+  }
+
+  return items;
+}
+
 
