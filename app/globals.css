@@ -66,25 +66,25 @@
  * app/layout.tsx) — nothing else needs to change.
  */
 :root {
-  --background: oklch(0.99 0.021 95);
-  --foreground: oklch(0.2 0.015 82);
+  --background: oklch(0.978 0.003 260);
+  --foreground: oklch(0.18 0.015 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.015 82);
+  --card-foreground: oklch(0.18 0.015 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.015 82);
+  --popover-foreground: oklch(0.18 0.015 260);
   --primary: oklch(0.91 0.189 100);
   --primary-foreground: oklch(0.17 0.01 89);
   --primary-text: oklch(0.48 0.16 75);
-  --secondary: oklch(0.96 0.063 97);
-  --secondary-foreground: oklch(0.2 0.015 82);
-  --muted: oklch(0.95 0.025 92);
-  --muted-foreground: oklch(0.5 0.02 80);
-  --accent: oklch(0.79 0.161 87);
+  --secondary: oklch(0.965 0.003 260);
+  --secondary-foreground: oklch(0.2 0.015 260);
+  --muted: oklch(0.965 0.003 260);
+  --muted-foreground: oklch(0.52 0.015 260);
+  --accent: oklch(0.955 0.004 260);
   --accent-foreground: oklch(0.17 0.01 89);
   --destructive: oklch(0.55 0.19 25);
-  --border: oklch(0.89 0.09 98);
-  --input: oklch(0.89 0.09 98);
-  --ring: oklch(0.35 0.02 85);
+  --border: oklch(0.935 0.004 260);
+  --input: oklch(0.935 0.004 260);
+  --ring: oklch(0.25 0.015 260);
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
   --chart-3: #1baf7a;
@@ -94,15 +94,15 @@
   --status-warning: #fab219;
   --status-serious: #ec835a;
   --status-critical: #d03b3b;
-  --radius: 0.75rem;
-  --sidebar: oklch(0.97 0.04 95);
-  --sidebar-foreground: oklch(0.2 0.015 82);
+  --radius: 1rem;
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.18 0.015 260);
   --sidebar-primary: oklch(0.91 0.189 100);
   --sidebar-primary-foreground: oklch(0.17 0.01 89);
-  --sidebar-accent: oklch(0.96 0.063 97);
-  --sidebar-accent-foreground: oklch(0.2 0.015 82);
-  --sidebar-border: oklch(0.89 0.09 98);
-  --sidebar-ring: oklch(0.35 0.02 85);
+  --sidebar-accent: oklch(0.965 0.003 260);
+  --sidebar-accent-foreground: oklch(0.18 0.015 260);
+  --sidebar-border: oklch(0.935 0.004 260);
+  --sidebar-ring: oklch(0.25 0.015 260);
 }
 
 .dark {

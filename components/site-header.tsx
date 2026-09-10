@@ -13,6 +13,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { Code2 } from "lucide-react";
 
 const ROUTE_LABELS: Record<string, string> = {
   admin: "Dashboard",
@@ -54,7 +55,7 @@ export function SiteHeader() {
   });
 
   return (
-    <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
+    <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b border-border/50 bg-card/90 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
       <div className="flex w-full items-center justify-between px-4 lg:px-6">
         <div className="flex items-center gap-2">
           <SidebarTrigger className="-ml-1" />
@@ -83,6 +84,18 @@ export function SiteHeader() {
               )}
             </BreadcrumbList>
           </Breadcrumb>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/docs"
+            target="_blank"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            title="Open Swagger API Documentation"
+          >
+            <Code2 className="size-3.5" />
+            <span className="hidden sm:inline">API Docs</span>
+          </Link>
         </div>
       </div>
     </header>

@@ -9,27 +9,48 @@ export function StatCard({
   /** Full text to show on hover when `value` may be truncated (e.g. a long branch name). */
   tooltip,
   subtext,
+  badge,
   icon: Icon,
   tone = "default",
+  className,
 }: {
   label: string;
   value: React.ReactNode;
   tooltip?: string;
   subtext?: React.ReactNode;
+  badge?: React.ReactNode;
   icon: LucideIcon;
-  tone?: "default" | "good" | "critical";
+  tone?: "default" | "good" | "critical" | "info" | "brand";
+  className?: string;
 }) {
   const valueEl = (
-    <p className="font-heading mt-1 line-clamp-2 text-xl leading-tight font-bold text-foreground">
+    <p className="font-heading text-2xl leading-none font-bold text-foreground tracking-tight">
       {value}
     </p>
   );
 
   return (
-    <Card>
-      <CardContent className="flex items-start justify-between gap-3 px-5">
-        <div className="min-w-0">
+    <Card className={cn("h-full", className)}>
+      <CardContent className="flex flex-col justify-between p-5 h-full gap-3">
+        {/* Top line: Label on left, subtle icon on right */}
+        <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          <span
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-lg",
+              tone === "good" && "bg-emerald-50 text-emerald-600",
+              tone === "critical" && "bg-rose-50 text-rose-600",
+              tone === "info" && "bg-blue-50 text-blue-600",
+              tone === "brand" && "bg-amber-50 text-amber-700",
+              tone === "default" && "bg-muted/60 text-muted-foreground"
+            )}
+          >
+            <Icon className="size-4" />
+          </span>
+        </div>
+
+        {/* Hero value + optional pill badge */}
+        <div className="flex items-baseline gap-2.5 flex-wrap">
           {tooltip ? (
             <Tooltip>
               <TooltipTrigger className="cursor-default text-left" render={<div />}>
@@ -40,18 +61,13 @@ export function StatCard({
           ) : (
             valueEl
           )}
-          {subtext && <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtext}</p>}
+          {badge}
         </div>
-        <span
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-full",
-            tone === "good" && "bg-status-good/10 text-status-good",
-            tone === "critical" && "bg-status-critical/10 text-status-critical",
-            tone === "default" && "bg-primary/10 text-foreground",
-          )}
-        >
-          <Icon className="size-[18px]" />
-        </span>
+
+        {/* Subtext */}
+        {subtext && (
+          <p className="text-[11px] font-normal text-muted-foreground truncate">{subtext}</p>
+        )}
       </CardContent>
     </Card>
   );
