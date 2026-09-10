@@ -1,24 +1,49 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, CalendarDays, Clock, FileSpreadsheet } from "lucide-react";
+import { AlertTriangle, CalendarCheck, CalendarDays, Clock, FileSpreadsheet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-export type AttendanceView = "daily" | "live" | "timesheets" | "exceptions";
+export type AttendanceView = "daily" | "live" | "timesheets" | "exceptions" | "leave";
 
 export function AttendanceTabs({
   activeView = "daily",
   branchId,
   date,
   exceptionsCount = 0,
+  leaveRequestsCount = 0,
 }: {
   activeView: AttendanceView;
   branchId?: string;
   date?: string;
   exceptionsCount?: number;
+  leaveRequestsCount?: number;
 }) {
   const searchParams = useSearchParams();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const activeTabRef = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const tab = activeTabRef.current;
+    if (!container || !tab) return;
+
+    const tabLeft = tab.offsetLeft;
+    const tabRight = tabLeft + tab.offsetWidth;
+    const containerScrollLeft = container.scrollLeft;
+    const containerWidth = container.clientWidth;
+
+    if (tabLeft < containerScrollLeft) {
+      container.scrollTo({ left: Math.max(0, tabLeft - 12), behavior: "smooth" });
+    } else if (tabRight > containerScrollLeft + containerWidth) {
+      container.scrollTo({
+        left: tabRight - containerWidth + 12,
+        behavior: "smooth",
+      });
+    }
+  }, [activeView]);
 
   function buildHref(view: AttendanceView) {
     const params = new URLSearchParams(searchParams.toString());
@@ -43,37 +68,49 @@ export function AttendanceTabs({
       icon: AlertTriangle,
       badge: exceptionsCount,
     },
+    {
+      id: "leave",
+      label: "Leave Requests",
+      icon: CalendarCheck,
+      badge: leaveRequestsCount,
+    },
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
-      <div className="inline-flex rounded-lg bg-muted p-1 text-muted-foreground">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeView === tab.id;
-          return (
-            <Link
-              key={tab.id}
-              href={buildHref(tab.id)}
-              className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
-                isActive
-                  ? "bg-background text-foreground shadow-sm"
-                  : "hover:bg-muted/80 hover:text-foreground"
-              }`}
-            >
-              <Icon className="size-4" />
-              <span>{tab.label}</span>
-              {tab.badge !== undefined && tab.badge > 0 && (
-                <Badge
-                  variant="outline"
-                  className="ml-0.5 h-5 border-amber-300 bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
-                >
-                  {tab.badge}
-                </Badge>
-              )}
-            </Link>
-          );
-        })}
+    <div className="w-full max-w-full min-w-0 border-b border-border pb-3">
+      <div
+        ref={scrollContainerRef}
+        className="no-scrollbar flex w-full max-w-full overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]"
+      >
+        <div className="inline-flex min-w-max items-center gap-1 rounded-lg bg-muted p-1 text-muted-foreground">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeView === tab.id;
+            return (
+              <Link
+                key={tab.id}
+                ref={isActive ? activeTabRef : null}
+                href={buildHref(tab.id)}
+                className={`inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 sm:gap-2 rounded-md px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-all ${
+                  isActive
+                    ? "bg-background text-foreground shadow-sm font-semibold"
+                    : "hover:bg-muted/80 hover:text-foreground"
+                }`}
+              >
+                <Icon className="size-3.5 sm:size-4 shrink-0" />
+                <span className="shrink-0">{tab.label}</span>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="ml-0.5 h-4.5 sm:h-5 shrink-0 border-amber-300 bg-amber-100 px-1.5 text-[10px] sm:text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+                  >
+                    {tab.badge}
+                  </Badge>
+                )}
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

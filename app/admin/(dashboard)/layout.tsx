@@ -41,7 +41,7 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
           it is centered with a cap, so a wide monitor does not leave data
           tables and forms pinned to the left with the rest of the screen bare.
         */}
-        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 lg:px-6 lg:py-6">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] min-w-0 flex-1 px-4 py-6 lg:px-6 lg:py-6">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -499,6 +499,90 @@ Ingests mobile clock-in/out punches from branch staff.
       },
     },
 
+    "/api/v1/attendance/leave-requests": {
+      post: {
+        tags: ["Attendance", "Mobile"],
+        summary: "Submit Employee Leave / Day-Off Request",
+        description: "Enables an employee to request annual, sick, or emergency leave. Once approved by a manager, DAY_OFF overrides are automatically placed on the roster.",
+        operationId: "submitLeaveRequest",
+        security: [{ DeviceTokenAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["type", "startDate", "endDate", "reason"],
+                properties: {
+                  type: { type: "string", enum: ["ANNUAL", "SICK", "EMERGENCY", "CASUAL", "UNPAID", "OTHER"], example: "ANNUAL" },
+                  startDate: { type: "string", format: "date", example: "2026-09-15" },
+                  endDate: { type: "string", format: "date", example: "2026-09-18" },
+                  reason: { type: "string", example: "Attending family function." },
+                  branchId: { type: "string", example: "branch_accra_mall" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Leave request submitted successfully.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    leaveRequest: { type: "object" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error or invalid date range.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          },
+          "401": {
+            description: "Unauthorized: Missing or invalid device token.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          },
+        },
+      },
+      get: {
+        tags: ["Attendance", "Mobile"],
+        summary: "List Employee Leave Requests",
+        description: "Returns the employee's submitted leave requests with their review status and manager notes.",
+        operationId: "getEmployeeLeaveRequests",
+        security: [{ DeviceTokenAuth: [] }],
+        parameters: [
+          { name: "limit", in: "query", schema: { type: "integer", default: 50 } },
+          { name: "offset", in: "query", schema: { type: "integer", default: 0 } },
+        ],
+        responses: {
+          "200": {
+            description: "List of leave requests.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    total: { type: "integer" },
+                    leaveRequests: { type: "array", items: { type: "object" } },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized: Missing or invalid device token.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } },
+          },
+        },
+      },
+    },
+
     "/api/v1/auth/mobile/otp/request": {
       post: {
         tags: ["Mobile Authentication"],

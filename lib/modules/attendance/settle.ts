@@ -1,5 +1,5 @@
 import "server-only";
-import type { Prisma } from "@prisma/client";
+import { DayStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { zonedMinutesToUtc } from "@/lib/platform/date";
 import { PROVIDER_BASELINE } from "./assurance";
@@ -185,6 +185,55 @@ export async function settleDay(
   });
 
   return projected;
+}
+
+export type SettlementSweepSummary = {
+  examined: number;
+  settled: number;
+};
+
+/**
+ * Sweeps unclosed or open attendance records from previous days (or shifts that
+ * ended at least 2 hours ago) and projects/settles them into final day totals.
+ */
+export async function runDailySettlementSweep(
+  now: Date = new Date(),
+  limit = 200,
+  settleFn = settleDay,
+): Promise<SettlementSweepSummary> {
+  const todayKey = now.toISOString().slice(0, 10);
+  const todayDate = new Date(`${todayKey}T00:00:00.000Z`);
+
+  const openDays = await prisma.attendanceDay.findMany({
+    where: {
+      status: DayStatus.PENDING,
+      OR: [
+        { workDate: { lt: todayDate } },
+        { scheduledEnd: { not: null, lt: new Date(now.getTime() - 2 * 60 * 60 * 1000) } },
+      ],
+    },
+    select: {
+      employeeId: true,
+      branchId: true,
+      workDate: true,
+    },
+    take: limit,
+  });
+
+  let settled = 0;
+  for (const day of openDays) {
+    const workDateKey = day.workDate.toISOString().slice(0, 10);
+    try {
+      const result = await settleFn(day.employeeId, day.branchId, workDateKey, prisma, now);
+      if (result.status === "SETTLED") {
+        settled++;
+      }
+    } catch {
+      // Continue next day if one fails
+    }
+  }
+
+  return { examined: openDays.length, settled };
 }
 
 /** Baseline assurance for a provider, before per-event evidence adjusts it. */

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, Clock, TriangleAlert, Users } from "lucide-react";
+import { AlertTriangle, CalendarCheck, Clock, TriangleAlert, Users } from "lucide-react";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import {
   employeeLookup,
@@ -23,6 +23,7 @@ import { TimesheetFilters } from "@/components/admin/timesheet-filters";
 import { TimesheetsTable } from "@/components/admin/timesheets-table";
 import { ExceptionsFilters } from "@/components/admin/exceptions-filters";
 import { ExceptionsTable } from "@/components/admin/exceptions-table";
+import { LeaveRequestsTable, type SerializedLeaveRequest } from "@/components/admin/leave-requests-table";
 import { ManualPunchDialog, type EmployeeOption } from "@/components/admin/manual-punch-dialog";
 import { MobileClockInDialog } from "@/components/admin/mobile-clock-in-dialog";
 import { AttendanceSweepButton } from "@/components/admin/attendance-sweep-button";
@@ -107,6 +108,16 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
           },
         });
 
+  const pendingLeaveCount =
+    scope.kind === "none"
+      ? 0
+      : await prisma.leaveRequest.count({
+          where: {
+            status: "PENDING",
+            ...(scope.kind === "branches" ? { branchId: { in: scope.branchIds } } : {}),
+          },
+        });
+
   const activeEmployees = canManualEntry
     ? await listEmployees(scope, { status: "ACTIVE" })
     : [];
@@ -127,10 +138,10 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
   const canWrite = can(actor, "attendance:write");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full">
       {/* Page Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="font-heading text-2xl font-bold text-foreground">Attendance Hub</h1>
           <p className="text-sm text-muted-foreground">
             {scope.kind === "branches" ? "Your branches." : "Every branch."} Daily logs, live
@@ -168,6 +179,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
         branchId={branchId}
         date={date}
         exceptionsCount={exceptionsCount}
+        leaveRequestsCount={pendingLeaveCount}
       />
 
       {/* View 1: Daily Roster */}
@@ -210,6 +222,17 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
           branches={branches}
           branchId={branchId}
           flag={flag}
+          search={search}
+          canWrite={canWrite}
+        />
+      )}
+
+      {/* View 5: Leave Requests */}
+      {view === "leave" && (
+        <LeaveRequestsView
+          scope={scope}
+          _branches={branches}
+          branchId={branchId}
           search={search}
           canWrite={canWrite}
         />
@@ -456,4 +479,122 @@ async function ExceptionsQueueView({
     </div>
   );
 }
+
+async function LeaveRequestsView({
+  scope,
+  _branches,
+  branchId,
+  search,
+  canWrite,
+}: {
+  scope: Parameters<typeof listPendingExceptions>[0];
+  _branches: { id: string; name: string }[];
+  branchId?: string;
+  search?: string;
+  canWrite: boolean;
+}) {
+  const branchFilter =
+    branchId
+      ? { branchId }
+      : scope.kind === "branches"
+        ? { branchId: { in: scope.branchIds } }
+        : {};
+
+  const requests = await prisma.leaveRequest.findMany({
+    where: {
+      ...branchFilter,
+      ...(search
+        ? {
+            employee: {
+              OR: [
+                { firstName: { contains: search, mode: "insensitive" } },
+                { lastName: { contains: search, mode: "insensitive" } },
+                { employeeCode: { contains: search, mode: "insensitive" } },
+              ],
+            },
+          }
+        : {}),
+    },
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    include: {
+      employee: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          employeeCode: true,
+          jobTitle: true,
+        },
+      },
+      branch: {
+        select: { id: true, name: true },
+      },
+      reviewer: {
+        select: { id: true, name: true },
+      },
+    },
+  });
+
+  const pendingCount = requests.filter((r) => r.status === "PENDING").length;
+  const approvedCount = requests.filter((r) => r.status === "APPROVED").length;
+  const rejectedCount = requests.filter((r) => r.status === "REJECTED").length;
+
+  const serializedRequests: SerializedLeaveRequest[] = requests.map((r) => {
+    const start = r.startDate.toISOString().slice(0, 10);
+    const end = r.endDate.toISOString().slice(0, 10);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const daysCount = Math.max(
+      1,
+      Math.round((r.endDate.getTime() - r.startDate.getTime()) / dayMs) + 1,
+    );
+
+    return {
+      id: r.id,
+      employeeId: r.employeeId,
+      employeeName: `${r.employee.firstName} ${r.employee.lastName}`.trim(),
+      employeeCode: r.employee.employeeCode,
+      jobTitle: r.employee.jobTitle,
+      branchId: r.branchId,
+      branchName: r.branch?.name ?? null,
+      type: r.type,
+      startDate: start,
+      endDate: end,
+      daysCount,
+      reason: r.reason,
+      status: r.status,
+      reviewedBy: r.reviewer?.name ?? null,
+      reviewedAt: r.reviewedAt?.toISOString() ?? null,
+      managerNotes: r.managerNotes,
+      createdAt: r.createdAt.toISOString(),
+    };
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Pending Requests"
+          value={String(pendingCount)}
+          icon={Clock}
+        />
+        <StatCard
+          label="Approved Leave"
+          value={String(approvedCount)}
+          icon={CalendarCheck}
+        />
+        <StatCard
+          label="Declined"
+          value={String(rejectedCount)}
+          icon={AlertTriangle}
+        />
+      </div>
+
+      <LeaveRequestsTable
+        requests={serializedRequests}
+        canReview={canWrite}
+      />
+    </div>
+  );
+}
+
 

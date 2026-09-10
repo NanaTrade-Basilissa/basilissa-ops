@@ -24,6 +24,7 @@ import { attendancePolicySchema } from "./validation";
 import { canAuthorizeOvertime } from "./overtime-auth";
 import { autoCloseStaleDays, type AutoCloseSummary } from "./auto-close";
 import { shiftDateKey } from "@/lib/platform/date";
+import { reviewLeaveRequest } from "./leave";
 
 // `FormState` already includes undefined, so intersecting with it would make
 // the whole type non-optional. Extend the non-null half and re-add undefined.
@@ -715,5 +716,58 @@ export async function bulkAssignShiftAction(
     count: createdCount,
     message: `Successfully assigned shift to ${createdCount} staff member(s).`,
   };
+}
+
+/**
+ * Approves or rejects an employee's leave request.
+ */
+export async function reviewLeaveRequestAction(
+  leaveRequestId: string,
+  decision: "APPROVED" | "REJECTED",
+  managerNotes?: string,
+): Promise<{ ok: boolean; message?: string; error?: string }> {
+  requireFeature("attendance");
+
+  if (!leaveRequestId || !decision) {
+    return { ok: false, error: "Invalid review parameters." };
+  }
+
+  const leave = await prisma.leaveRequest.findUnique({
+    where: { id: leaveRequestId },
+    select: { branchId: true, employeeId: true },
+  });
+
+  if (!leave) {
+    return { ok: false, error: "Leave request not found." };
+  }
+
+  const actor = await requirePermission("attendance:write", {
+    branchId: leave.branchId ?? undefined,
+  });
+
+  try {
+    const res = await reviewLeaveRequest({
+      leaveRequestId,
+      reviewerUserId: actor.userId,
+      decision,
+      managerNotes,
+    });
+
+    revalidatePath("/admin/attendance");
+    revalidatePath("/admin/shifts");
+
+    return {
+      ok: true,
+      message:
+        res.status === "APPROVED"
+          ? "Leave request approved and roster day-off overrides applied."
+          : "Leave request declined.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Failed to review leave request.",
+    };
+  }
 }
 

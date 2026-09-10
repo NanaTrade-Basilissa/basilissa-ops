@@ -5,7 +5,11 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/platform/prisma";
 import { claim, markFailed, markSucceeded, queueDepth, reclaimStuck } from "@/lib/platform/jobs";
 import { logger, setBaseFields } from "@/lib/platform/logger";
-import { autoCloseStaleDays } from "@/lib/modules/attendance/jobs";
+import {
+  autoCloseStaleDays,
+  runDailySettlementSweep,
+  dispatchUpcomingShiftReminders,
+} from "@/lib/modules/attendance/jobs";
 import { purgeExpiredPasswordResets } from "@/lib/modules/identity/jobs";
 import { purgeSentInvitationJobs } from "@/lib/modules/assessments/jobs";
 import { autoSubmitExpiredAttempts, purgeSentInvitationJobs as purgeSentAptitudeInvitationJobs } from "@/lib/modules/aptitude/jobs";
@@ -141,6 +145,24 @@ async function runPeriodic(now: number): Promise<void> {
     } catch (error) {
       // A failed sweep must not stop the queue being drained.
       logger.error("auto-close sweep failed", { error });
+    }
+
+    try {
+      const reminderSummary = await dispatchUpcomingShiftReminders(new Date());
+      if (reminderSummary.remindersDispatched > 0) {
+        logger.info("shift reminders sweep", reminderSummary);
+      }
+    } catch (error) {
+      logger.error("shift reminders sweep failed", { error });
+    }
+
+    try {
+      const settlementSummary = await runDailySettlementSweep(new Date());
+      if (settlementSummary.settled > 0) {
+        logger.info("daily settlement sweep", settlementSummary);
+      }
+    } catch (error) {
+      logger.error("daily settlement sweep failed", { error });
     }
   }
 

@@ -9,3 +9,5 @@
  * the rule uniform — the worker imports `jobs`, never `server`.
  */
 export { autoCloseStaleDays } from "./auto-close";
+export { runDailySettlementSweep } from "./settle";
+export { dispatchUpcomingShiftReminders } from "./reminders";
