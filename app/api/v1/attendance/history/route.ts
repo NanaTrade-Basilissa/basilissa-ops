@@ -108,28 +108,38 @@ export async function GET(request: NextRequest) {
   const totalPayableOvertimeMinutes = days.reduce((acc, d) => acc + d.payableOvertimeMinutes, 0);
   const totalLateMinutes = days.reduce((acc, d) => acc + d.lateMinutes, 0);
 
-  const formattedDays = days.map((d) => ({
-    id: d.id,
-    workDate: d.workDate.toISOString().slice(0, 10),
-    branchId: d.branchId,
-    branchName: branchMap.get(d.branchId) ?? "Unknown Branch",
-    shiftName: d.shiftIdSnapshot ? "Scheduled Shift" : "Unscheduled",
-    scheduledStart: formatTime(d.scheduledStart),
-    scheduledEnd: formatTime(d.scheduledEnd),
-    scheduledMinutes: d.scheduledMinutes,
-    actualIn: d.actualIn?.toISOString() ?? null,
-    actualOut: d.actualOut?.toISOString() ?? null,
-    actualInTime: formatTime(d.actualIn),
-    actualOutTime: formatTime(d.actualOut),
-    netWorkedMinutes: d.netWorkedMinutes,
-    regularMinutes: d.regularMinutes,
-    overtimeMinutes: d.overtimeMinutes,
-    payableOvertimeMinutes: d.payableOvertimeMinutes,
-    lateMinutes: d.lateMinutes,
-    earlyDepartureMinutes: d.earlyDepartureMinutes,
-    status: d.status,
-    flags: d.flags,
-  }));
+  const formattedDays = days.map((d) => {
+    const dateStr = d.workDate.toISOString().slice(0, 10);
+    const inFormatted = formatTime(d.actualIn);
+    const outFormatted = formatTime(d.actualOut);
+
+    return {
+      id: d.id,
+      workDate: dateStr,
+      date: dateStr,
+      branchId: d.branchId,
+      branchName: branchMap.get(d.branchId) ?? "Unknown Branch",
+      shiftName: d.shiftIdSnapshot ? "Scheduled Shift" : "Unscheduled",
+      scheduledStart: formatTime(d.scheduledStart),
+      scheduledEnd: formatTime(d.scheduledEnd),
+      scheduledMinutes: d.scheduledMinutes,
+      actualIn: d.actualIn?.toISOString() ?? null,
+      actualOut: d.actualOut?.toISOString() ?? null,
+      actualInTime: inFormatted,
+      actualOutTime: outFormatted,
+      inTime: inFormatted,
+      outTime: outFormatted,
+      netWorkedMinutes: d.netWorkedMinutes,
+      workedMinutes: d.netWorkedMinutes,
+      regularMinutes: d.regularMinutes,
+      overtimeMinutes: d.overtimeMinutes,
+      payableOvertimeMinutes: d.payableOvertimeMinutes,
+      lateMinutes: d.lateMinutes,
+      earlyDepartureMinutes: d.earlyDepartureMinutes,
+      status: d.status,
+      flags: d.flags,
+    };
+  });
 
   return NextResponse.json({
     ok: true,
@@ -145,5 +155,6 @@ export async function GET(request: NextRequest) {
       totalOvertimeHours: Number((totalOvertimeMinutes / 60).toFixed(2)),
     },
     days: formattedDays,
+    history: formattedDays,
   });
 }

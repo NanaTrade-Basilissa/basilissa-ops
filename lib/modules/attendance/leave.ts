@@ -249,3 +249,36 @@ export async function reviewLeaveRequest(input: ReviewLeaveRequestInput) {
     return { ok: true, status: LeaveStatus.REJECTED };
   }
 }
+
+/**
+ * Cancels a pending leave request submitted by an employee.
+ */
+export async function cancelLeaveRequest(employeeId: string, leaveRequestId: string) {
+  const leave = await prisma.leaveRequest.findUnique({
+    where: { id: leaveRequestId },
+  });
+
+  if (!leave) {
+    throw new Error("Leave request not found.");
+  }
+
+  if (leave.employeeId !== employeeId) {
+    throw new Error("You are not authorized to cancel this leave request.");
+  }
+
+  if (leave.status !== LeaveStatus.PENDING) {
+    throw new Error(`Cannot cancel a leave request that is already ${leave.status.toLowerCase()}.`);
+  }
+
+  const cancelled = await prisma.leaveRequest.update({
+    where: { id: leaveRequestId },
+    data: { status: LeaveStatus.CANCELLED },
+  });
+
+  log.info("Leave request cancelled by employee", {
+    leaveRequestId,
+    employeeId,
+  });
+
+  return cancelled;
+}

@@ -11,14 +11,20 @@ import { LeaveType } from "@prisma/client";
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
-const createLeaveRequestSchema = z.object({
-  type: z.nativeEnum(LeaveType),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid startDate format (YYYY-MM-DD)"),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid endDate format (YYYY-MM-DD)"),
-  reason: z.string().min(1, "Reason is required").max(500, "Reason is too long"),
-  branchId: z.string().optional(),
-  deviceToken: z.string().optional(),
-});
+const createLeaveRequestSchema = z
+  .object({
+    type: z.nativeEnum(LeaveType).optional(),
+    leaveType: z.nativeEnum(LeaveType).optional(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid startDate format (YYYY-MM-DD)"),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid endDate format (YYYY-MM-DD)"),
+    reason: z.string().max(500, "Reason is too long").optional().default("Personal Leave"),
+    branchId: z.string().optional(),
+    deviceToken: z.string().optional(),
+  })
+  .refine((data) => Boolean(data.type || data.leaveType), {
+    message: "Leave type is required",
+    path: ["type"],
+  });
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -75,13 +81,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { type, startDate, endDate, reason, branchId } = parsed.data;
+  const resolvedType = (parsed.data.type || parsed.data.leaveType)!;
+  const { startDate, endDate, reason, branchId } = parsed.data;
   const { employeeId } = tokenVerification.payload;
 
   try {
     const leaveRequest = await submitLeaveRequest({
       employeeId,
-      type,
+      type: resolvedType,
       startDate,
       endDate,
       reason,
@@ -94,6 +101,7 @@ export async function POST(request: NextRequest) {
         leaveRequest: {
           id: leaveRequest.id,
           type: leaveRequest.type,
+          leaveType: leaveRequest.type,
           startDate: leaveRequest.startDate.toISOString().slice(0, 10),
           endDate: leaveRequest.endDate.toISOString().slice(0, 10),
           reason: leaveRequest.reason,
@@ -155,6 +163,7 @@ export async function GET(request: NextRequest) {
     leaveRequests: requests.map((r) => ({
       id: r.id,
       type: r.type,
+      leaveType: r.type,
       startDate: r.startDate.toISOString().slice(0, 10),
       endDate: r.endDate.toISOString().slice(0, 10),
       reason: r.reason,
@@ -163,6 +172,7 @@ export async function GET(request: NextRequest) {
       reviewedBy: r.reviewer?.name ?? null,
       reviewedAt: r.reviewedAt?.toISOString() ?? null,
       managerNotes: r.managerNotes,
+      reviewNotes: r.managerNotes ?? null,
       createdAt: r.createdAt.toISOString(),
     })),
   });

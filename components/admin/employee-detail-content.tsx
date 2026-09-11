@@ -1,8 +1,9 @@
-import { Building2, CalendarClock } from "lucide-react";
+import { Building2, CalendarClock, Smartphone } from "lucide-react";
 import {
   assignBranch,
   assignShift,
   endBranchAssignment,
+  revokeDeviceIdentity,
   updateEmployee,
 } from "@/lib/modules/employees/actions";
 import { minutesToTime } from "@/lib/modules/employees/validation";
@@ -11,6 +12,7 @@ import { EmployeeForm } from "@/components/admin/employee-form";
 import {
   BranchAssignmentForm,
   EndAssignmentButton,
+  RevokeDeviceButton,
   ShiftAssignmentForm,
 } from "@/components/admin/assignment-forms";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -148,6 +150,7 @@ export function EmployeeDetailContent({
         </CardContent>
       </Card>
 
+
       {attendanceEnabled && (
         <Card>
           <CardHeader>
@@ -196,6 +199,64 @@ export function EmployeeDetailContent({
                     }))}
                 />
               ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {attendanceEnabled && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Smartphone className="size-5 text-primary" />
+                <CardTitle>Paired Mobile Devices</CardTitle>
+              </div>
+              <Badge variant={employee.deviceIdentities && employee.deviceIdentities.length > 0 ? "secondary" : "outline"}>
+                {employee.deviceIdentities && employee.deviceIdentities.length > 0
+                  ? `${employee.deviceIdentities.length} Bound`
+                  : "No Device Bound"}
+              </Badge>
+            </div>
+            <CardDescription>
+              Hardware binding secures clock-in so employees cannot punch for each other.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(!employee.deviceIdentities || employee.deviceIdentities.length === 0) ? (
+              <p className="text-sm text-muted-foreground">
+                No active mobile phone is currently bound to this employee account. When the employee logs into the mobile app, their phone will be automatically paired.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border text-sm">
+                {employee.deviceIdentities.map((device) => (
+                  <li key={device.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 font-medium">
+                        <span>{device.label || "Mobile Device"}</span>
+                        <Badge variant="outline" className="text-[11px] font-mono">
+                          {device.providerType}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        Hardware ID: {device.deviceId ? `${device.deviceId.slice(0, 12)}...` : device.externalId}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Bound on {formatAccraDate(device.enrolledAt)}
+                      </p>
+                    </div>
+
+                    {canWrite && (
+                      <RevokeDeviceButton
+                        action={revokeDeviceIdentity}
+                        deviceIdentityId={device.id}
+                        deviceLabel={device.label}
+                        onSuccess={onMutated}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       )}

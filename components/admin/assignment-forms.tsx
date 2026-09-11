@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect } from "react";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, Plus, Smartphone, X } from "lucide-react";
 import { toast } from "sonner";
 import type { FormState } from "@/lib/platform/forms";
 import { Button } from "@/components/ui/button";
@@ -228,3 +228,69 @@ export function EndAssignmentButton({
     </div>
   );
 }
+
+export function RevokeDeviceButton({
+  action,
+  deviceIdentityId,
+  deviceLabel,
+  onSuccess,
+}: {
+  action: (prevState: FormState, formData: FormData) => Promise<FormState>;
+  deviceIdentityId: string;
+  deviceLabel?: string | null;
+  onSuccess?: () => void;
+}) {
+  const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
+
+  useEffect(() => {
+    if (state?.success) {
+      toast.success("Device released successfully. Employee can now bind a new phone.");
+      onSuccess?.();
+    } else if (state?.error) {
+      toast.error(state.error);
+    }
+  }, [state, onSuccess]);
+
+  return (
+    <div className="ml-auto">
+      <AlertDialog>
+        <AlertDialogTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              className="text-destructive hover:bg-destructive/10 border-destructive/30 gap-1.5"
+            >
+              {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Smartphone className="size-3.5" />}
+              Release Device
+            </Button>
+          }
+        />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release bound device?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will unbind {deviceLabel ? `"${deviceLabel}"` : "this mobile device"} from this employee's account. The physical phone will be released and the employee will be permitted to register a new phone via OTP.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <form action={formAction}>
+              <input type="hidden" name="deviceIdentityId" value={deviceIdentityId} />
+              <AlertDialogAction
+                type="submit"
+                disabled={isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isPending && <Loader2 className="size-4 animate-spin mr-1.5" />}
+                Release Device
+              </AlertDialogAction>
+            </form>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+

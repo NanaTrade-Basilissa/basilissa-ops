@@ -628,3 +628,59 @@ export async function getEmployeeDetailAction(employeeId: string) {
   };
 }
 
+export async function revokeDeviceIdentity(
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireAuth();
+  const deviceIdentityId = String(formData.get("deviceIdentityId") || "");
+
+  if (!deviceIdentityId) {
+    return { success: false, error: "Device identity ID is required." };
+  }
+
+  const identity = await prisma.employeeDeviceIdentity.findUnique({
+    where: { id: deviceIdentityId },
+    include: {
+      employee: {
+        include: {
+          branchAssignments: { where: { validTo: null }, select: { branchId: true } },
+        },
+      },
+    },
+  });
+
+  if (!identity || identity.revokedAt !== null) {
+    return { success: false, error: "Device identity not found or already released." };
+  }
+
+  const employeeBranchIds = identity.employee.branchAssignments.map((b) => b.branchId);
+  const allowed =
+    can(actor, "employee:write") ||
+    employeeBranchIds.some((branchId) => can(actor, "employee:write", { branchId }));
+
+  if (!allowed) {
+    return { success: false, error: "You do not have permission to manage this employee's devices." };
+  }
+
+  await prisma.employeeDeviceIdentity.update({
+    where: { id: deviceIdentityId },
+    data: { revokedAt: new Date() },
+  });
+
+  await recordAudit({
+    actor: auditActorFrom(actor),
+    action: "employee.device_revoked",
+    entityType: "Employee",
+    entityId: identity.employeeId,
+    before: { deviceId: identity.externalId, label: identity.label, providerType: identity.providerType },
+    after: { revokedAt: new Date().toISOString() },
+    metadata: { reason: "Admin/Manager released device for re-assignment" },
+  });
+
+  revalidatePath(`/admin/employees/${identity.employeeId}`);
+  revalidatePath(`/admin/employees`);
+  return { success: true };
+}
+
+

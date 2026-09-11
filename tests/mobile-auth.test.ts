@@ -4,8 +4,15 @@ import { open } from "@/lib/platform/secret-box";
 const mockEmployeeFindFirst = vi.fn();
 const mockEmployeeFindUnique = vi.fn();
 const mockDeviceFindFirst = vi.fn();
+const mockDeviceCreate = vi.fn();
 const mockDeviceUpsert = vi.fn();
 const mockDeviceUpdateMany = vi.fn();
+const mockRecordAudit = vi.fn();
+
+vi.mock("@/lib/platform/audit", () => ({
+  recordAudit: (...args: unknown[]) => mockRecordAudit(...args),
+  SYSTEM_ACTOR: { userId: null, email: null, role: "SYSTEM" },
+}));
 
 vi.mock("@/lib/platform/prisma", () => ({
   prisma: {
@@ -15,6 +22,7 @@ vi.mock("@/lib/platform/prisma", () => ({
     },
     employeeDeviceIdentity: {
       findFirst: (...args: unknown[]) => mockDeviceFindFirst(...args),
+      create: (...args: unknown[]) => mockDeviceCreate(...args),
       upsert: (...args: unknown[]) => mockDeviceUpsert(...args),
       updateMany: (...args: unknown[]) => mockDeviceUpdateMany(...args),
     },
@@ -147,5 +155,103 @@ describe("mobile-auth 6-digit OTP", () => {
     const result = await requestMobileOtp("0200000000");
     expect(result.ok).toBe(false);
     expect(result.error).toBe("EMPLOYEE_NOT_FOUND");
+  });
+
+  it("rejects login when device is already bound to another employee (1 Phone -> 1 Staff Member)", async () => {
+    mockEmployeeFindFirst.mockResolvedValueOnce({
+      id: "emp_ama_002",
+      phone: "+233200999888",
+      firstName: "Ama",
+      lastName: "Osei",
+      status: "ACTIVE",
+    });
+
+    const requestResult = await requestMobileOtp("0200999888");
+    expect(requestResult.ok).toBe(true);
+
+    mockEmployeeFindUnique.mockResolvedValueOnce({
+      id: "emp_ama_002",
+      employeeCode: "BAS-ACC-002",
+      firstName: "Ama",
+      lastName: "Osei",
+      phone: "+233200999888",
+      status: "ACTIVE",
+      branchAssignments: [],
+    });
+
+    // Device is already bound to Kwame
+    mockDeviceFindFirst.mockResolvedValueOnce({
+      id: "dev_identity_kwame",
+      employeeId: "emp_kwame_001",
+      externalId: "shared_hardware_uuid_123",
+      revokedAt: null,
+    });
+
+    const verifyResult = await verifyMobileOtp({
+      phone: "0200999888",
+      code: requestResult.debugOtp!,
+      challengeToken: requestResult.challengeToken!,
+      deviceId: "shared_hardware_uuid_123",
+    });
+
+    expect(verifyResult.ok).toBe(false);
+    expect(verifyResult.error).toBe("DEVICE_BOUND_TO_OTHER");
+    expect(verifyResult.message).toContain("This device is registered to another employee");
+    expect(mockRecordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "security.device_binding_conflict",
+        entityId: "emp_ama_002",
+      })
+    );
+  });
+
+  it("rejects login when employee already has another active phone registered (1 Staff Member -> 1 Phone)", async () => {
+    mockEmployeeFindFirst.mockResolvedValueOnce({
+      id: "emp_kwame_001",
+      phone: "+233244111222",
+      firstName: "Kwame",
+      lastName: "Mensah",
+      status: "ACTIVE",
+    });
+
+    const requestResult = await requestMobileOtp("0244111222");
+    expect(requestResult.ok).toBe(true);
+
+    mockEmployeeFindUnique.mockResolvedValueOnce({
+      id: "emp_kwame_001",
+      employeeCode: "BAS-ACC-001",
+      firstName: "Kwame",
+      lastName: "Mensah",
+      phone: "+233244111222",
+      status: "ACTIVE",
+      branchAssignments: [],
+    });
+
+    // Check 1: Device is not bound to another employee
+    mockDeviceFindFirst.mockResolvedValueOnce(null);
+    // Check 2: Kwame already has an active phone registered with a different deviceId
+    mockDeviceFindFirst.mockResolvedValueOnce({
+      id: "dev_identity_kwame_phone1",
+      employeeId: "emp_kwame_001",
+      externalId: "kwame_first_hardware_uuid",
+      revokedAt: null,
+    });
+
+    const verifyResult = await verifyMobileOtp({
+      phone: "0244111222",
+      code: requestResult.debugOtp!,
+      challengeToken: requestResult.challengeToken!,
+      deviceId: "kwame_second_hardware_uuid",
+    });
+
+    expect(verifyResult.ok).toBe(false);
+    expect(verifyResult.error).toBe("EMPLOYEE_ALREADY_BOUND");
+    expect(verifyResult.message).toContain("already bound to another phone");
+    expect(mockRecordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "security.employee_multi_device_attempt",
+        entityId: "emp_kwame_001",
+      })
+    );
   });
 });

@@ -96,6 +96,7 @@ describe("Mobile Attendance APIs", () => {
       vi.spyOn(prisma.branch, "findMany").mockResolvedValueOnce([
         { id: "branch_1", name: "Accra Mall" },
       ] as never);
+      vi.spyOn(prisma.leaveRequest, "findMany").mockResolvedValueOnce([] as never);
 
       const req = new NextRequest("http://localhost:3000/api/v1/attendance/status", {
         headers: { Authorization: `Bearer ${validToken}` },
@@ -191,6 +192,13 @@ describe("Mobile Attendance APIs", () => {
       expect(data.days[0].workDate).toBe("2026-09-09");
       expect(data.days[0].branchName).toBe("Accra Mall Branch");
       expect(data.days[0].overtimeMinutes).toBe(60);
+
+      expect(data.history).toBeDefined();
+      expect(data.history.length).toBe(2);
+      expect(data.history[0].date).toBe("2026-09-09");
+      expect(data.history[0].inTime).toBeDefined();
+      expect(data.history[0].outTime).toBeDefined();
+      expect(data.history[0].workedMinutes).toBe(540);
     });
   });
 });

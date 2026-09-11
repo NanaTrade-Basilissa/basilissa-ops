@@ -4,6 +4,7 @@ import { ProviderType } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { seal, open } from "@/lib/platform/secret-box";
 import { sendSms, normalizePhoneNumber } from "@/lib/platform/sms";
+import { recordAudit, SYSTEM_ACTOR } from "@/lib/platform/audit";
 import { scoped } from "@/lib/platform/logger";
 
 const log = scoped("mobile-auth");
@@ -53,7 +54,14 @@ export interface VerifyOtpResult {
   assignedBranches?: MobileBranchInfo[];
   branches?: MobileBranchInfo[];
   deviceToken?: string;
-  error?: "INVALID_CHALLENGE" | "OTP_EXPIRED" | "INVALID_CODE" | "EMPLOYEE_NOT_FOUND" | "EMPLOYEE_NOT_ACTIVE";
+  error?:
+    | "INVALID_CHALLENGE"
+    | "OTP_EXPIRED"
+    | "INVALID_CODE"
+    | "EMPLOYEE_NOT_FOUND"
+    | "EMPLOYEE_NOT_ACTIVE"
+    | "DEVICE_BOUND_TO_OTHER"
+    | "EMPLOYEE_ALREADY_BOUND";
 }
 
 interface OtpChallengePayload {
@@ -273,25 +281,92 @@ export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpR
     };
   }
 
-  // 5. Enforce device binding in EmployeeDeviceIdentity
-  try {
-    const existingActiveBinding = await prisma.employeeDeviceIdentity.findFirst({
-      where: {
-        providerType: ProviderType.MOBILE_APP,
-        externalId: deviceId,
-        revokedAt: null,
-      },
+  // 5. Enforce strict 1:1 hardware device binding
+  // Rule 1: A physical phone can only belong to ONE active employee.
+  const existingDeviceBinding = await prisma.employeeDeviceIdentity.findFirst({
+    where: {
+      providerType: ProviderType.MOBILE_APP,
+      externalId: deviceId,
+      revokedAt: null,
+    },
+  });
+
+  if (existingDeviceBinding && existingDeviceBinding.employeeId !== employee.id) {
+    log.warn("Hardware device conflict: device already bound to another staff member", {
+      deviceId,
+      currentEmployeeId: employee.id,
+      boundEmployeeId: existingDeviceBinding.employeeId,
+      phone: normalizedPhone,
     });
 
-    if (existingActiveBinding && existingActiveBinding.employeeId !== employee.id) {
-      // Reassigned phone/device: Revoke previous employee binding
-      await prisma.employeeDeviceIdentity.update({
-        where: { id: existingActiveBinding.id },
-        data: { revokedAt: new Date() },
+    try {
+      await recordAudit({
+        actor: SYSTEM_ACTOR,
+        action: "security.device_binding_conflict",
+        entityType: "employee",
+        entityId: employee.id,
+        metadata: {
+          attemptedDeviceId: deviceId,
+          existingEmployeeId: existingDeviceBinding.employeeId,
+          phone: normalizedPhone,
+        },
       });
+    } catch (auditErr) {
+      log.warn("Failed to write audit log for device binding conflict", { auditErr });
     }
 
-    if (!existingActiveBinding || existingActiveBinding.employeeId !== employee.id) {
+    return {
+      ok: false,
+      error: "DEVICE_BOUND_TO_OTHER",
+      message:
+        "This device is registered to another employee. Device sharing is prohibited. Please contact your manager or clock in at the branch terminal.",
+    };
+  }
+
+  // Rule 2: An employee can only have ONE active mobile phone registered.
+  const existingEmployeeBinding = await prisma.employeeDeviceIdentity.findFirst({
+    where: {
+      providerType: ProviderType.MOBILE_APP,
+      employeeId: employee.id,
+      revokedAt: null,
+    },
+  });
+
+  if (existingEmployeeBinding && existingEmployeeBinding.externalId !== deviceId) {
+    log.warn("Employee multi-device attempt: employee already has active device binding", {
+      employeeId: employee.id,
+      attemptedDeviceId: deviceId,
+      existingDeviceId: existingEmployeeBinding.externalId,
+      phone: normalizedPhone,
+    });
+
+    try {
+      await recordAudit({
+        actor: SYSTEM_ACTOR,
+        action: "security.employee_multi_device_attempt",
+        entityType: "employee",
+        entityId: employee.id,
+        metadata: {
+          attemptedDeviceId: deviceId,
+          existingDeviceId: existingEmployeeBinding.externalId,
+          phone: normalizedPhone,
+        },
+      });
+    } catch (auditErr) {
+      log.warn("Failed to write audit log for multi device attempt", { auditErr });
+    }
+
+    return {
+      ok: false,
+      error: "EMPLOYEE_ALREADY_BOUND",
+      message:
+        "Your account is already bound to another phone. You are only permitted 1 registered device. Contact your manager to transfer devices.",
+    };
+  }
+
+  // Register device if not yet bound
+  if (!existingEmployeeBinding) {
+    try {
       await prisma.employeeDeviceIdentity.create({
         data: {
           employeeId: employee.id,
@@ -301,10 +376,9 @@ export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpR
           label: deviceName || "Staff Smartphone",
         },
       });
+    } catch (bindErr) {
+      log.warn("Could not bind device identity in database", { bindErr });
     }
-  } catch (bindErr) {
-    log.warn("Could not bind device identity in database", { bindErr });
-    // Continue: device token still issued
   }
 
   // 6. Generate signed device session token (valid for 30 days)

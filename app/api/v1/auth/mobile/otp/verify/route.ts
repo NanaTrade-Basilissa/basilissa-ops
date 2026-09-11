@@ -92,7 +92,9 @@ export async function POST(request: NextRequest) {
         ? 401
         : result.error === "EMPLOYEE_NOT_FOUND"
           ? 404
-          : result.error === "EMPLOYEE_NOT_ACTIVE"
+          : result.error === "EMPLOYEE_NOT_ACTIVE" ||
+              result.error === "DEVICE_BOUND_TO_OTHER" ||
+              result.error === "EMPLOYEE_ALREADY_BOUND"
             ? 403
             : 400;
 

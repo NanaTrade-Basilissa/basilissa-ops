@@ -122,6 +122,18 @@ export async function getEmployee(employeeId: string, scope: BranchScope) {
           branch: { select: { id: true, name: true } },
         },
       },
+      deviceIdentities: {
+        where: { revokedAt: null },
+        orderBy: { enrolledAt: "desc" },
+        select: {
+          id: true,
+          providerType: true,
+          externalId: true,
+          deviceId: true,
+          label: true,
+          enrolledAt: true,
+        },
+      },
     },
   });
 }

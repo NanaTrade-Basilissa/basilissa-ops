@@ -100,8 +100,8 @@ export async function GET(request: NextRequest) {
   const todayKey = dateKeyInZone(now, timeZone);
   const todayDate = new Date(`${todayKey}T00:00:00.000Z`);
 
-  // 3. Fetch today's attendance day, recent punch events, corrections, and schedules concurrently
-  const [todayDay, recentEvents, corrections, shifts, shiftAssignments, exceptions, branchMapRecords] = await Promise.all([
+  // 3. Fetch today's attendance day, recent punch events, corrections, schedules, and approved leaves concurrently
+  const [todayDay, recentEvents, corrections, shifts, shiftAssignments, exceptions, branchMapRecords, upcomingLeaves] = await Promise.all([
     prisma.attendanceDay.findFirst({
       where: {
         employeeId,
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
     prisma.employeeShiftAssignment.findMany({
       where: {
         employeeId,
-        validFrom: { lte: now },
+        validFrom: { lte: new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000) },
         OR: [{ validTo: null }, { validTo: { gte: now } }],
       },
       select: { employeeId: true, shiftId: true, daysOfWeek: true, validFrom: true, validTo: true },
@@ -145,12 +145,25 @@ export async function GET(request: NextRequest) {
     prisma.scheduleException.findMany({
       where: {
         employeeId,
-        date: todayDate,
+        date: { gte: todayDate, lte: new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000) },
       },
       include: { shift: true },
     }),
     prisma.branch.findMany({
       select: { id: true, name: true },
+    }),
+    prisma.leaveRequest.findMany({
+      where: {
+        employeeId,
+        status: "APPROVED",
+        endDate: { gte: todayDate },
+      },
+      select: {
+        id: true,
+        type: true,
+        startDate: true,
+        endDate: true,
+      },
     }),
   ]);
 
@@ -173,6 +186,79 @@ export async function GET(request: NextRequest) {
       type: ex.type,
     })),
   });
+
+  // 4b. Resolve upcoming schedule for the next 7 days
+  const upcomingSchedule: Array<{
+    date: string;
+    dayName: string;
+    formattedDate: string;
+    shiftId: string | null;
+    shiftName: string;
+    startTime: string | null;
+    endTime: string | null;
+    isLeave: boolean;
+    leaveType: string | null;
+  }> = [];
+
+  for (let i = 1; i <= 7; i++) {
+    const futureDate = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
+    const dateKey = dateKeyInZone(futureDate, timeZone);
+    const dayObj = new Date(`${dateKey}T12:00:00.000Z`);
+    const dayName = i === 1 ? "Tomorrow" : dayObj.toLocaleDateString("en-US", { weekday: "short" });
+    const formattedDate = dayObj.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" });
+
+    // Check if on approved leave
+    const leave = (upcomingLeaves || []).find(
+      (l) => dateKey >= l.startDate.toISOString().slice(0, 10) && dateKey <= l.endDate.toISOString().slice(0, 10)
+    );
+
+    if (leave) {
+      upcomingSchedule.push({
+        date: dateKey,
+        dayName,
+        formattedDate,
+        shiftId: null,
+        shiftName: "Approved Leave",
+        startTime: null,
+        endTime: null,
+        isLeave: true,
+        leaveType: leave.type,
+      });
+      continue;
+    }
+
+    const resolved = resolveScheduleForDate(dateKey, {
+      timeZone,
+      shifts,
+      assignments: shiftAssignments,
+      exceptions: exceptions.map((ex) => ({
+        dateKey: ex.date.toISOString().slice(0, 10),
+        shiftId: ex.shiftId,
+        type: ex.type,
+      })),
+    });
+
+    const shift = resolved ? shifts.find((s) => s.id === resolved.shiftId) : null;
+    if (resolved && shift) {
+      upcomingSchedule.push({
+        date: dateKey,
+        dayName,
+        formattedDate,
+        shiftId: shift.id,
+        shiftName: resolved.shiftName || shift.name,
+        startTime:
+          shift.startMinute !== null
+            ? `${String(Math.floor(shift.startMinute / 60)).padStart(2, "0")}:${String(shift.startMinute % 60).padStart(2, "0")}`
+            : "08:00",
+        endTime:
+          shift.endMinute !== null
+            ? `${String(Math.floor(shift.endMinute / 60)).padStart(2, "0")}:${String(shift.endMinute % 60).padStart(2, "0")}`
+            : "17:00",
+        isLeave: false,
+        leaveType: null,
+      });
+    }
+  }
 
   // 5. Determine canonical live duty state aligned identically with live floor dashboard
   const canonicalActualIn =
@@ -240,7 +326,11 @@ export async function GET(request: NextRequest) {
       ? {
           eventId: lastEvent.id,
           direction: lastEvent.direction,
+          type: lastEvent.direction === "IN" ? "Clock In" : "Clock Out",
           occurredAt: lastEvent.occurredAt.toISOString(),
+          timestamp: lastEvent.occurredAt.toISOString(),
+          time: formatTime(lastEvent.occurredAt),
+          occurredAtFormatted: formatTime(lastEvent.occurredAt),
           branchId: lastEvent.branchId,
           branchName: lastPunchBranchName,
         }
@@ -263,6 +353,7 @@ export async function GET(request: NextRequest) {
           exceptionType: todayException?.type ?? null,
         }
       : null,
+    upcomingSchedule,
     todayRecord: todayDay
       ? {
           id: todayDay.id,

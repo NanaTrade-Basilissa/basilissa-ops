@@ -4,12 +4,14 @@ import {
   getDateRangeKeys,
   submitLeaveRequest,
   reviewLeaveRequest,
+  cancelLeaveRequest,
 } from "@/lib/modules/attendance/server";
 import { reviewLeaveRequestAction } from "@/lib/modules/attendance/actions";
 import {
   POST as submitLeaveRoute,
   GET as getLeaveRoute,
 } from "@/lib/../app/api/v1/attendance/leave-requests/route";
+import { DELETE as cancelLeaveRoute } from "@/app/api/v1/attendance/leave-requests/[id]/route";
 import { createDeviceToken } from "@/lib/modules/attendance/server";
 import { prisma } from "@/lib/platform/prisma";
 import * as pushModule from "@/lib/platform/push";
@@ -246,6 +248,8 @@ describe("Employee Leave Requests", () => {
       expect(data.ok).toBe(true);
       expect(data.leaveRequest.id).toBe("leave_created");
       expect(data.leaveRequest.status).toBe("PENDING");
+      expect(data.leaveRequest.leaveType).toBe(LeaveType.ANNUAL);
+      expect(data.leaveRequest.type).toBe(LeaveType.ANNUAL);
     });
 
     it("returns 200 with list of requests on GET", async () => {
@@ -277,6 +281,9 @@ describe("Employee Leave Requests", () => {
       expect(data.ok).toBe(true);
       expect(data.total).toBe(1);
       expect(data.leaveRequests[0].id).toBe("leave_1");
+      expect(data.leaveRequests[0].leaveType).toBe(LeaveType.ANNUAL);
+      expect(data.leaveRequests[0].type).toBe(LeaveType.ANNUAL);
+      expect(data.leaveRequests[0].reviewNotes).toBe("Approved");
     });
   });
 
@@ -323,6 +330,87 @@ describe("Employee Leave Requests", () => {
       const result = await reviewLeaveRequestAction("leave_1", "APPROVED", "Enjoy your time off!");
       expect(result.ok).toBe(true);
       expect(result.message).toContain("approved");
+    });
+  });
+
+  describe("cancelLeaveRequest", () => {
+    it("throws error if leave request not found", async () => {
+      vi.spyOn(prisma.leaveRequest, "findUnique").mockResolvedValueOnce(null);
+      await expect(cancelLeaveRequest("emp_100", "non_existent")).rejects.toThrow("not found");
+    });
+
+    it("throws error if caller is not the owner of the leave request", async () => {
+      vi.spyOn(prisma.leaveRequest, "findUnique").mockResolvedValueOnce({
+        id: "leave_1",
+        employeeId: "emp_other",
+        status: LeaveStatus.PENDING,
+      } as never);
+
+      await expect(cancelLeaveRequest("emp_100", "leave_1")).rejects.toThrow("not authorized");
+    });
+
+    it("throws error if leave request is already approved or rejected", async () => {
+      vi.spyOn(prisma.leaveRequest, "findUnique").mockResolvedValueOnce({
+        id: "leave_1",
+        employeeId: "emp_100",
+        status: LeaveStatus.APPROVED,
+      } as never);
+
+      await expect(cancelLeaveRequest("emp_100", "leave_1")).rejects.toThrow("already approved");
+    });
+
+    it("successfully cancels a pending leave request", async () => {
+      vi.spyOn(prisma.leaveRequest, "findUnique").mockResolvedValueOnce({
+        id: "leave_1",
+        employeeId: "emp_100",
+        status: LeaveStatus.PENDING,
+      } as never);
+
+      vi.spyOn(prisma.leaveRequest, "update").mockResolvedValueOnce({
+        id: "leave_1",
+        employeeId: "emp_100",
+        status: LeaveStatus.CANCELLED,
+      } as never);
+
+      const result = await cancelLeaveRequest("emp_100", "leave_1");
+      expect(result.status).toBe(LeaveStatus.CANCELLED);
+    });
+  });
+
+  describe("DELETE /api/v1/attendance/leave-requests/[id]", () => {
+    it("returns 401 when token is missing", async () => {
+      const req = new NextRequest("http://localhost:3000/api/v1/attendance/leave-requests/leave_1", {
+        method: "DELETE",
+      });
+      const res = await cancelLeaveRoute(req, { params: Promise.resolve({ id: "leave_1" }) });
+      expect(res.status).toBe(401);
+    });
+
+    it("successfully cancels leave request via DELETE endpoint", async () => {
+      vi.spyOn(prisma.leaveRequest, "findUnique").mockResolvedValueOnce({
+        id: "leave_1",
+        employeeId: "emp_100",
+        status: LeaveStatus.PENDING,
+      } as never);
+
+      vi.spyOn(prisma.leaveRequest, "update").mockResolvedValueOnce({
+        id: "leave_1",
+        employeeId: "emp_100",
+        status: LeaveStatus.CANCELLED,
+      } as never);
+
+      const req = new NextRequest("http://localhost:3000/api/v1/attendance/leave-requests/leave_1", {
+        method: "DELETE",
+        headers: {
+          authorization: `Bearer ${validToken}`,
+        },
+      });
+
+      const res = await cancelLeaveRoute(req, { params: Promise.resolve({ id: "leave_1" }) });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.ok).toBe(true);
+      expect(data.leaveRequestId).toBe("leave_1");
     });
   });
 });
