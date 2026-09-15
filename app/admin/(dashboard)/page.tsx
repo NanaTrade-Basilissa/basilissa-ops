@@ -15,7 +15,7 @@ import {
   BookA,
 } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
-import { requirePermission, branchScope } from "@/lib/modules/identity/server";
+import { requirePermission, branchScope, isSuperAdmin, getEmailQueueStats, listEmailJobs } from "@/lib/modules/identity/server";
 import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from "@/components/ui/card";
@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { MobileClockInDialog } from "@/components/admin/mobile-clock-in-dialog";
 import { GeneralQrButton } from "@/components/admin/general-qr-button";
+import { DashboardJobsCard } from "@/components/admin/dashboard-jobs-card";
 import { getEnv } from "@/lib/platform/env";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,7 @@ export const dynamic = "force-dynamic";
 
 export default async function OperationsDashboardPage() {
   const actor = await requirePermission("admin:access");
+  const isSuperAdminUser = isSuperAdmin(actor);
   const attScope = branchScope(actor, "attendance:read");
   const feedScope = branchScope(actor, "feedback:read");
 
@@ -67,6 +69,8 @@ export default async function OperationsDashboardPage() {
     aptitudeTestsCount,
     aptitudeAttemptsCount,
     employeesForDialog,
+    jobStats,
+    recentJobs,
   ] = await Promise.all([
     prisma.branch.findMany({
       where: branchWhere,
@@ -157,6 +161,8 @@ export default async function OperationsDashboardPage() {
       orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
       take: 50,
     }),
+    isSuperAdminUser ? getEmailQueueStats() : Promise.resolve(null),
+    isSuperAdminUser ? listEmailJobs({ pageSize: 6 }) : Promise.resolve(null),
   ]);
 
   // Lookup maps for fast join resolution
@@ -191,6 +197,12 @@ export default async function OperationsDashboardPage() {
               <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {todayKey} (Accra)
             </span>
+            {isSuperAdminUser && jobStats && jobStats.dead > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                <span className="size-1.5 rounded-full bg-rose-500 animate-ping" />
+                {jobStats.dead} Failed Job{jobStats.dead > 1 ? "s" : ""}
+              </span>
+            )}
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             {attScope.kind === "branches" && branches.length === 1
@@ -619,6 +631,11 @@ export default async function OperationsDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Super Admin Section: Background and System Jobs */}
+      {isSuperAdminUser && jobStats && recentJobs && (
+        <DashboardJobsCard stats={jobStats} jobs={recentJobs.jobs} />
+      )}
     </div>
   );
 }

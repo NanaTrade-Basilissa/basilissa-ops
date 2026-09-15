@@ -724,6 +724,7 @@ export async function retryEmailJobAction(jobId: string): Promise<{ success: boo
   const result = await retryEmailJob(jobId, actor);
   if (result.success) {
     revalidatePath("/admin/email-queue");
+    revalidatePath("/admin");
   }
   return result;
 }
@@ -739,6 +740,7 @@ export async function resendEmailJobAction(
   const result = await resendEmailJob(jobId, actor);
   if (result.success) {
     revalidatePath("/admin/email-queue");
+    revalidatePath("/admin");
   }
   return result;
 }
@@ -752,6 +754,7 @@ export async function cancelEmailJobAction(jobId: string): Promise<{ success: bo
   const result = await cancelEmailJob(jobId, actor);
   if (result.success) {
     revalidatePath("/admin/email-queue");
+    revalidatePath("/admin");
   }
   return result;
 }
