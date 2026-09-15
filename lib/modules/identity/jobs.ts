@@ -48,26 +48,26 @@ function buildInviteEmailHtml(url: string, expiresAt: Date, name?: string): stri
   const greeting = name ? `Hello ${escapeHtml(name.split(" ")[0]!)},` : "Hello,";
 
   return `
-  <div style="background:#f7f1e8;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-    <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;">
-      <h1 style="margin:0 0 16px;font-size:20px;color:#3f3226;">Your ${escapeHtml(APP_NAME)} account</h1>
-      <p style="margin:0 0 16px;font-size:15px;color:#3f3226;line-height:1.6;">
+  <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
+      <h1 style="margin:0 0 16px;font-size:20px;color:#18181B;font-weight:700;">Your ${escapeHtml(APP_NAME)} account</h1>
+      <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
         ${greeting} an account has been created for you. Choose a password using the
         link below and you are set up. It works once and expires in about
         ${minutes} minutes.
       </p>
       <p style="margin:0 0 24px;">
         <a href="${escapeHtml(url)}"
-           style="display:inline-block;background:#8a4b1f;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">
+           style="display:inline-block;background:#EFCE02;color:#18181B;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;">
           Choose a password
         </a>
       </p>
-      <p style="margin:0 0 8px;font-size:13px;color:#6b5c4d;line-height:1.6;">
+      <p style="margin:0 0 8px;font-size:13px;color:#71717A;line-height:1.6;">
         If the link has expired by the time you open this, use &ldquo;Forgotten
         password&rdquo; on the sign-in page and one will be sent straight away.
       </p>
-      <p style="margin:16px 0 0;font-size:12px;color:#9b8b7c;word-break:break-all;">
-        If the button does not work, paste this into your browser:<br />${escapeHtml(url)}
+      <p style="margin:16px 0 0;font-size:12px;color:#A1A1AA;word-break:break-all;">
+        If the button does not work, paste this into your browser:<br /><a href="${escapeHtml(url)}" style="color:#0284C7;text-decoration:underline;">${escapeHtml(url)}</a>
       </p>
     </div>
   </div>`;
@@ -77,25 +77,25 @@ function buildResetEmailHtml(resetUrl: string, expiresAt: Date): string {
   const minutes = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60_000));
 
   return `
-  <div style="background:#f7f1e8;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-    <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;">
-      <h1 style="margin:0 0 16px;font-size:20px;color:#3f3226;">Set a new password</h1>
-      <p style="margin:0 0 16px;font-size:15px;color:#3f3226;line-height:1.6;">
+  <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
+      <h1 style="margin:0 0 16px;font-size:20px;color:#18181B;font-weight:700;">Set a new password</h1>
+      <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
         Someone asked to reset the password for your ${escapeHtml(APP_NAME)} account.
         The link below works once and expires in about ${minutes} minutes.
       </p>
       <p style="margin:0 0 24px;">
         <a href="${escapeHtml(resetUrl)}"
-           style="display:inline-block;background:#8a4b1f;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">
+           style="display:inline-block;background:#EFCE02;color:#18181B;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;">
           Set a new password
         </a>
       </p>
-      <p style="margin:0 0 8px;font-size:13px;color:#6b5c4d;line-height:1.6;">
+      <p style="margin:0 0 8px;font-size:13px;color:#71717A;line-height:1.6;">
         If you did not ask for this, you can ignore it. Your password has not changed.
         Nobody can use the link without this email.
       </p>
-      <p style="margin:16px 0 0;font-size:12px;color:#9b8b7c;word-break:break-all;">
-        If the button does not work, paste this into your browser:<br />${escapeHtml(resetUrl)}
+      <p style="margin:16px 0 0;font-size:12px;color:#A1A1AA;word-break:break-all;">
+        If the button does not work, paste this into your browser:<br /><a href="${escapeHtml(resetUrl)}" style="color:#0284C7;text-decoration:underline;">${escapeHtml(resetUrl)}</a>
       </p>
     </div>
   </div>`;

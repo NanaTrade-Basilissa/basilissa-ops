@@ -85,8 +85,11 @@ export async function sendEmail({
     const env = getEnv();
     const resend = new Resend(env.RESEND_API_KEY!);
 
+    const rawFrom = env.RESEND_FROM_EMAIL!;
+    const from = rawFrom.includes("<") ? rawFrom : `Basilissa <${rawFrom}>`;
+
     const { data, error } = await resend.emails.send({
-      from: env.RESEND_FROM_EMAIL!,
+      from,
       to,
       subject,
       html,

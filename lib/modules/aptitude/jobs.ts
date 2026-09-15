@@ -35,22 +35,27 @@ function buildInvitationEmailHtml(url: string, testTitle: string, expiresAt: Dat
   const deadline = expiresAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 
   return `
-  <div style="background:#f7f1e8;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-    <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;">
-      <h1 style="margin:0 0 16px;font-size:20px;color:#3f3226;">${escapeHtml(testTitle)}</h1>
-      <p style="margin:0 0 16px;font-size:15px;color:#3f3226;line-height:1.6;">
+  <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
+      <div style="margin-bottom:16px;">
+        <span style="display:inline-block;padding:4px 10px;background:#FEFCE8;color:#854D0E;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">
+          Basilissa Aptitude Test
+        </span>
+      </div>
+      <h1 style="margin:0 0 16px;font-size:20px;color:#18181B;font-weight:700;">${escapeHtml(testTitle)}</h1>
+      <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
         Hello ${escapeHtml(first)}, you have been invited to take this aptitude test for
         ${escapeHtml(APP_NAME)}. The link below is yours alone and works once. It
         expires ${escapeHtml(deadline)}.
       </p>
       <p style="margin:0 0 24px;">
         <a href="${escapeHtml(url)}"
-           style="display:inline-block;background:#8a4b1f;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">
+           style="display:inline-block;background:#EFCE02;color:#18181B;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;">
           Start the test
         </a>
       </p>
-      <p style="margin:16px 0 0;font-size:12px;color:#9b8b7c;word-break:break-all;">
-        If the button does not work, paste this into your browser:<br />${escapeHtml(url)}
+      <p style="margin:16px 0 0;font-size:12px;color:#A1A1AA;word-break:break-all;">
+        If the button does not work, paste this into your browser:<br /><a href="${escapeHtml(url)}" style="color:#0284C7;text-decoration:underline;">${escapeHtml(url)}</a>
       </p>
     </div>
   </div>`;
@@ -168,46 +173,46 @@ function buildAptitudeCompletedEmailHtml(params: {
     : "Submitted by candidate";
 
   return `
-  <div style="background:#f7f1e8;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-      <div style="border-bottom:1px solid #eee;padding-bottom:16px;margin-bottom:20px;">
-        <span style="display:inline-block;padding:4px 8px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">
+  <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
+      <div style="border-bottom:1px solid #F4F4F5;padding-bottom:16px;margin-bottom:20px;">
+        <span style="display:inline-block;padding:4px 10px;background:#FEFCE8;color:#854D0E;border-radius:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
           Aptitude Test Completed
         </span>
-        <h1 style="margin:12px 0 0;font-size:20px;color:#3f3226;">${escapeHtml(params.testTitle)}</h1>
+        <h1 style="margin:12px 0 0;font-size:20px;color:#18181B;font-weight:700;">${escapeHtml(params.testTitle)}</h1>
       </div>
 
-      <p style="margin:0 0 16px;font-size:15px;color:#3f3226;line-height:1.6;">
+      <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
         A candidate has completed an aptitude test on ${escapeHtml(APP_NAME)}.
       </p>
 
-      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:14px;color:#3f3226;">
-        <tr style="border-bottom:1px solid #f0ece7;">
-          <td style="padding:8px 0;color:#786c5e;width:140px;">Candidate</td>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:14px;color:#18181B;">
+        <tr style="border-bottom:1px solid #F4F4F5;">
+          <td style="padding:8px 0;color:#71717A;width:140px;">Candidate</td>
           <td style="padding:8px 0;font-weight:600;">
             ${escapeHtml(params.candidateName)}
-            ${params.candidateEmail ? `<span style="font-weight:normal;color:#786c5e;">(${escapeHtml(params.candidateEmail)})</span>` : ""}
+            ${params.candidateEmail ? `<span style="font-weight:normal;color:#71717A;">(${escapeHtml(params.candidateEmail)})</span>` : ""}
           </td>
         </tr>
-        <tr style="border-bottom:1px solid #f0ece7;">
-          <td style="padding:8px 0;color:#786c5e;">Submitted at</td>
+        <tr style="border-bottom:1px solid #F4F4F5;">
+          <td style="padding:8px 0;color:#71717A;">Submitted at</td>
           <td style="padding:8px 0;">${escapeHtml(formattedDate)}</td>
         </tr>
-        <tr style="border-bottom:1px solid #f0ece7;">
-          <td style="padding:8px 0;color:#786c5e;">Submission status</td>
+        <tr style="border-bottom:1px solid #F4F4F5;">
+          <td style="padding:8px 0;color:#71717A;">Submission status</td>
           <td style="padding:8px 0;">${escapeHtml(submissionModeLabel)}</td>
         </tr>
-        <tr style="border-bottom:1px solid #f0ece7;">
-          <td style="padding:8px 0;color:#786c5e;">Score</td>
-          <td style="padding:8px 0;font-weight:600;font-size:16px;color:#8a4b1f;">
+        <tr style="border-bottom:1px solid #F4F4F5;">
+          <td style="padding:8px 0;color:#71717A;">Score</td>
+          <td style="padding:8px 0;font-weight:700;font-size:16px;color:#0284C7;">
             ${params.scoredPoints} / ${params.maxPoints} (${params.percent}%)
           </td>
         </tr>
         ${
           passStatus
             ? `
-        <tr style="border-bottom:1px solid #f0ece7;">
-          <td style="padding:8px 0;color:#786c5e;">Outcome</td>
+        <tr style="border-bottom:1px solid #F4F4F5;">
+          <td style="padding:8px 0;color:#71717A;">Outcome</td>
           <td style="padding:8px 0;">${passStatus}</td>
         </tr>`
             : ""
@@ -216,13 +221,13 @@ function buildAptitudeCompletedEmailHtml(params: {
 
       <p style="margin:0 0 24px;">
         <a href="${escapeHtml(params.url)}"
-           style="display:inline-block;background:#8a4b1f;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">
+           style="display:inline-block;background:#EFCE02;color:#18181B;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;">
           Review attempt in Admin
         </a>
       </p>
 
-      <p style="margin:16px 0 0;font-size:12px;color:#9b8b7c;word-break:break-all;">
-        Or copy and paste this link:<br />${escapeHtml(params.url)}
+      <p style="margin:16px 0 0;font-size:12px;color:#A1A1AA;word-break:break-all;">
+        Or copy and paste this link:<br /><a href="${escapeHtml(params.url)}" style="color:#0284C7;text-decoration:underline;">${escapeHtml(params.url)}</a>
       </p>
     </div>
   </div>`;

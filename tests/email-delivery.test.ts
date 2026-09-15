@@ -42,6 +42,15 @@ describe("a successful send", () => {
   it("reports sent, with the provider's id for tracing", async () => {
     expect(await sendEmail(message)).toEqual({ status: "sent", id: "msg_1" });
   });
+
+  it("formats the sender display name as Basilissa", async () => {
+    await sendEmail(message);
+    expect(resend.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: "Basilissa <noreply@basilissa.gh>",
+      }),
+    );
+  });
 });
 
 describe("outcomes that are not failures", () => {
