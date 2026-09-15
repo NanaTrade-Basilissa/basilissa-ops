@@ -1,8 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/platform/prisma";
 import { recordAuditBestEffort, SYSTEM_ACTOR } from "@/lib/platform/audit";
+import { enqueue } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { scoreResponse, type ScorableQuestion } from "./scoring";
+import { APTITUDE_NOTIFY_HR } from "./constants";
 
 const log = scoped("aptitude.finalize");
 
@@ -124,6 +126,13 @@ export async function finalizeAttempt(attemptId: string): Promise<FinalizeOutcom
           data: { awardedPoints: result.awardedPoints, possiblePoints: result.possiblePoints },
         });
       }
+
+      await enqueue(
+        APTITUDE_NOTIFY_HR,
+        { attemptId: attempt.id },
+        {},
+        tx,
+      );
     });
 
   if (claimedCount === 0) {

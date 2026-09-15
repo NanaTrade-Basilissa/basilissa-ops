@@ -13,12 +13,14 @@ import { escapeHtml, sendEmail } from "@/lib/platform/email";
 import { PermanentJobError } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { APP_NAME } from "@/lib/platform/constants";
-import { DEFAULT_INVITATION_TTL_HOURS } from "./constants";
+import { DEFAULT_INVITATION_TTL_HOURS, APTITUDE_NOTIFY_HR } from "./constants";
 import { finalizeAttempt } from "./finalize";
+import { getHrNotificationEmails } from "@/lib/modules/identity/hr-recipients";
 
 const log = scoped("aptitude.invitation-send");
 
 export const APTITUDE_INVITATION_SEND = "aptitude.invitation_send";
+export { APTITUDE_NOTIFY_HR };
 
 export const aptitudeInvitationSendPayload = z.object({
   email: z.string().email(),
@@ -133,3 +135,174 @@ export async function autoSubmitExpiredAttempts(now: Date = new Date(), limit = 
   }
   return { examined: expired.length, submitted };
 }
+
+export const aptitudeNotifyHrPayload = z.object({
+  attemptId: z.string().min(1),
+});
+
+function buildAptitudeCompletedEmailHtml(params: {
+  url: string;
+  testTitle: string;
+  candidateName: string;
+  candidateEmail: string | null;
+  submittedAt: Date;
+  autoSubmitted: boolean;
+  scoredPoints: number;
+  maxPoints: number;
+  percent: number;
+  passMarkPercent: number | null;
+}): string {
+  const formattedDate = params.submittedAt.toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const passStatus =
+    params.passMarkPercent !== null
+      ? params.percent >= params.passMarkPercent
+        ? `<span style="color:#166534;font-weight:600;">Passed (Pass mark: ${params.passMarkPercent}%)</span>`
+        : `<span style="color:#991b1b;font-weight:600;">Did not pass (Pass mark: ${params.passMarkPercent}%)</span>`
+      : null;
+
+  const submissionModeLabel = params.autoSubmitted
+    ? "Auto-submitted (time limit expired)"
+    : "Submitted by candidate";
+
+  return `
+  <div style="background:#f7f1e8;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+      <div style="border-bottom:1px solid #eee;padding-bottom:16px;margin-bottom:20px;">
+        <span style="display:inline-block;padding:4px 8px;background:#fef3c7;color:#92400e;border-radius:4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">
+          Aptitude Test Completed
+        </span>
+        <h1 style="margin:12px 0 0;font-size:20px;color:#3f3226;">${escapeHtml(params.testTitle)}</h1>
+      </div>
+
+      <p style="margin:0 0 16px;font-size:15px;color:#3f3226;line-height:1.6;">
+        A candidate has completed an aptitude test on ${escapeHtml(APP_NAME)}.
+      </p>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:14px;color:#3f3226;">
+        <tr style="border-bottom:1px solid #f0ece7;">
+          <td style="padding:8px 0;color:#786c5e;width:140px;">Candidate</td>
+          <td style="padding:8px 0;font-weight:600;">
+            ${escapeHtml(params.candidateName)}
+            ${params.candidateEmail ? `<span style="font-weight:normal;color:#786c5e;">(${escapeHtml(params.candidateEmail)})</span>` : ""}
+          </td>
+        </tr>
+        <tr style="border-bottom:1px solid #f0ece7;">
+          <td style="padding:8px 0;color:#786c5e;">Submitted at</td>
+          <td style="padding:8px 0;">${escapeHtml(formattedDate)}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f0ece7;">
+          <td style="padding:8px 0;color:#786c5e;">Submission status</td>
+          <td style="padding:8px 0;">${escapeHtml(submissionModeLabel)}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f0ece7;">
+          <td style="padding:8px 0;color:#786c5e;">Score</td>
+          <td style="padding:8px 0;font-weight:600;font-size:16px;color:#8a4b1f;">
+            ${params.scoredPoints} / ${params.maxPoints} (${params.percent}%)
+          </td>
+        </tr>
+        ${
+          passStatus
+            ? `
+        <tr style="border-bottom:1px solid #f0ece7;">
+          <td style="padding:8px 0;color:#786c5e;">Outcome</td>
+          <td style="padding:8px 0;">${passStatus}</td>
+        </tr>`
+            : ""
+        }
+      </table>
+
+      <p style="margin:0 0 24px;">
+        <a href="${escapeHtml(params.url)}"
+           style="display:inline-block;background:#8a4b1f;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px;">
+          Review attempt in Admin
+        </a>
+      </p>
+
+      <p style="margin:16px 0 0;font-size:12px;color:#9b8b7c;word-break:break-all;">
+        Or copy and paste this link:<br />${escapeHtml(params.url)}
+      </p>
+    </div>
+  </div>`;
+}
+
+export async function handleAptitudeNotifyHr(payload: unknown): Promise<void> {
+  const { attemptId } = aptitudeNotifyHrPayload.parse(payload);
+
+  const attempt = await prisma.aptitudeAttempt.findUnique({
+    where: { id: attemptId },
+    select: {
+      id: true,
+      submittedAt: true,
+      autoSubmitted: true,
+      declaredName: true,
+      declaredEmail: true,
+      scoredPoints: true,
+      maxPoints: true,
+      invitation: {
+        select: {
+          id: true,
+          candidateName: true,
+          candidateEmail: true,
+          test: {
+            select: {
+              id: true,
+              title: true,
+              passMarkPercent: true,
+              createdBy: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!attempt) {
+    scoped("aptitude.notify_hr").warn("attempt no longer exists, skipping", { attemptId });
+    return;
+  }
+
+  const candidateName = attempt.declaredName || attempt.invitation.candidateName || "Candidate";
+  const candidateEmail = attempt.declaredEmail || attempt.invitation.candidateEmail || null;
+  const testTitle = attempt.invitation.test.title;
+  const scoredPoints = attempt.scoredPoints ?? 0;
+  const maxPoints = attempt.maxPoints ?? 0;
+  const percent = maxPoints > 0 ? Math.round((scoredPoints / maxPoints) * 100) : 0;
+  const submittedAt = attempt.submittedAt ?? new Date();
+  const url = `${getEnv().NEXT_PUBLIC_APP_URL}/admin/aptitude-tests/${attempt.invitation.test.id}/attempts/${attempt.id}`;
+
+  const hrEmails = await getHrNotificationEmails(attempt.invitation.test.createdBy);
+  if (hrEmails.length === 0) {
+    scoped("aptitude.notify_hr").warn("no HR recipients found, skipping", { attemptId });
+    return;
+  }
+
+  const result = await sendEmail({
+    to: hrEmails,
+    subject: `Aptitude Test Completed: ${testTitle} (${candidateName})`,
+    html: buildAptitudeCompletedEmailHtml({
+      url,
+      testTitle,
+      candidateName,
+      candidateEmail,
+      submittedAt,
+      autoSubmitted: attempt.autoSubmitted,
+      scoredPoints,
+      maxPoints,
+      percent,
+      passMarkPercent: attempt.invitation.test.passMarkPercent,
+    }),
+    context: { attemptId, testId: attempt.invitation.test.id },
+  });
+
+  if (result.status === "failed") {
+    const detail = result.error instanceof Error ? result.error.message : String(result.error);
+    if (!result.retryable) {
+      throw new PermanentJobError(`Aptitude HR notification rejected: ${detail}`, result.error);
+    }
+    throw new Error(`Aptitude HR notification failed, will retry: ${detail}`);
+  }
+}
+

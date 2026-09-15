@@ -1,7 +1,17 @@
 import { FEEDBACK_NOTIFY, handleFeedbackNotify } from "@/lib/modules/feedback/jobs";
 import { PASSWORD_RESET_SEND, handlePasswordResetSend } from "@/lib/modules/identity/jobs";
-import { ASSESSMENT_INVITATION_SEND, handleAssessmentInvitationSend } from "@/lib/modules/assessments/jobs";
-import { APTITUDE_INVITATION_SEND, handleAptitudeInvitationSend } from "@/lib/modules/aptitude/jobs";
+import {
+  ASSESSMENT_INVITATION_SEND,
+  handleAssessmentInvitationSend,
+  ASSESSMENT_NOTIFY_HR,
+  handleAssessmentNotifyHr,
+} from "@/lib/modules/assessments/jobs";
+import {
+  APTITUDE_INVITATION_SEND,
+  handleAptitudeInvitationSend,
+  APTITUDE_NOTIFY_HR,
+  handleAptitudeNotifyHr,
+} from "@/lib/modules/aptitude/jobs";
 
 /**
  * Job type -> handler.
@@ -11,7 +21,7 @@ import { APTITUDE_INVITATION_SEND, handleAptitudeInvitationSend } from "@/lib/mo
  * the mechanism; this owns the vocabulary.
  *
  * Adding a job type means adding a line here. A queued job whose type is
- * missing from this map is treated as a failure and retried, then dies — which
+ * missing from this map is treated as a failure and retried, then dies: which
  * is the right outcome for a job enqueued by a newer deploy than the worker
  * running it, since the worker will be replaced shortly and the retry will
  * then succeed.
@@ -22,7 +32,9 @@ export const HANDLERS: Record<string, JobHandler> = {
   [FEEDBACK_NOTIFY]: handleFeedbackNotify,
   [PASSWORD_RESET_SEND]: handlePasswordResetSend,
   [ASSESSMENT_INVITATION_SEND]: handleAssessmentInvitationSend,
+  [ASSESSMENT_NOTIFY_HR]: handleAssessmentNotifyHr,
   [APTITUDE_INVITATION_SEND]: handleAptitudeInvitationSend,
+  [APTITUDE_NOTIFY_HR]: handleAptitudeNotifyHr,
 };
 
 export function resolveHandler(type: string): JobHandler | undefined {

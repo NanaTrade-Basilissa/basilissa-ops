@@ -1,7 +1,8 @@
 import "server-only";
-import { getEnv, getNotificationEmails } from "@/lib/platform/env";
+import { getEnv } from "@/lib/platform/env";
 import { escapeHtml, sendEmail, type SendEmailResult } from "@/lib/platform/email";
 import { formatAccraDateTime } from "@/lib/platform/date";
+import { getFeedbackRecipientsForBranch } from "./recipients";
 
 export type NotificationAnswer = { questionText: string; score: number; label: string };
 
@@ -78,20 +79,20 @@ function buildEmailHtml(payload: FeedbackNotificationPayload, dashboardUrl: stri
 }
 
 /**
- * Sends the feedback notification to every configured recipient.
+ * Sends the feedback notification to every configured recipient for the branch.
  *
  * Never throws, and returns what happened. The submission is already saved by
- * the time this runs, so a failure is not the customer's problem — but it is
- * somebody's, and the job that called this needs to know whether another
- * attempt is worth making.
+ * the time this runs, so a failure is not the customer's problem: it is
+ * logged, and the job that called this knows whether another attempt is needed.
  */
 export async function sendFeedbackNotification(
   payload: FeedbackNotificationPayload,
 ): Promise<SendEmailResult> {
   const dashboardUrl = `${getEnv().NEXT_PUBLIC_APP_URL}/admin/branches/${payload.branchId}#submission-${payload.submissionId}`;
+  const recipients = await getFeedbackRecipientsForBranch(payload.branchId);
 
   return sendEmail({
-    to: getNotificationEmails(),
+    to: recipients,
     subject: `New feedback: ${payload.branchName} (${payload.overallScore.toFixed(1)}/5)`,
     html: buildEmailHtml(payload, dashboardUrl),
     context: { submissionId: payload.submissionId },

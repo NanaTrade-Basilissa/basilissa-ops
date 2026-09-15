@@ -32,3 +32,6 @@ export const DEFAULT_INVITATION_TTL_HOURS = 168;
  */
 export const MIN_TIME_LIMIT_MINUTES = 5;
 export const MAX_TIME_LIMIT_MINUTES = 480;
+
+export const APTITUDE_NOTIFY_HR = "aptitude.notify_hr";
+

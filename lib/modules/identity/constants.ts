@@ -55,7 +55,9 @@ export const EMAIL_JOB_TYPES = [
   "feedback.notify",
   "identity.password_reset_send",
   "assessments.invitation_send",
+  "assessments.notify_hr",
   "aptitude.invitation_send",
+  "aptitude.notify_hr",
 ] as const;
 
 export type EmailJobType = (typeof EMAIL_JOB_TYPES)[number];

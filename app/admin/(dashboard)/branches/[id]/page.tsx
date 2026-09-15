@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { BranchDialog } from "@/components/admin/branch-dialog";
 import { BranchGeofenceCard } from "@/components/admin/branch-geofence-card";
+import { BranchFeedbackRecipientsCard } from "@/components/admin/branch-feedback-recipients-card";
+import { listConfigurableRecipientsForBranch } from "@/lib/modules/feedback/recipients";
 import { StatCard } from "@/components/admin/stat-card";
 import { CopyLinkButton } from "@/components/admin/copy-link-button";
 import {
@@ -52,10 +54,11 @@ export default async function BranchDetailPage({
   const branch = await prisma.branch.findUnique({ where: { id } });
   if (!branch) notFound();
 
-  const [branchData, allBranchesData, trend] = await Promise.all([
+  const [branchData, allBranchesData, trend, initialRecipients] = await Promise.all([
     getDashboardData({ branchId: branch.id }),
     getDashboardData({}),
     getBranchTrendSeries(branch.id, granularity),
+    listConfigurableRecipientsForBranch(branch.id),
   ]);
 
   const feedbackUrl = `${getEnv().NEXT_PUBLIC_APP_URL}/feedback?branch=${branch.slug}`;
@@ -152,6 +155,12 @@ export default async function BranchDetailPage({
       </div>
 
       <BranchGeofenceCard branch={branch} canWrite={canWrite} />
+
+      <BranchFeedbackRecipientsCard
+        branchId={branch.id}
+        initialRecipients={initialRecipients}
+        canWrite={canWrite}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

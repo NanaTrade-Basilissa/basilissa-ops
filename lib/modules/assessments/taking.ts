@@ -2,11 +2,13 @@ import "server-only";
 import { AssessmentQuestionKind, IdentityFieldMode } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { recordAuditBestEffort } from "@/lib/platform/audit";
+import { enqueue } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { hashInvitationToken } from "./invitations";
 import { scoreResponse, unansweredRequired, type ScorableQuestion } from "./scoring";
 import { publicDeclarationSchema } from "./validation";
 import { MAX_FREE_TEXT_LENGTH } from "./constants";
+import { ASSESSMENT_NOTIFY_HR } from "./jobs";
 
 /** Fixed shape a personal, HR-issued invitation always uses. */
 const PERSONAL_IDENTITY_MODES = { nameMode: IdentityFieldMode.REQUIRED, emailMode: IdentityFieldMode.OPTIONAL };
@@ -489,6 +491,13 @@ export async function submitResponse(token: string): Promise<SubmitOutcome> {
         data: { awardedPoints: result.awardedPoints, possiblePoints: result.possiblePoints },
       });
     }
+
+    await enqueue(
+      ASSESSMENT_NOTIFY_HR,
+      { responseId: invitation.response!.id },
+      {},
+      tx,
+    );
   }).catch((error) => {
     if (error instanceof AlreadySubmitted) return;
     throw error;

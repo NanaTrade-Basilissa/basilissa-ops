@@ -91,6 +91,7 @@ model User {
   mfaRecoveryCodes MfaRecoveryCode[]
   passwordResetTokens PasswordResetToken[]
   reviewedLeaveRequests LeaveRequest[] @relation("LeaveReviewedBy")
+  feedbackRecipients BranchFeedbackRecipient[]
 
   @@index([status])
   @@map("users")
@@ -234,6 +235,7 @@ model Branch {
   submissions FeedbackSubmission[]
   employees   EmployeeBranchAssignment[]
   leaveRequests LeaveRequest[]
+  feedbackRecipients BranchFeedbackRecipient[]
 
   @@index([isActive])
   @@map("branches")
@@ -1656,4 +1658,23 @@ model AptitudeAnswer {
 
   @@unique([attemptId, questionId])
   @@map("aptitude_answers")
+}
+
+model BranchFeedbackRecipient {
+  id        String   @id @default(cuid())
+  branchId  String
+  email     String
+  name      String?
+  roleLabel String?
+  userId    String?
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([branchId, email])
+  @@index([branchId, enabled])
+  @@map("branch_feedback_recipients")
 }

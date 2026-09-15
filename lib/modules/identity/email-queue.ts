@@ -63,6 +63,15 @@ export function parseEmailJobPayload(type: string, rawPayload: unknown): {
       };
     }
 
+    case "assessments.notify_hr": {
+      const responseId = typeof payload.responseId === "string" ? payload.responseId : "";
+      return {
+        typeLabel: "Assessment Result (HR)",
+        recipient: "HR Team",
+        subject: responseId ? `Assessment completed: ${responseId}` : "Assessment completed",
+      };
+    }
+
     case "aptitude.invitation_send": {
       const email = typeof payload.email === "string" ? payload.email : "Unknown recipient";
       const title = typeof payload.testTitle === "string" ? payload.testTitle : "Aptitude Test";
@@ -71,6 +80,15 @@ export function parseEmailJobPayload(type: string, rawPayload: unknown): {
         typeLabel: "Aptitude Invite",
         recipient: email,
         subject: name ? `Aptitude Test: ${title} (${name})` : `Aptitude Test: ${title}`,
+      };
+    }
+
+    case "aptitude.notify_hr": {
+      const attemptId = typeof payload.attemptId === "string" ? payload.attemptId : "";
+      return {
+        typeLabel: "Aptitude Result (HR)",
+        recipient: "HR Team",
+        subject: attemptId ? `Aptitude test completed: ${attemptId}` : "Aptitude test completed",
       };
     }
 
