@@ -15,7 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatCard } from "@/components/admin/stat-card";
-import { requireFeature } from "@/lib/platform/features-guard";
 
 export const metadata: Metadata = { title: "Attendance day" };
 export const dynamic = "force-dynamic";
@@ -46,8 +45,6 @@ export default async function AttendanceDayPage({
   params: Promise<{ employeeId: string; date: string }>;
   searchParams?: Promise<{ branchId?: string }>;
 }) {
-  requireFeature("attendance");
-
   const { employeeId, date } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const { actor, scope } = await requireAnyBranchPermission("attendance:read");

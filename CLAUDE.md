@@ -122,8 +122,7 @@ verify the cleanup actually happened.
   here), worker. Containers run `NODE_ENV=production`.
 - Env precedence: `.env` then `.env.local` overriding it, for the app, the
   Prisma CLI and compose alike. Put local values in `.env.local`.
-- `FEATURE_ATTENDANCE=on` in `.env.local` keeps attendance visible locally; it
-  is off by default in a production build.
+- Attendance, scheduling, policy editor, and aptitude tests are fully live across all environments.
 - Rebuild after changing code the container runs: `docker compose build app worker`.
   There is no bind mount — the image has a baked copy.
 

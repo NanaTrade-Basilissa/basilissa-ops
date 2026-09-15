@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { startPublicAttempt } from "@/lib/modules/aptitude/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Logo } from "@/components/brand/logo";
@@ -12,14 +11,13 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * The public link's entry point — mints an ordinary invitation for whoever
+ * The public link entry point: mints an ordinary invitation for whoever
  * just opened it and hands off to the same per-invitation flow every
  * personal link uses. A fresh attempt on every visit: there is no session
  * here, so "the same person opened it twice" and "two different people
  * opened it" look identical, and are treated the same way.
  */
 export default async function PublicAptitudeTestEntryPage({ params }: { params: Promise<{ token: string }> }) {
-  requireFeature("aptitude");
   const { token } = await params;
   const outcome = await startPublicAttempt(decodeURIComponent(token));
 

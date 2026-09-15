@@ -40,7 +40,7 @@ export function EmployeeDetailContent({
   shiftAssignments,
   canWrite,
   canSchedule,
-  attendanceEnabled,
+  attendanceEnabled = true,
   attendanceHistory,
   onMutated,
 }: {
@@ -56,7 +56,7 @@ export function EmployeeDetailContent({
   }[];
   canWrite: boolean;
   canSchedule: boolean;
-  attendanceEnabled: boolean;
+  attendanceEnabled?: boolean;
   attendanceHistory?: EmployeeAttendanceHistoryData | null;
   onMutated?: () => void;
 }) {

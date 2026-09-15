@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { loadForTaking } from "@/lib/modules/aptitude/server";
 import {
   declareIdentityAction,
@@ -20,7 +19,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function TakeAptitudeTestPage({ params }: { params: Promise<{ token: string }> }) {
-  requireFeature("aptitude");
   const { token } = await params;
   const outcome = await loadForTaking(decodeURIComponent(token));
 

@@ -13,7 +13,6 @@ import {
 import { purgeExpiredPasswordResets } from "@/lib/modules/identity/jobs";
 import { purgeSentInvitationJobs } from "@/lib/modules/assessments/jobs";
 import { autoSubmitExpiredAttempts, purgeSentInvitationJobs as purgeSentAptitudeInvitationJobs } from "@/lib/modules/aptitude/jobs";
-import { featureSnapshot, isFeatureEnabled } from "@/lib/platform/features";
 import { resolveHandler } from "./registry";
 
 /**
@@ -127,43 +126,33 @@ async function runPeriodic(now: number): Promise<void> {
   if (now - lastPeriodicRun < PERIODIC_INTERVAL_MS) return;
   lastPeriodicRun = now;
 
-  /*
-    Skipped entirely when attendance is gated. There would be no days to close,
-    so it is not a correctness matter — but a polling worker already keeps
-    Neon's compute awake permanently (ADR 0001), and a query that cannot
-    return anything is pure cost.
-
-    Imported from `features`, not `features-guard`: the guard calls
-    `notFound()`, which would kill this process at startup.
-  */
-  if (isFeatureEnabled("attendance")) {
-    try {
-      const summary = await autoCloseStaleDays(new Date());
-      if (summary.closed > 0 || summary.examined > 0) {
-        logger.info("auto-close sweep", summary);
-      }
-    } catch (error) {
-      // A failed sweep must not stop the queue being drained.
-      logger.error("auto-close sweep failed", { error });
+  // Attendance sweeps
+  try {
+    const summary = await autoCloseStaleDays(new Date());
+    if (summary.closed > 0 || summary.examined > 0) {
+      logger.info("auto-close sweep", summary);
     }
+  } catch (error) {
+    // A failed sweep must not stop the queue being drained.
+    logger.error("auto-close sweep failed", { error });
+  }
 
-    try {
-      const reminderSummary = await dispatchUpcomingShiftReminders(new Date());
-      if (reminderSummary.remindersDispatched > 0) {
-        logger.info("shift reminders sweep", reminderSummary);
-      }
-    } catch (error) {
-      logger.error("shift reminders sweep failed", { error });
+  try {
+    const reminderSummary = await dispatchUpcomingShiftReminders(new Date());
+    if (reminderSummary.remindersDispatched > 0) {
+      logger.info("shift reminders sweep", reminderSummary);
     }
+  } catch (error) {
+    logger.error("shift reminders sweep failed", { error });
+  }
 
-    try {
-      const settlementSummary = await runDailySettlementSweep(new Date());
-      if (settlementSummary.settled > 0) {
-        logger.info("daily settlement sweep", settlementSummary);
-      }
-    } catch (error) {
-      logger.error("daily settlement sweep failed", { error });
+  try {
+    const settlementSummary = await runDailySettlementSweep(new Date());
+    if (settlementSummary.settled > 0) {
+      logger.info("daily settlement sweep", settlementSummary);
     }
+  } catch (error) {
+    logger.error("daily settlement sweep failed", { error });
   }
 
   // Expired password reset tokens, and the send jobs whose payloads carry the
@@ -175,36 +164,24 @@ async function runPeriodic(now: number): Promise<void> {
     logger.error("password reset purge failed", { error });
   }
 
-  // Same shape, tighter bound: an invitation token lives a week, not an hour,
-  // so its send job is swept the moment it succeeds rather than left for the
-  // full week. See `purgeSentInvitationJobs`.
   try {
     await purgeSentInvitationJobs(new Date());
   } catch (error) {
     logger.error("invitation send purge failed", { error });
   }
 
-  /*
-    Aptitude tests: gated the same way attendance is — no rows to find when
-    the module is off, and a polling worker already keeps Neon's compute
-    awake permanently (ADR 0001), so a query that cannot return anything is
-    pure cost. `loadForTaking` already force-submits opportunistically when
-    a candidate reopens an expired link; this is the backstop for someone
-    who never comes back at all.
-  */
-  if (isFeatureEnabled("aptitude")) {
-    try {
-      const summary = await autoSubmitExpiredAttempts(new Date());
-      if (summary.submitted > 0) logger.info("aptitude auto-submit sweep", summary);
-    } catch (error) {
-      logger.error("aptitude auto-submit sweep failed", { error });
-    }
+  // Aptitude sweeps: auto-submit expired attempts and purge sent invitation jobs.
+  try {
+    const summary = await autoSubmitExpiredAttempts(new Date());
+    if (summary.submitted > 0) logger.info("aptitude auto-submit sweep", summary);
+  } catch (error) {
+    logger.error("aptitude auto-submit sweep failed", { error });
+  }
 
-    try {
-      await purgeSentAptitudeInvitationJobs(new Date());
-    } catch (error) {
-      logger.error("aptitude invitation send purge failed", { error });
-    }
+  try {
+    await purgeSentAptitudeInvitationJobs(new Date());
+  } catch (error) {
+    logger.error("aptitude invitation send purge failed", { error });
   }
 }
 
@@ -241,7 +218,6 @@ async function tick(): Promise<void> {
 
 async function main(): Promise<void> {
   logger.info("worker starting", {
-    features: featureSnapshot(),
     pollIntervalMs: POLL_INTERVAL_MS,
     periodicIntervalMs: PERIODIC_INTERVAL_MS,
     batchSize: BATCH_SIZE,

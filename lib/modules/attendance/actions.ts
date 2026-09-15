@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireFeature } from "@/lib/platform/features-guard";
 import {
   CorrectionOperation,
   Prisma,
@@ -49,10 +48,6 @@ export async function updateAttendancePolicy(
   _prevState: PolicyFormState,
   formData: FormData,
 ): Promise<PolicyFormState> {
-  // Gated in the action as well as the page: a Server Action is reachable
-  // by direct POST without ever rendering the page in front of it.
-  requireFeature("attendance");
-
   const actor = await requirePermission("policy:write");
 
   const parsed = attendancePolicySchema.safeParse({
@@ -127,10 +122,6 @@ export async function recordManualAttendance(
   _prevState: AttendanceActionState,
   formData: FormData,
 ): Promise<AttendanceActionState> {
-  // Gated in the action as well as the page: a Server Action is reachable
-  // by direct POST without ever rendering the page in front of it.
-  requireFeature("attendance");
-
   const actor = await requirePermission("attendance:manual_entry", { branchId });
 
   const occurredAtRaw = String(formData.get("occurredAt") ?? "");
@@ -193,8 +184,6 @@ export async function recordManualAttendanceDirect(
   prevState: AttendanceActionState,
   formData: FormData,
 ): Promise<AttendanceActionState> {
-  requireFeature("attendance");
-
   const employeeId = String(formData.get("employeeId") ?? "");
   const branchId = String(formData.get("branchId") ?? "");
 
@@ -216,10 +205,6 @@ export async function correctAttendance(
   _prevState: AttendanceActionState,
   formData: FormData,
 ): Promise<AttendanceActionState> {
-  // Gated in the action as well as the page: a Server Action is reachable
-  // by direct POST without ever rendering the page in front of it.
-  requireFeature("attendance");
-
   const actor = await requirePermission("attendance:write", { branchId });
 
   const operation = String(formData.get("operation") ?? "") as CorrectionOperation;
@@ -269,8 +254,6 @@ export async function saveScheduleOverride(
   _prevState: ScheduleOverrideState,
   formData: FormData,
 ): Promise<ScheduleOverrideState> {
-  requireFeature("attendance");
-
   const employeeId = String(formData.get("employeeId") ?? "");
   const branchId = String(formData.get("branchId") ?? "");
   const dateKey = String(formData.get("dateKey") ?? "");
@@ -350,8 +333,6 @@ export async function clearScheduleOverride(
   _prevState: ScheduleOverrideState,
   formData: FormData,
 ): Promise<ScheduleOverrideState> {
-  requireFeature("attendance");
-
   const exceptionId = String(formData.get("exceptionId") ?? "");
   const branchId = String(formData.get("branchId") ?? "");
 
@@ -412,8 +393,6 @@ export async function resolveAttendanceDay(
   dateKey: string,
   input: ResolveDayInput,
 ): Promise<{ success: boolean; error?: string }> {
-  requireFeature("attendance");
-
   const actor = await requirePermission("attendance:write", { branchId });
   const policy = await resolvePolicy(branchId, new Date(`${dateKey}T00:00:00.000Z`));
 
@@ -486,7 +465,6 @@ export async function resolveAttendanceDay(
  * Triggers an on-demand sweep to close unclocked-out shifts that have exceeded their schedule.
  */
 export async function runDailyAttendanceSweepAction(): Promise<AutoCloseSummary> {
-  requireFeature("attendance");
   await requirePermission("attendance:write");
 
   const result = await autoCloseStaleDays();
@@ -511,7 +489,6 @@ export async function copyWeeklyScheduleAction(
   branchId: string,
   overwriteExisting: boolean = false,
 ): Promise<CopyWeeklyScheduleResult> {
-  requireFeature("attendance");
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(sourceWeekStart) || !/^\d{4}-\d{2}-\d{2}$/.test(targetWeekStart)) {
     return { ok: false, error: "Invalid week date format. Expected YYYY-MM-DD." };
@@ -649,8 +626,6 @@ export type BulkAssignShiftInput = {
 export async function bulkAssignShiftAction(
   input: BulkAssignShiftInput,
 ): Promise<{ ok: boolean; count?: number; error?: string; message?: string }> {
-  requireFeature("attendance");
-
   const { employeeIds, shiftId, daysOfWeek, validFrom, validTo, branchId } = input;
 
   if (!employeeIds || employeeIds.length === 0) {
@@ -726,8 +701,6 @@ export async function reviewLeaveRequestAction(
   decision: "APPROVED" | "REJECTED",
   managerNotes?: string,
 ): Promise<{ ok: boolean; message?: string; error?: string }> {
-  requireFeature("attendance");
-
   if (!leaveRequestId || !decision) {
     return { ok: false, error: "Invalid review parameters." };
   }

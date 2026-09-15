@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { requirePermission } from "@/lib/modules/identity/server";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { getAttemptDetail } from "@/lib/modules/aptitude/server";
 import { AttemptDetailContent } from "@/components/admin/attempt-detail-content";
 
@@ -15,7 +14,6 @@ export default async function AptitudeAttemptPage({
 }: {
   params: Promise<{ id: string; attemptId: string }>;
 }) {
-  requireFeature("aptitude");
   await requirePermission("aptitude:read");
   const { id, attemptId } = await params;
 

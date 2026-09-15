@@ -13,14 +13,12 @@ import {
 } from "@/lib/modules/identity/server";
 import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
-import { isFeatureEnabled } from "@/lib/platform/features";
 import {
   branchAssignmentSchema,
   employeeInputSchema,
   shiftAssignmentSchema,
   shiftInputSchema,
 } from "./validation";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { branchSpecBySlug, parseEmployeeWorkbook, resolveImportRows, type ResolvedImportRow } from "./import";
 import { getEmployee, listShiftAssignments, listShifts } from "./repository";
 import { getEmployeeAttendanceHistory } from "@/lib/modules/attendance/server";
@@ -439,9 +437,6 @@ function parseShift(formData: FormData) {
 }
 
 export async function createShift(_prevState: FormState, formData: FormData): Promise<FormState> {
-  // Scheduling travels with attendance, not with the employee record.
-  requireFeature("attendance");
-
   const parsed = parseShift(formData);
   if (!parsed.success) {
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
@@ -474,9 +469,6 @@ export async function updateShift(
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  // Scheduling travels with attendance, not with the employee record.
-  requireFeature("attendance");
-
   const parsed = parseShift(formData);
   if (!parsed.success) {
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
@@ -517,9 +509,6 @@ export async function assignShift(
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  // Scheduling travels with attendance, not with the employee record.
-  requireFeature("attendance");
-
   const actor = await requireAuth();
 
   const employee = await prisma.employee.findUnique({
@@ -586,7 +575,6 @@ export async function assignShift(
  */
 export async function getEmployeeDetailAction(employeeId: string) {
   const { actor, scope } = await requireAnyBranchPermission("employee:read");
-  const attendanceEnabled = isFeatureEnabled("attendance");
 
   const employee = await getEmployee(employeeId, scope);
   if (!employee) return null;
@@ -605,9 +593,8 @@ export async function getEmployeeDetailAction(employeeId: string) {
     employeeBranchIds.some((branchId) => can(actor, "schedule:write", { branchId }));
 
   const canReadAttendance =
-    attendanceEnabled &&
-    (can(actor, "attendance:read") ||
-      employeeBranchIds.some((branchId) => can(actor, "attendance:read", { branchId })));
+    can(actor, "attendance:read") ||
+    employeeBranchIds.some((branchId) => can(actor, "attendance:read", { branchId }));
 
   const [branches, shifts, shiftAssignments, attendanceHistory] = await Promise.all([
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -623,7 +610,7 @@ export async function getEmployeeDetailAction(employeeId: string) {
     shiftAssignments,
     canWrite,
     canSchedule,
-    attendanceEnabled,
+    attendanceEnabled: true,
     attendanceHistory,
   };
 }

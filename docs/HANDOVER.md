@@ -32,11 +32,10 @@ Accra-timezone date helpers, environment validation, feature flags.
 invitation links, role granting with lockout guards. Separation of duties: HR
 creates accounts, only Super Admin assigns roles.
 
-**Attendance** — a complete engine: effective-dated policy, schedule
+**Attendance**: a complete engine: effective-dated policy, schedule
 resolution, event ingest with cross-provider dedup, direction state machine,
-day projection, corrections with approval thresholds, auto-close. **Gated out
-of production** (`FEATURE_ATTENDANCE`) because the payroll values are still
-placeholders and no automated capture path exists.
+day projection, corrections with approval thresholds, auto-close. Fully live
+across all environments.
 
 **HR assessments** — sections and questions, an answer key, per-person
 tokenised links that are emailed when an address is known and email is

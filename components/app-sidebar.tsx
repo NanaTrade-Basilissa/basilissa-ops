@@ -19,21 +19,18 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import type { FeatureName } from "@/lib/platform/features";
 
 /**
  * The real admin sidebar, built on shadcn's Sidebar primitives
  * (`npx shadcn@latest add dashboard-01`) instead of the hand-rolled version
  * this replaced. Navigation data lives in `admin-nav.tsx`; this file is only
- * the shell — same routes, same feature-flag gating, same grouping.
+ * the shell: same routes and grouping.
  */
 export function AppSidebar({
-  enabledFeatures,
   user,
   permissions = [],
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  enabledFeatures: Partial<Record<FeatureName, boolean>>;
   user: { name: string; email: string };
   permissions?: string[];
 }) {
@@ -73,7 +70,6 @@ export function AppSidebar({
 
         {NAV_GROUPS.map((group) => {
           const items = group.items.filter((item) => {
-            if (item.feature && !enabledFeatures[item.feature]) return false;
             if (item.permission && !permissions.includes(item.permission)) return false;
             return true;
           });

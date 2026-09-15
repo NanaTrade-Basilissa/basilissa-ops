@@ -8,7 +8,6 @@ import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { getEnv, isEmailConfigured } from "@/lib/platform/env";
 import { enqueue } from "@/lib/platform/jobs";
 import { rateLimit } from "@/lib/platform/rate-limit";
-import { requireFeature } from "@/lib/platform/features-guard";
 import {
   answerSchema,
   aptitudeTestDetailsSchema,
@@ -51,7 +50,6 @@ export async function createAptitudeTestAction(
   _prev: AptitudeFormState,
   formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
 
   const parsed = aptitudeTestDetailsSchema.safeParse({
@@ -73,7 +71,6 @@ export async function updateAptitudeTestAction(
   _prev: AptitudeFormState,
   formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
 
   const parsed = aptitudeTestDetailsSchema.safeParse({
@@ -101,7 +98,6 @@ export async function updatePublicLinkAction(
   _prev: AptitudeFormState,
   formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
 
   const parsed = publicLinkConfigSchema.safeParse({
@@ -125,7 +121,6 @@ export async function addSectionAction(
   _prev: AptitudeFormState,
   formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
 
   const parsed = sectionSchema.safeParse({
@@ -148,7 +143,6 @@ export async function updateSectionAction(
   _prev: AptitudeFormState,
   formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
 
   const parsed = sectionSchema.safeParse({
@@ -175,7 +169,6 @@ export async function addQuestionAction(
   _prev: AptitudeFormState,
   formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
 
   const texts = formData.getAll("optionText").map(String);
@@ -207,7 +200,6 @@ export async function deleteQuestionAction(
   _prev: AptitudeFormState,
   formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
   const outcome = await deleteQuestion(String(formData.get("questionId") ?? ""), auditActorFrom(actor));
   if (!outcome.ok) return { error: outcome.message };
@@ -221,7 +213,6 @@ export async function publishAptitudeTestAction(
   _prev: AptitudeFormState,
   _formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
   const outcome = await publishAptitudeTest(testId, auditActorFrom(actor));
   if (!outcome.ok) return { error: outcome.message };
@@ -235,7 +226,6 @@ export async function closeAptitudeTestAction(
   _prev: AptitudeFormState,
   _formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
   const outcome = await closeAptitudeTest(testId, auditActorFrom(actor));
   if (!outcome.ok) return { error: outcome.message };
@@ -249,7 +239,6 @@ export async function deleteAptitudeTestAction(
   _prev: AptitudeFormState,
   _formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
   const outcome = await deleteAptitudeTest(testId, auditActorFrom(actor));
   if (!outcome.ok) return { error: outcome.message };
@@ -285,7 +274,6 @@ export async function inviteToAptitudeTestAction(
   _prev: InviteState,
   formData: FormData,
 ): Promise<InviteState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
 
   const parsed = invitationSchema.safeParse({
@@ -326,7 +314,6 @@ export async function inviteManyByEmailAction(
   _prev: BulkInviteState,
   formData: FormData,
 ): Promise<BulkInviteState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
 
   const raw = String(formData.get("candidates") ?? "");
@@ -351,7 +338,6 @@ export async function resendInvitationAction(
   _prev: InviteState,
   formData: FormData,
 ): Promise<InviteState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
 
   const invitationId = String(formData.get("invitationId") ?? "");
@@ -378,7 +364,6 @@ export async function revokeInvitationAction(
   _prev: AptitudeFormState,
   formData: FormData,
 ): Promise<AptitudeFormState> {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:write");
   const outcome = await revokeInvitation(String(formData.get("invitationId") ?? ""), auditActorFrom(actor));
   if (!outcome.ok) return { error: outcome.message ?? "Could not withdraw that link." };
@@ -407,7 +392,6 @@ export async function declareIdentityAction(
   _prev: DeclarationState,
   formData: FormData,
 ): Promise<DeclarationState> {
-  requireFeature("aptitude");
   const limit = await rateLimit(`aptitude-declare:${await clientIp()}`, 30, 15 * 60 * 1000);
   if (!limit.success) return { error: "Too many attempts. Please try again shortly." };
 
@@ -425,7 +409,6 @@ export async function saveAnswerAction(
   _prev: AnswerState,
   formData: FormData,
 ): Promise<AnswerState> {
-  requireFeature("aptitude");
   const limit = await rateLimit(`aptitude-answer:${await clientIp()}`, 600, 60 * 60 * 1000);
   if (!limit.success) return { error: "Too many changes at once. Please slow down." };
 
@@ -454,7 +437,6 @@ export async function recordTabAbsenceAction(
   leftAt: string,
   durationMs: number,
 ): Promise<void> {
-  requireFeature("aptitude");
   const limit = await rateLimit(`aptitude-tab-absence:${await clientIp()}`, 600, 60 * 60 * 1000);
   if (!limit.success) return;
 
@@ -464,7 +446,6 @@ export async function recordTabAbsenceAction(
 export type SubmitState = { error?: string; unanswered?: string[] } | undefined;
 
 export async function submitAptitudeTestAction(token: string, _prev: SubmitState): Promise<SubmitState> {
-  requireFeature("aptitude");
   const limit = await rateLimit(`aptitude-submit:${await clientIp()}`, 20, 15 * 60 * 1000);
   if (!limit.success) return { error: "Too many attempts. Please try again shortly." };
 

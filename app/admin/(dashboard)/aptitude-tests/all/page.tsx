@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft, Plus, Timer } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { listAptitudeTests } from "@/lib/modules/aptitude/server";
 import { createAptitudeTestAction } from "@/lib/modules/aptitude/actions";
 import { Button } from "@/components/ui/button";
@@ -14,7 +13,6 @@ export const metadata: Metadata = { title: "All aptitude tests" };
 export const dynamic = "force-dynamic";
 
 export default async function AllAptitudeTestsPage() {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:read");
   const canWrite = can(actor, "aptitude:write");
   const tests = await listAptitudeTests();

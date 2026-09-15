@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { CheckCircle2 } from "lucide-react";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { prisma } from "@/lib/platform/prisma";
 import { hashInvitationToken } from "@/lib/modules/aptitude/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +12,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AptitudeTestDonePage({ params }: { params: Promise<{ token: string }> }) {
-  requireFeature("aptitude");
   const { token } = await params;
 
   /*

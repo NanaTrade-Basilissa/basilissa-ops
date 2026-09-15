@@ -14,7 +14,6 @@ import { WeeklyScheduleGrid } from "@/components/admin/weekly-schedule-grid";
 import { ScheduleBranchSelect } from "@/components/admin/schedule-branch-select";
 import { ScheduleCopyWeekDialog } from "@/components/admin/schedule-copy-week-dialog";
 import { ScheduleBulkAssignDialog } from "@/components/admin/schedule-bulk-assign-dialog";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { accraDateKey, getAccraWeekStart, shiftDateKey } from "@/lib/platform/date";
 import { cn } from "@/lib/utils";
 
@@ -24,8 +23,6 @@ export const dynamic = "force-dynamic";
 type SearchParams = Promise<{ tab?: string; branchId?: string; week?: string }>;
 
 export default async function ShiftsPage({ searchParams }: { searchParams: SearchParams }) {
-  requireFeature("attendance");
-
   const { actor, scope } = await requireAnyBranchPermission("schedule:read");
   const canWriteAny = hasAnyPermission(actor, "schedule:write");
   const allowGlobal = can(actor, "schedule:write");

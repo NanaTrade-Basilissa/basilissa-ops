@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import { heldPermissions, requireAdminShell } from "@/lib/modules/identity/server";
-import { isFeatureEnabled } from "@/lib/platform/features";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -10,7 +9,6 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
   // enrolment page too, so gating it on MFA would redirect that page to
   // itself. Each page below applies its own permission and MFA check.
   const session = await requireAdminShell();
-  const enabledFeatures = { attendance: isFeatureEnabled("attendance"), aptitude: isFeatureEnabled("aptitude") };
   const userPermissions = heldPermissions(session);
 
   // Sidebar collapsed/expanded state persists across reloads via a cookie
@@ -29,7 +27,6 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
       }
     >
       <AppSidebar
-        enabledFeatures={enabledFeatures}
         user={{ name: session.name, email: session.email }}
         permissions={userPermissions}
       />

@@ -85,33 +85,9 @@ confirmed that all branches are and will stay in Ghana.
 anchoring must resolve per-branch — the column already supports it, the
 calculation code must actually read it.
 
-### 🟢 A5 — Attendance is gated out of production
+### 🟢 A5: Attendance is fully live in production
 
-**Where:** `lib/platform/features.ts`, `FEATURE_ATTENDANCE`
-
-Attendance, scheduling and the policy editor are hidden in production builds:
-the routes return 404, the navigation omits them, the Server Actions refuse a
-direct POST, and the worker skips the auto-close sweep. Employees stays
-visible; only the shift-assignment block inside it is conditional, because a
-shift cannot be created while the flag is off and a form that 404s on submit is
-worse than an absence.
-
-**Why gated:** the payroll thresholds are still placeholders (A1) and no real
-capture path exists. A manager could otherwise record attendance by hand and
-have it calculated with placeholder values, which is worse than the feature
-being absent because the numbers would look deliberate.
-
-**Environment-driven, no flag store.** Flipping one is a deploy, which is when
-you would enable a feature anyway, and a flag service would be another
-dependency to justify (ADR 0002).
-
-**Defaults are asymmetric on purpose:** on outside production so local work and
-tests need no setup, off in production so a flag nobody sets fails towards
-invisible rather than exposed. An unrecognised value is treated as unset, so a
-typo cannot silently enable something.
-
-**To enable:** set `FEATURE_ATTENDANCE=on` in the hosting platform's
-environment. Turn it on once A1 has real values and one capture path exists.
+Attendance, scheduling, the policy editor, and aptitude tests have been promoted to fully live across all environments. Feature flags have been removed. Access is now governed entirely by role-based permissions and branch scoping.
 
 ### 🟠 A4 — Production environment values
 

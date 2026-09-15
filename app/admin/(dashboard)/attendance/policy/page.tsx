@@ -10,7 +10,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { formatAccraDateTime } from "@/lib/platform/date";
-import { requireFeature } from "@/lib/platform/features-guard";
 
 export const metadata: Metadata = { title: "Attendance policy" };
 export const dynamic = "force-dynamic";
@@ -22,8 +21,6 @@ export default async function AttendancePolicyPage({
 }: {
   searchParams?: SearchParams;
 }) {
-  requireFeature("attendance");
-
   // Read gates the page; the Server Action re-checks write separately, because
   // actions are reachable by direct POST and a page-level check is not a
   // security boundary.

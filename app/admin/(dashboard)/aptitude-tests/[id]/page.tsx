@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { aptitudeTestSummary, getAptitudeTestForEditing, listInvitations } from "@/lib/modules/aptitude/server";
 import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
 import {
@@ -30,7 +29,6 @@ export const metadata: Metadata = { title: "Aptitude test" };
 export const dynamic = "force-dynamic";
 
 export default async function AptitudeTestPage({ params }: { params: Promise<{ id: string }> }) {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:read");
   const { id } = await params;
   const canWrite = can(actor, "aptitude:write");

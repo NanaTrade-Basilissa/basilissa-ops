@@ -5,7 +5,6 @@ import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { getEmployee, listShiftAssignments, listShifts } from "@/lib/modules/employees/server";
 import { getEmployeeAttendanceHistory } from "@/lib/modules/attendance/server";
 import { EmployeeDetailContent } from "@/components/admin/employee-detail-content";
-import { isFeatureEnabled } from "@/lib/platform/features";
 
 export const metadata: Metadata = { title: "Employee" };
 export const dynamic = "force-dynamic";
@@ -13,7 +12,6 @@ export const dynamic = "force-dynamic";
 export default async function EmployeePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { actor, scope } = await requireAnyBranchPermission("employee:read");
-  const attendanceEnabled = isFeatureEnabled("attendance");
 
   // Scoped lookup, not a fetch-then-check. A manager must not be able to reach
   // another branch's employee by guessing the id.
@@ -33,9 +31,8 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
     can(actor, "schedule:write") ||
     employeeBranchIds.some((branchId) => can(actor, "schedule:write", { branchId }));
   const canReadAttendance =
-    attendanceEnabled &&
-    (can(actor, "attendance:read") ||
-      employeeBranchIds.some((branchId) => can(actor, "attendance:read", { branchId })));
+    can(actor, "attendance:read") ||
+    employeeBranchIds.some((branchId) => can(actor, "attendance:read", { branchId }));
 
   const [branches, shifts, shiftAssignments, attendanceHistory] = await Promise.all([
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -53,7 +50,7 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
         shiftAssignments={shiftAssignments}
         canWrite={canWrite}
         canSchedule={canSchedule}
-        attendanceEnabled={attendanceEnabled}
+        attendanceEnabled={true}
         attendanceHistory={attendanceHistory}
       />
     </div>

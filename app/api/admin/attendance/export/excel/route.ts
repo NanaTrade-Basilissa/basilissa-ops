@@ -5,15 +5,12 @@ import {
   getTimesheetDetailedLogs,
   buildPayrollTimesheetWorkbook,
 } from "@/lib/modules/attendance/server";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  requireFeature("attendance");
-
   const { actor, scope } = await requireAnyBranchPermission("attendance:read");
 
   const { searchParams } = new URL(request.url);

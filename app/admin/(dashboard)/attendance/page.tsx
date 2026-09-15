@@ -29,7 +29,6 @@ import { MobileClockInDialog } from "@/components/admin/mobile-clock-in-dialog";
 import { AttendanceSweepButton } from "@/components/admin/attendance-sweep-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
-import { requireFeature } from "@/lib/platform/features-guard";
 
 export const metadata: Metadata = { title: "Attendance" };
 export const dynamic = "force-dynamic";
@@ -55,8 +54,6 @@ function hours(minutes: number): string {
 }
 
 export default async function AttendancePage({ searchParams }: { searchParams: SearchParams }) {
-  requireFeature("attendance");
-
   const { actor, scope } = await requireAnyBranchPermission("attendance:read");
   const raw = await searchParams;
 

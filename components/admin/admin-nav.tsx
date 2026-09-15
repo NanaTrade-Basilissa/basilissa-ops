@@ -15,15 +15,12 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import type { FeatureName } from "@/lib/platform/features";
 import type { Permission } from "@/lib/modules/identity/authorization";
 
 /**
- * Navigation data only — no rendering here. The actual sidebar is
+ * Navigation data only, no rendering here. The actual sidebar is
  * `components/app-sidebar.tsx` (shadcn's Sidebar primitives); this file
- * stays a plain data module so it can be read by both the sidebar and
- * `tests/features.test.ts`, which asserts every gated destination carries
- * its `feature` flag.
+ * stays a plain data module read by the sidebar.
  */
 
 export type NavItem = {
@@ -31,7 +28,6 @@ export type NavItem = {
   label: string;
   icon: LucideIcon;
   exact: boolean;
-  feature?: FeatureName;
   permission?: Permission;
 };
 
@@ -49,7 +45,7 @@ export const DASHBOARD_ITEM: NavItem = { href: "/admin", label: "Dashboard", ico
  * Grouped by purpose rather than left as one flat list, so the sidebar reads
  * as "what is this system made of" rather than growing sideways forever.
  * Adding a feature means adding one line to the group it belongs to, or a
- * new group — not renumbering anything.
+ * new group, not renumbering anything.
  */
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
@@ -57,9 +53,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: "/admin/employees", label: "Employees", icon: Users, exact: false, permission: "employee:read" },
       { href: "/admin/branches", label: "Branches", icon: Store, exact: false, permission: "branch:read" },
-      { href: "/admin/attendance", label: "Attendance", icon: ClipboardList, exact: true, feature: "attendance", permission: "attendance:read" },
-      { href: "/admin/shifts", label: "Shifts", icon: CalendarRange, exact: false, feature: "attendance", permission: "schedule:read" },
-      { href: "/admin/attendance/policy", label: "Attendance policy", icon: CalendarClock, exact: false, feature: "attendance", permission: "policy:read" },
+      { href: "/admin/attendance", label: "Attendance", icon: ClipboardList, exact: true, permission: "attendance:read" },
+      { href: "/admin/shifts", label: "Shifts", icon: CalendarRange, exact: false, permission: "schedule:read" },
+      { href: "/admin/attendance/policy", label: "Attendance policy", icon: CalendarClock, exact: false, permission: "policy:read" },
     ],
   },
   {
@@ -70,7 +66,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "HR",
     items: [
       { href: "/admin/assessments", label: "Assessments", icon: ClipboardCheck, exact: false, permission: "assessment:read" },
-      { href: "/admin/aptitude-tests", label: "Aptitude Tests", icon: Brain, exact: false, feature: "aptitude", permission: "aptitude:read" },
+      { href: "/admin/aptitude-tests", label: "Aptitude Tests", icon: Brain, exact: false, permission: "aptitude:read" },
     ],
   },
   {

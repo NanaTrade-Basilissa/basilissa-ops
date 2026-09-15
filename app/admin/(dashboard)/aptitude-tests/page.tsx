@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, FileEdit, ListChecks, Plus, Send, Timer } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
-import { requireFeature } from "@/lib/platform/features-guard";
 import { aptitudeOverview } from "@/lib/modules/aptitude/server";
 import { createAptitudeTestAction } from "@/lib/modules/aptitude/actions";
 import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
@@ -17,13 +16,12 @@ export const metadata: Metadata = { title: "Aptitude Tests" };
 export const dynamic = "force-dynamic";
 
 /**
- * The landing page for Aptitude Tests — mirrors the Assessments overview
+ * The landing page for Aptitude Tests, mirrors the Assessments overview
  * page's shape (`app/admin/(dashboard)/assessments/page.tsx`), for the same
  * reason: a high-level picture before authoring or invitations, which stay
  * on `/all`, `/new`, `/[id]`.
  */
 export default async function AptitudeTestsOverviewPage() {
-  requireFeature("aptitude");
   const actor = await requirePermission("aptitude:read");
   const canWrite = can(actor, "aptitude:write");
   const overview = await aptitudeOverview();
