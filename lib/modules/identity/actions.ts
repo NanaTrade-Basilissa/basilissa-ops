@@ -673,7 +673,9 @@ export async function getUserDetailAction(userId: string) {
   const activeAssignments = user.roleAssignments.filter((a) => a.validTo === null || a.validTo > now);
   const revokedAssignments = user.roleAssignments.filter((a) => a.validTo !== null && a.validTo <= now);
 
-  const isTargetSuperAdmin = activeAssignments.some((a) => a.role === Role.SUPER_ADMIN);
+  const isTargetSuperAdmin =
+    activeAssignments.some((a) => a.role === Role.SUPER_ADMIN) ||
+    user.roleAssignments.some((a) => a.role === Role.SUPER_ADMIN);
   if (isTargetSuperAdmin && !isSuperAdmin(actor)) {
     return null;
   }

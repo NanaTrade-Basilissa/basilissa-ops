@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ShieldAlert, UserPlus } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
+import { Role, type Prisma } from "@prisma/client";
 import {
   MFA_REQUIRED_ROLES,
   can,
@@ -22,7 +23,19 @@ export default async function UsersPage() {
   const canWrite = can(actor, "user:write");
   const isSuperAdminViewer = isSuperAdmin(actor);
 
-  const users = await prisma.user.findMany({
+  const now = new Date();
+  const where: Prisma.UserWhereInput = isSuperAdminViewer
+    ? {}
+    : {
+        roleAssignments: {
+          none: {
+            role: Role.SUPER_ADMIN,
+          },
+        },
+      };
+
+  const rawUsers = await prisma.user.findMany({
+    where,
     orderBy: [{ status: "asc" }, { email: "asc" }],
     select: {
       id: true,
@@ -32,12 +45,16 @@ export default async function UsersPage() {
       lastLoginAt: true,
       mfaEnabledAt: true,
       roleAssignments: {
-        where: { OR: [{ validTo: null }, { validTo: { gt: new Date() } }] },
+        where: { OR: [{ validTo: null }, { validTo: { gt: now } }] },
         select: { role: true, scopeType: true, scopeId: true },
       },
       _count: { select: { mfaRecoveryCodes: { where: { usedAt: null } } } },
     },
   });
+
+  const users = isSuperAdminViewer
+    ? rawUsers
+    : rawUsers.filter((u) => !u.roleAssignments.some((ra) => ra.role === Role.SUPER_ADMIN));
 
   const branchIds = users.flatMap((user) =>
     user.roleAssignments.filter((a) => a.scopeType === "BRANCH").map((a) => a.scopeId),

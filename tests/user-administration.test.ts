@@ -5,7 +5,7 @@ import {
   grantRoleSchema,
   userStatusSchema,
 } from "@/lib/modules/identity/validation";
-import { permissionsForRole } from "@/lib/modules/identity/authorization";
+import { isSuperAdmin, permissionsForRole } from "@/lib/modules/identity/authorization";
 import { MFA_REQUIRED_ROLES } from "@/lib/modules/identity/constants";
 
 /**
@@ -122,3 +122,48 @@ describe("what a granted role implies", () => {
     );
   });
 });
+
+describe("super admin visibility and privacy", () => {
+  it("only treats active super admins as super admin viewers", () => {
+    const superAdminActor = {
+      userId: "sa_1",
+      email: "sa@basilissa.gh",
+      status: UserStatus.ACTIVE,
+      assignments: [{ role: Role.SUPER_ADMIN, scopeType: ScopeType.GLOBAL, scopeId: null }],
+    };
+    const adminActor = {
+      userId: "adm_1",
+      email: "adm@basilissa.gh",
+      status: UserStatus.ACTIVE,
+      assignments: [{ role: Role.ADMINISTRATOR, scopeType: ScopeType.GLOBAL, scopeId: null }],
+    };
+    const inactiveSuperAdmin = {
+      userId: "sa_2",
+      email: "sa2@basilissa.gh",
+      status: UserStatus.SUSPENDED,
+      assignments: [{ role: Role.SUPER_ADMIN, scopeType: ScopeType.GLOBAL, scopeId: null }],
+    };
+
+    expect(isSuperAdmin(superAdminActor as any)).toBe(true);
+    expect(isSuperAdmin(adminActor as any)).toBe(false);
+    expect(isSuperAdmin(inactiveSuperAdmin as any)).toBe(false);
+  });
+
+  it("filters out super admin accounts from non-super-admin user lists", () => {
+    const users = [
+      { id: "u1", name: "Alice Admin", roleAssignments: [{ role: Role.ADMINISTRATOR }] },
+      { id: "u2", name: "Sam Super", roleAssignments: [{ role: Role.SUPER_ADMIN }] },
+      { id: "u3", name: "Bob Staff", roleAssignments: [{ role: Role.EMPLOYEE }] },
+    ];
+
+    const filterForViewer = (isSuperAdminViewer: boolean) =>
+      isSuperAdminViewer
+        ? users
+        : users.filter((u) => !u.roleAssignments.some((ra) => ra.role === Role.SUPER_ADMIN));
+
+    expect(filterForViewer(true)).toHaveLength(3);
+    expect(filterForViewer(false)).toHaveLength(2);
+    expect(filterForViewer(false).map((u) => u.id)).toEqual(["u1", "u3"]);
+  });
+});
+

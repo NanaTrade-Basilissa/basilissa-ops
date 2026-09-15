@@ -33,35 +33,35 @@ export function UsersTable({
   canWrite: boolean;
   isSuperAdminViewer?: boolean;
 }) {
+  const visibleUsers = useMemo(() => {
+    if (isSuperAdminViewer) return users;
+    return users.filter(
+      (u) => !u.isSuperAdmin && !u.roles.some((r) => r.role === "SUPER_ADMIN"),
+    );
+  }, [users, isSuperAdminViewer]);
+
   const columns = useMemo(() => columnHelper.columns([
     columnHelper.display({
       id: "name",
       header: "Name",
-      cell: ({ row }) => {
-        const isProtectedSuperAdmin = !isSuperAdminViewer && row.original.isSuperAdmin;
-        return (
-          <>
-            {isProtectedSuperAdmin ? (
-              <span className="font-medium text-foreground">{row.original.name}</span>
-            ) : (
-              <UserDetailSheet
-                userId={row.original.id}
-                trigger={
-                  <button type="button" className="font-medium underline-offset-4 hover:underline">
-                    {row.original.name}
-                  </button>
-                }
-              />
-            )}
-            <span className="block text-xs text-muted-foreground">{row.original.email}</span>
-            {row.original.status !== "ACTIVE" && (
-              <Badge variant="destructive" className="mt-1 text-xs">
-                {row.original.status.toLowerCase()}
-              </Badge>
-            )}
-          </>
-        );
-      },
+      cell: ({ row }) => (
+        <>
+          <UserDetailSheet
+            userId={row.original.id}
+            trigger={
+              <button type="button" className="font-medium underline-offset-4 hover:underline">
+                {row.original.name}
+              </button>
+            }
+          />
+          <span className="block text-xs text-muted-foreground">{row.original.email}</span>
+          {row.original.status !== "ACTIVE" && (
+            <Badge variant="destructive" className="mt-1 text-xs">
+              {row.original.status.toLowerCase()}
+            </Badge>
+          )}
+        </>
+      ),
     }),
     columnHelper.display({
       id: "roles",
@@ -105,30 +105,20 @@ export function UsersTable({
           columnHelper.display({
             id: "actions",
             header: () => <span className="sr-only">Actions</span>,
-            cell: ({ row }) => {
-              const isProtectedSuperAdmin = !isSuperAdminViewer && row.original.isSuperAdmin;
-              if (isProtectedSuperAdmin) {
-                return (
-                  <span className="text-xs text-muted-foreground italic px-2">
-                    Super Admin
-                  </span>
-                );
-              }
-              return (
-                <UserDetailSheet
-                  userId={row.original.id}
-                  trigger={
-                    <Button variant="ghost" size="sm">
-                      Manage
-                    </Button>
-                  }
-                />
-              );
-            },
+            cell: ({ row }) => (
+              <UserDetailSheet
+                userId={row.original.id}
+                trigger={
+                  <Button variant="ghost" size="sm">
+                    Manage
+                  </Button>
+                }
+              />
+            ),
           }),
         ]
       : []),
-  ]), [canWrite, isSuperAdminViewer]);
+  ]), [canWrite]);
 
-  return <DataTable columns={columns} data={users} />;
+  return <DataTable columns={columns} data={visibleUsers} />;
 }
