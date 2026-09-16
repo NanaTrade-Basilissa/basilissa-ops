@@ -32,6 +32,8 @@ import {
   beginMfaEnrolment,
   confirmMfaEnrolment,
   hasMfaEnabled,
+  recommendsMfa,
+  requiresMfa,
   resetMfa,
   verifyMfaChallenge,
 } from "./mfa";
@@ -86,7 +88,12 @@ export async function login(
   const { email, password } = parsed.data;
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, passwordHash: true, status: true },
+    select: {
+      id: true,
+      passwordHash: true,
+      status: true,
+      roleAssignments: { select: { role: true } },
+    },
   });
 
   const passwordMatches = await bcrypt.compare(
@@ -111,7 +118,8 @@ export async function login(
   // Password proven. If this account has a second factor, check whether the device
   // is trusted. A trusted device bypasses the second factor challenge for 30 days.
   let mfaBypassedViaTrustedDevice = false;
-  if (await hasMfaEnabled(user.id)) {
+  const userHasMfa = await hasMfaEnabled(user.id);
+  if (userHasMfa) {
     const trusted = await isDeviceTrusted(user.id);
     if (!trusted) {
       await createMfaPendingToken(user.id);
@@ -136,6 +144,16 @@ export async function login(
     entityId: user.id,
     metadata: mfaBypassedViaTrustedDevice ? { secondFactor: "trusted_device_bypass" } : undefined,
   });
+
+  const roles = user.roleAssignments.map((ra) => ra.role);
+  if (!userHasMfa) {
+    if (requiresMfa(roles)) {
+      redirect("/admin/security?enrol=required");
+    }
+    if (recommendsMfa(roles)) {
+      redirect("/admin/security?enrol=suggested");
+    }
+  }
 
   redirect("/admin");
 }

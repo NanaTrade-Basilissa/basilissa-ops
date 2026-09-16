@@ -3,7 +3,9 @@ import path from "node:path";
 const pathJoin = path.join;
 import { describe, expect, it } from "vitest";
 import { permissionsForRole } from "@/lib/modules/identity/authorization";
-import { MFA_REQUIRED_ROLES } from "@/lib/modules/identity/constants";
+import { MFA_RECOMMENDED_ROLES, MFA_REQUIRED_ROLES } from "@/lib/modules/identity/constants";
+import { recommendsMfa, requiresMfa } from "@/lib/modules/identity/server";
+import { Role } from "@prisma/client";
 
 /**
  * Structural tests, deliberately.
@@ -140,6 +142,28 @@ describe("everyone required to enrol can actually reach enrolment", () => {
     for (const role of MFA_REQUIRED_ROLES) {
       expect(permissionsForRole(role)).toContain("admin:access");
     }
+  });
+
+  it("every MFA-recommended role holds admin:access", () => {
+    for (const role of MFA_RECOMMENDED_ROLES) {
+      expect(permissionsForRole(role)).toContain("admin:access");
+    }
+  });
+});
+
+describe("MFA classification helper functions", () => {
+  it("strictly requires MFA only for super admin", () => {
+    expect(requiresMfa([Role.SUPER_ADMIN])).toBe(true);
+    expect(requiresMfa([Role.ADMINISTRATOR])).toBe(false);
+    expect(requiresMfa([Role.HR])).toBe(false);
+    expect(requiresMfa([Role.BRANCH_MANAGER])).toBe(false);
+  });
+
+  it("recommends MFA for administrator and HR", () => {
+    expect(recommendsMfa([Role.ADMINISTRATOR])).toBe(true);
+    expect(recommendsMfa([Role.HR])).toBe(true);
+    expect(recommendsMfa([Role.SUPER_ADMIN])).toBe(false);
+    expect(recommendsMfa([Role.BRANCH_MANAGER])).toBe(false);
   });
 });
 

@@ -1,9 +1,10 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
+import Link from "next/link";
 import { Copy, Loader2, ShieldCheck, ShieldPlus } from "lucide-react";
 import type { EnrolmentState } from "@/lib/modules/identity/actions";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -55,15 +56,20 @@ export function MfaEnrolment({
               </li>
             ))}
           </ul>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void navigator.clipboard.writeText(state.recoveryCodes.join("\n"))}
-          >
-            <Copy className="size-4" />
-            Copy all
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void navigator.clipboard.writeText(state.recoveryCodes.join("\n"))}
+            >
+              <Copy className="size-4" />
+              Copy all
+            </Button>
+            <Link href="/admin" className={buttonVariants({ size: "sm" })}>
+              Continue to dashboard
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -114,21 +120,37 @@ export function MfaEnrolment({
       )}
 
       {!active ? (
-        <Button
-          type="button"
-          disabled={isStarting}
-          onClick={() => startTransition(async () => setStarted(await start()))}
-        >
-          {isStarting ? <Loader2 className="size-4 animate-spin" /> : <ShieldPlus className="size-4" />}
-          Set up two-step verification
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            disabled={isStarting}
+            onClick={() => startTransition(async () => setStarted(await start()))}
+          >
+            {isStarting ? <Loader2 className="size-4 animate-spin" /> : <ShieldPlus className="size-4" />}
+            Set up two-step verification
+          </Button>
+          {!required && (
+            <Link href="/admin" className={buttonVariants({ variant: "outline" })}>
+              Skip to dashboard
+            </Link>
+          )}
+        </div>
       ) : (
-        <Secret
-          state={active}
-          formAction={formAction}
-          isPending={isPending}
-          error={state.step === "error" ? state.error : undefined}
-        />
+        <div className="space-y-4">
+          <Secret
+            state={active}
+            formAction={formAction}
+            isPending={isPending}
+            error={state.step === "error" ? state.error : undefined}
+          />
+          {!required && (
+            <div>
+              <Link href="/admin" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                Skip for now
+              </Link>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

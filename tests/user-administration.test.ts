@@ -6,7 +6,7 @@ import {
   userStatusSchema,
 } from "@/lib/modules/identity/validation";
 import { isSuperAdmin, permissionsForRole } from "@/lib/modules/identity/authorization";
-import { MFA_REQUIRED_ROLES } from "@/lib/modules/identity/constants";
+import { MFA_RECOMMENDED_ROLES, MFA_REQUIRED_ROLES } from "@/lib/modules/identity/constants";
 
 /**
  * The lockout guards and the token behaviour are exercised against a real
@@ -114,11 +114,13 @@ describe("status changes", () => {
 });
 
 describe("what a granted role implies", () => {
-  // Granting one of these makes MFA mandatory for that person, so the UI has
-  // to be able to say so at the moment of granting rather than afterwards.
   it("marks the roles that will demand two-step verification", () => {
-    expect([...MFA_REQUIRED_ROLES].sort()).toEqual(
-      [Role.SUPER_ADMIN, Role.HR, Role.ADMINISTRATOR].sort(),
+    expect([...MFA_REQUIRED_ROLES].sort()).toEqual([Role.SUPER_ADMIN].sort());
+  });
+
+  it("marks the roles where two-step verification is recommended", () => {
+    expect([...MFA_RECOMMENDED_ROLES].sort()).toEqual(
+      [Role.ADMINISTRATOR, Role.HR].sort(),
     );
   });
 });
@@ -144,9 +146,10 @@ describe("super admin visibility and privacy", () => {
       assignments: [{ role: Role.SUPER_ADMIN, scopeType: ScopeType.GLOBAL, scopeId: null }],
     };
 
-    expect(isSuperAdmin(superAdminActor as any)).toBe(true);
-    expect(isSuperAdmin(adminActor as any)).toBe(false);
-    expect(isSuperAdmin(inactiveSuperAdmin as any)).toBe(false);
+    type SuperAdminParam = Parameters<typeof isSuperAdmin>[0];
+    expect(isSuperAdmin(superAdminActor as unknown as SuperAdminParam)).toBe(true);
+    expect(isSuperAdmin(adminActor as unknown as SuperAdminParam)).toBe(false);
+    expect(isSuperAdmin(inactiveSuperAdmin as unknown as SuperAdminParam)).toBe(false);
   });
 
   it("filters out super admin accounts from non-super-admin user lists", () => {

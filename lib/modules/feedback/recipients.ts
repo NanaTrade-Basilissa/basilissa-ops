@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/platform/prisma";
-import { auditActorFrom, type Actor } from "@/lib/modules/identity/server";
+import { auditActorFrom, type Actor } from "@/lib/modules/identity/authorization";
 import { recordAudit } from "@/lib/platform/audit";
 
 export type ConfigurableRecipient = {

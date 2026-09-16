@@ -18,6 +18,7 @@ export type UserRow = {
   mfaEnabledAt: Date | null;
   recoveryCodesLeft: number;
   requiresMfa: boolean;
+  recommendsMfa?: boolean;
   isSuperAdmin?: boolean;
   roles: { role: string; scopeType: string; branchName: string | null }[];
 };
@@ -92,6 +93,10 @@ export function UsersTable({
           </span>
         ) : row.original.requiresMfa ? (
           <Badge variant="destructive">required, not set up</Badge>
+        ) : row.original.recommendsMfa ? (
+          <Badge variant="outline" className="border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400">
+            optional
+          </Badge>
         ) : (
           <span className="text-sm text-muted-foreground">off</span>
         ),

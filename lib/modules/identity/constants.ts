@@ -35,8 +35,11 @@ export const TRUSTED_DEVICE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
  */
 export const MFA_REQUIRED_ROLES: readonly Role[] = [
   Role.SUPER_ADMIN,
-  Role.HR,
+];
+
+export const MFA_RECOMMENDED_ROLES: readonly Role[] = [
   Role.ADMINISTRATOR,
+  Role.HR,
 ];
 
 /**

@@ -349,3 +349,5 @@ export function heldPermissions(actor: Actor): Permission[] {
   return [...perms];
 }
 
+export { auditActorFrom } from "./audit";
+

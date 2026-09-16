@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { ShieldCheck, History } from "lucide-react";
 import {
+  MFA_RECOMMENDED_ROLES,
   MFA_REQUIRED_ROLES,
   can,
   hasMfaEnabled,
@@ -13,6 +15,7 @@ import { confirmMfa, startMfaEnrolment } from "@/lib/modules/identity/actions";
 import { MfaEnrolment } from "@/components/admin/mfa-enrolment";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
 
@@ -29,8 +32,9 @@ export default async function SecurityPage({
   // privileged ones yet.
   const actor = await requireAuth();
   const sp = await searchParams;
-  const redirectedHere = sp.enrol === "required";
   const roles = actor.assignments.map((assignment) => assignment.role);
+  const isRequiredRole = requiresMfa(roles);
+  const isEnrolPrompt = sp.enrol === "required" || sp.enrol === "suggested";
 
   const canViewAudit = can(actor, "user:read");
 
@@ -53,14 +57,32 @@ export default async function SecurityPage({
 
   const mfaCard = (
     <div className="mx-auto max-w-2xl space-y-6">
-      {redirectedHere && !enabled && (
-        <Alert variant="destructive">
-          <AlertTitle>Set this up to continue</AlertTitle>
-          <AlertDescription>
-            The page you tried to open needs two-step verification because of your role.
-            You can still sign in and reach this page, nothing else until it is set up.
-          </AlertDescription>
-        </Alert>
+      {isEnrolPrompt && !enabled && (
+        isRequiredRole ? (
+          <Alert variant="destructive">
+            <AlertTitle>Set this up to continue</AlertTitle>
+            <AlertDescription>
+              The page you tried to open needs two-step verification because of your role.
+              You can still sign in and reach this page, nothing else until it is set up.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert className="border-amber-200 bg-amber-50/50 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+            <ShieldCheck className="size-4 text-amber-600 dark:text-amber-400" />
+            <AlertTitle>Two-step verification recommended</AlertTitle>
+            <AlertDescription className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm">
+                We recommend setting up two-step verification to safeguard administrative features. You can set it up now or skip to the dashboard.
+              </span>
+              <Link
+                href="/admin"
+                className={buttonVariants({ variant: "outline", size: "sm", className: "shrink-0 bg-background" })}
+              >
+                Skip to dashboard
+              </Link>
+            </AlertDescription>
+          </Alert>
+        )
       )}
 
       <Card>
@@ -72,6 +94,8 @@ export default async function SecurityPage({
           <CardDescription>
             A code from your phone, on top of your password. Required for{" "}
             {MFA_REQUIRED_ROLES.join(", ").toLowerCase().replace(/_/g, " ")}.
+            {MFA_RECOMMENDED_ROLES.length > 0 &&
+              ` Recommended for ${MFA_RECOMMENDED_ROLES.join(" and ").toLowerCase().replace(/_/g, " ")}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -79,7 +103,7 @@ export default async function SecurityPage({
             start={startMfaEnrolment}
             confirm={confirmMfa}
             enabled={enabled}
-            required={requiresMfa(roles)}
+            required={isRequiredRole}
             remainingRecoveryCodes={remaining}
           />
         </CardContent>

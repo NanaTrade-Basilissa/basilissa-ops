@@ -3,6 +3,7 @@ import { ShieldAlert, UserPlus } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { Role, type Prisma } from "@prisma/client";
 import {
+  MFA_RECOMMENDED_ROLES,
   MFA_REQUIRED_ROLES,
   can,
   isSuperAdmin,
@@ -119,6 +120,7 @@ export default async function UsersPage() {
           mfaEnabledAt: user.mfaEnabledAt,
           recoveryCodesLeft: user._count.mfaRecoveryCodes,
           requiresMfa: user.roleAssignments.some((a) => MFA_REQUIRED_ROLES.includes(a.role)),
+          recommendsMfa: user.roleAssignments.some((a) => MFA_RECOMMENDED_ROLES.includes(a.role)),
           isSuperAdmin: user.roleAssignments.some((a) => a.role === "SUPER_ADMIN"),
           roles: user.roleAssignments.map((a) => ({
             role: a.role,

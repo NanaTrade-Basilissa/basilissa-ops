@@ -8,15 +8,19 @@ import { recordAudit, recordAuditBestEffort, type AuditActor } from "@/lib/platf
 import { scoped } from "@/lib/platform/logger";
 import { APP_NAME } from "@/lib/platform/constants";
 import { bumpSessionVersion } from "./session";
-import { MFA_REQUIRED_ROLES } from "./constants";
+import { MFA_RECOMMENDED_ROLES, MFA_REQUIRED_ROLES } from "./constants";
 
 const log = scoped("identity.mfa");
 const SEAL_PURPOSE = "mfa-totp";
 
-export { MFA_REQUIRED_ROLES };
+export { MFA_RECOMMENDED_ROLES, MFA_REQUIRED_ROLES };
 
 export function requiresMfa(roles: readonly Role[]): boolean {
   return roles.some((role) => MFA_REQUIRED_ROLES.includes(role));
+}
+
+export function recommendsMfa(roles: readonly Role[]): boolean {
+  return roles.some((role) => MFA_RECOMMENDED_ROLES.includes(role));
 }
 
 const RECOVERY_CODE_COUNT = 10;
