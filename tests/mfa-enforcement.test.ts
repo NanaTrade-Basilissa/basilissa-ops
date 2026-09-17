@@ -83,6 +83,17 @@ describe("the enrolment page stays reachable", () => {
     expect(body).not.toMatch(/requireMfaIfNeeded/);
     expect(body).toMatch(/requireAuth\(\)/);
   });
+
+  // Querying privileged data (like audit logs) on the enrolment page calls
+  // `requirePermission`, which delegates to `requireMfaIfNeeded` and redirects
+  // back to `/admin/security?enrol=required`. The enrolment page must not
+  // run those queries until MFA is actually confirmed.
+  it("does not execute permission-gated queries when MFA is required but not yet enabled", () => {
+    const page = read("app/admin/(dashboard)/security/page.tsx");
+    expect(page).toMatch(
+      /canViewAudit\s*=\s*can\(actor,\s*"user:read"\)\s*&&\s*\(!isRequiredRole\s*\|\|\s*enabled\)/,
+    );
+  });
 });
 
 describe("refusing someone does not bounce them into the thing that refused them", () => {

@@ -72,33 +72,47 @@ export function AptitudeTestBuilder({
         </p>
       )}
 
-      {sections.map((section, index) => (
-        <div key={section.id} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="flex items-start justify-between gap-2 border-b border-border bg-muted/40 px-5 py-3">
-            <div>
-              <h3 className="font-heading font-semibold text-foreground">
-                <span className="text-muted-foreground">Section {index + 1} · </span>
-                {section.title}
-              </h3>
-              {section.description && <p className="mt-0.5 text-sm text-muted-foreground">{section.description}</p>}
-            </div>
-            {editable && <EditSectionButton section={section} action={updateSectionAction} />}
-          </div>
+      {sections.map((section, index) => {
+        const offset = sections.slice(0, index).reduce((sum, s) => sum + s.questions.length, 0);
 
-          <div className="space-y-3 p-4">
-            {section.questions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No questions in this section yet.</p>
-            ) : (
-              <ol className="space-y-3">
-                {section.questions.map((question, qIndex) => {
-                  const KindIcon = KIND_ICON[question.kind];
-                  return (
-                    <li key={question.id} className="rounded-lg border border-border bg-background p-4 text-sm shadow-sm">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="flex flex-wrap items-baseline gap-2">
-                          <span className="font-medium text-foreground">
-                            {qIndex + 1}. {question.text}
-                          </span>
+        return (
+          <div key={section.id} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex items-start justify-between gap-2 border-b border-border bg-muted/40 px-5 py-3">
+              <div>
+                <h3 className="font-heading font-semibold text-foreground">
+                  <span className="text-muted-foreground">Section {index + 1} · </span>
+                  {section.title}
+                </h3>
+                {section.description && (
+                  <div className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
+                    {section.description.includes("|") ? (
+                      <div className="font-mono text-xs rounded bg-muted/50 p-2.5 border border-border/50 overflow-x-auto mt-1 text-foreground">
+                        {section.description}
+                      </div>
+                    ) : (
+                      section.description
+                    )}
+                  </div>
+                )}
+              </div>
+              {editable && <EditSectionButton section={section} action={updateSectionAction} />}
+            </div>
+
+            <div className="space-y-3 p-4">
+              {section.questions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No questions in this section yet.</p>
+              ) : (
+                <ol className="space-y-3">
+                  {section.questions.map((question, qIndex) => {
+                    const KindIcon = KIND_ICON[question.kind];
+                    const questionNumber = offset + qIndex + 1;
+                    return (
+                      <li key={question.id} className="rounded-lg border border-border bg-background p-4 text-sm shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <span className="font-medium text-foreground whitespace-pre-line">
+                              {questionNumber}. {question.text}
+                            </span>
                           <Badge variant="secondary" className="gap-1 text-xs font-normal">
                             <KindIcon className="size-3" />
                             {QUESTION_KIND_LABEL[question.kind]}
@@ -161,7 +175,8 @@ export function AptitudeTestBuilder({
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {editable && (
         <form action={addSection} className="space-y-3 rounded-xl border border-dashed border-border p-4">

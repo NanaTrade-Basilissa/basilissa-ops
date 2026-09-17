@@ -36,24 +36,28 @@ export default async function SecurityPage({
   const isRequiredRole = requiresMfa(roles);
   const isEnrolPrompt = sp.enrol === "required" || sp.enrol === "suggested";
 
-  const canViewAudit = can(actor, "user:read");
-
-  const [enabled, remaining, auditData] = await Promise.all([
+  const [enabled, remaining] = await Promise.all([
     hasMfaEnabled(actor.userId),
     remainingRecoveryCodes(actor.userId),
-    canViewAudit
-      ? listAuditLogs({
-          search: typeof sp.search === "string" ? sp.search : undefined,
-          action: typeof sp.action === "string" ? sp.action : undefined,
-          entityType: typeof sp.entityType === "string" ? sp.entityType : undefined,
-          actorEmail: typeof sp.actorEmail === "string" ? sp.actorEmail : undefined,
-          startDate: typeof sp.startDate === "string" ? sp.startDate : undefined,
-          endDate: typeof sp.endDate === "string" ? sp.endDate : undefined,
-          page: typeof sp.page === "string" ? Number(sp.page) : 1,
-          pageSize: typeof sp.pageSize === "string" ? Number(sp.pageSize) : 25,
-        })
-      : null,
   ]);
+
+  // A user whose role requires MFA must not invoke permission-gated queries
+  // (like listAuditLogs -> requirePermission -> requireMfaIfNeeded) before
+  // completing enrolment, or the page will redirect to itself in an infinite loop.
+  const canViewAudit = can(actor, "user:read") && (!isRequiredRole || enabled);
+
+  const auditData = canViewAudit
+    ? await listAuditLogs({
+        search: typeof sp.search === "string" ? sp.search : undefined,
+        action: typeof sp.action === "string" ? sp.action : undefined,
+        entityType: typeof sp.entityType === "string" ? sp.entityType : undefined,
+        actorEmail: typeof sp.actorEmail === "string" ? sp.actorEmail : undefined,
+        startDate: typeof sp.startDate === "string" ? sp.startDate : undefined,
+        endDate: typeof sp.endDate === "string" ? sp.endDate : undefined,
+        page: typeof sp.page === "string" ? Number(sp.page) : 1,
+        pageSize: typeof sp.pageSize === "string" ? Number(sp.pageSize) : 25,
+      })
+    : null;
 
   const mfaCard = (
     <div className="mx-auto max-w-2xl space-y-6">

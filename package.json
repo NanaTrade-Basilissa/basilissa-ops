@@ -16,6 +16,7 @@
     "db:seed": "prisma db seed",
     "db:seed:dev": "tsx prisma/seed-dev.ts",
     "db:seed:feedback": "tsx prisma/seed-feedback.ts",
+    "db:seed:data-analyst": "tsx prisma/seed-data-analyst-test.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "worker": "tsx --conditions=react-server worker/index.ts"

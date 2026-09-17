@@ -247,31 +247,45 @@ export function AptitudeRunner({
         {allQuestions.length} answered
       </p>
 
-      {sections.map((section, index) => (
-        <Card key={section.id}>
-          <CardHeader>
-            <CardTitle className="text-lg">
-              <span className="text-muted-foreground">Section {index + 1} · </span>
-              {section.title}
-            </CardTitle>
-            {section.description && <CardDescription>{section.description}</CardDescription>}
-          </CardHeader>
-          <CardContent className="space-y-8">
-            {section.questions.map((question, qIndex) => {
-              const answer = answers[question.id] ?? { options: [], text: "" };
-              const status = saving[question.id];
-              const missing = unanswered.has(question.id);
+      {sections.map((section, index) => {
+        const offset = sections.slice(0, index).reduce((sum, s) => sum + s.questions.length, 0);
 
-              return (
-                <fieldset
-                  key={question.id}
-                  disabled={locked}
-                  className={missing ? "rounded-lg border border-destructive/40 p-3" : undefined}
-                >
-                  <legend className="mb-2 text-sm font-medium">
-                    {qIndex + 1}. {question.text}
-                    {!question.required && <span className="ml-1 font-normal text-muted-foreground">(optional)</span>}
-                  </legend>
+        return (
+          <Card key={section.id}>
+            <CardHeader>
+              <CardTitle className="text-lg">
+                <span className="text-muted-foreground">Section {index + 1} · </span>
+                {section.title}
+              </CardTitle>
+              {section.description && (
+                <CardDescription className="whitespace-pre-wrap text-sm">
+                  {section.description.includes("|") ? (
+                    <span className="mt-2 block overflow-x-auto rounded-md border border-border/50 bg-muted/50 p-3 font-mono text-xs sm:text-sm text-foreground">
+                      {section.description}
+                    </span>
+                  ) : (
+                    section.description
+                  )}
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {section.questions.map((question, qIndex) => {
+                const answer = answers[question.id] ?? { options: [], text: "" };
+                const status = saving[question.id];
+                const missing = unanswered.has(question.id);
+                const questionNumber = offset + qIndex + 1;
+
+                return (
+                  <fieldset
+                    key={question.id}
+                    disabled={locked}
+                    className={missing ? "rounded-lg border border-destructive/40 p-3" : undefined}
+                  >
+                    <legend className="mb-2 text-sm font-medium whitespace-pre-line">
+                      {questionNumber}. {question.text}
+                      {!question.required && <span className="ml-1 font-normal text-muted-foreground">(optional)</span>}
+                    </legend>
 
                   {question.kind === "MULTI_CHOICE" && (
                     <p className="mb-2 text-xs text-muted-foreground">Choose all that apply.</p>
@@ -326,9 +340,10 @@ export function AptitudeRunner({
                 </fieldset>
               );
             })}
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        );
+      })}
 
       {submitState?.error && !timeUp && (
         <Alert variant="destructive">
