@@ -203,7 +203,7 @@ export function BranchForm({
               id="geofenceRadiusMeters"
               name="geofenceRadiusMeters"
               type="number"
-              min={10}
+              min={5}
               max={5000}
               defaultValue={defaultValues?.geofenceRadiusMeters ?? 150}
               className="w-28"

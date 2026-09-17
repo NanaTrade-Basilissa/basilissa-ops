@@ -68,6 +68,25 @@ describe("branchInputSchema geofence fields", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("accepts minimum radius of 5 meters", () => {
+    const result = branchInputSchema.safeParse({
+      ...baseValid,
+      geofenceRadiusMeters: 5,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.geofenceRadiusMeters).toBe(5);
+    }
+  });
+
+  it("rejects radius less than 5 meters", () => {
+    const result = branchInputSchema.safeParse({
+      ...baseValid,
+      geofenceRadiusMeters: 4,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("branchGeofenceUpdateSchema", () => {
@@ -106,6 +125,29 @@ describe("branchGeofenceUpdateSchema", () => {
     const result = branchGeofenceUpdateSchema.safeParse({
       latitude: "invalid",
       longitude: -0.187,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts minimum radius of 5 meters", () => {
+    const result = branchGeofenceUpdateSchema.safeParse({
+      latitude: 5.6037,
+      longitude: -0.187,
+      geofenceRadiusMeters: 5,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.geofenceRadiusMeters).toBe(5);
+    }
+  });
+
+  it("rejects radius less than 5 meters", () => {
+    const result = branchGeofenceUpdateSchema.safeParse({
+      latitude: 5.6037,
+      longitude: -0.187,
+      geofenceRadiusMeters: 4,
     });
 
     expect(result.success).toBe(false);

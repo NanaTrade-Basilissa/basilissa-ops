@@ -33,10 +33,10 @@ interface BranchGeofenceDialogProps {
 }
 
 const RADIUS_PRESETS = [
+  { label: "5m", value: 5, note: "Tight / Desk" },
+  { label: "15m", value: 15, note: "Office / Room" },
+  { label: "30m", value: 30, note: "Store / Dine-In" },
   { label: "50m", value: 50, note: "Kiosk / Express" },
-  { label: "100m", value: 100, note: "Standard Dine-In" },
-  { label: "150m", value: 150, note: "Mall / Large Unit" },
-  { label: "250m", value: 250, note: "Complex / Drive-thru" },
 ];
 
 export function BranchGeofenceDialog({
@@ -216,8 +216,17 @@ export function BranchGeofenceDialog({
                   Acceptable distance radius from branch center
                 </p>
               </div>
-              <div className="flex items-center gap-1 font-mono text-sm font-semibold">
-                <span>{radius}</span>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  id="geofenceRadiusMeters"
+                  name="geofenceRadiusMeters"
+                  type="number"
+                  min={5}
+                  max={5000}
+                  value={radius}
+                  onChange={(e) => setRadius(parseInt(e.target.value, 10) || 5)}
+                  className="w-20 text-right font-mono text-xs h-8"
+                />
                 <span className="text-xs font-normal text-muted-foreground">meters</span>
               </div>
             </div>
@@ -241,12 +250,9 @@ export function BranchGeofenceDialog({
               ))}
             </div>
 
-            <input
-              type="hidden"
-              id="geofenceRadiusMeters"
-              name="geofenceRadiusMeters"
-              value={radius}
-            />
+            {state?.fieldErrors?.geofenceRadiusMeters && (
+              <p className="text-xs text-destructive">{state.fieldErrors.geofenceRadiusMeters}</p>
+            )}
 
             <div className="pt-2 border-t border-border/50 flex items-center justify-between">
               <div>

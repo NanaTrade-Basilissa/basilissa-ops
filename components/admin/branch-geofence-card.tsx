@@ -197,7 +197,11 @@ export function BranchGeofenceCard({ branch, canWrite }: BranchGeofenceCardProps
                   <span className="text-xs font-normal text-muted-foreground">meters perimeter</span>
                 </div>
                 <div className="text-[11px] text-muted-foreground">
-                  {branch.geofenceRadiusMeters <= 60
+                  {branch.geofenceRadiusMeters <= 10
+                    ? "Tight / Desk perimeter"
+                    : branch.geofenceRadiusMeters <= 25
+                    ? "Office / Room perimeter"
+                    : branch.geofenceRadiusMeters <= 60
                     ? "Compact / Kiosk perimeter"
                     : branch.geofenceRadiusMeters <= 120
                     ? "Standard Dine-In radius"

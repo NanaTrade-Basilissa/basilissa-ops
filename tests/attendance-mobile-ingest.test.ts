@@ -107,6 +107,7 @@ describe("recordMobilePunch", () => {
       direction: AttendanceDirection.IN,
       coordinates: { latitude: 5.622, longitude: -0.1742, accuracyMeters: 10 },
       _ingestFn: ingestSpy,
+      skipScheduleCheck: true,
     });
 
     expect(result.ok).toBe(true);
@@ -157,5 +158,49 @@ describe("recordMobilePunch", () => {
     const command = ingestSpy.mock.calls[0][0];
     expect(command.assurance?.location).toBe("NONE");
     expect(command.evidence?.geofenceDecision).toBe(GeofenceDecision.OUTSIDE);
+  });
+
+  it("rejects clock-in when employee already completed today's shift", async () => {
+    vi.spyOn(prisma.employee, "findUnique").mockResolvedValueOnce(validEmployee as never);
+    vi.spyOn(prisma.branch, "findUnique").mockResolvedValueOnce(validBranch as never);
+    vi.spyOn(prisma.attendanceDay, "findFirst").mockResolvedValueOnce({
+      actualIn: new Date("2026-09-17T08:00:00.000Z"),
+      actualOut: new Date("2026-09-17T16:00:00.000Z"),
+    } as never);
+
+    const result = await recordMobilePunch({
+      employeeId: "emp_1",
+      branchId: "branch_1",
+      direction: AttendanceDirection.IN,
+      coordinates: { latitude: 5.622, longitude: -0.1742, accuracyMeters: 10 },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("SHIFT_ALREADY_COMPLETED");
+      expect(result.message).toContain("already completed your shift");
+    }
+  });
+
+  it("rejects clock-in when employee has no scheduled shift for today", async () => {
+    vi.spyOn(prisma.employee, "findUnique").mockResolvedValueOnce(validEmployee as never);
+    vi.spyOn(prisma.branch, "findUnique").mockResolvedValueOnce(validBranch as never);
+    vi.spyOn(prisma.attendanceDay, "findFirst").mockResolvedValueOnce(null);
+    vi.spyOn(prisma.shift, "findMany").mockResolvedValueOnce([]);
+    vi.spyOn(prisma.employeeShiftAssignment, "findMany").mockResolvedValueOnce([]);
+    vi.spyOn(prisma.scheduleException, "findMany").mockResolvedValueOnce([]);
+
+    const result = await recordMobilePunch({
+      employeeId: "emp_1",
+      branchId: "branch_1",
+      direction: AttendanceDirection.IN,
+      coordinates: { latitude: 5.622, longitude: -0.1742, accuracyMeters: 10 },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("NO_SCHEDULED_SHIFT");
+      expect(result.message).toContain("do not have a shift scheduled");
+    }
   });
 });

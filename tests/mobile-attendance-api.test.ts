@@ -108,6 +108,9 @@ describe("Mobile Attendance APIs", () => {
       const data = await res.json();
       expect(data.ok).toBe(true);
       expect(data.currentStatus).toBe("CLOCKED_IN");
+      expect(data.canClockIn).toBe(false);
+      expect(data.canClockOut).toBe(true);
+      expect(data.clockInDisabledReason).toBe("ALREADY_ON_DUTY");
       expect(data.employee.name).toBe("Kwame Mensah");
       expect(data.employee.employeeCode).toBe("EMP-100");
       expect(data.lastPunch.direction).toBe("IN");
@@ -116,6 +119,120 @@ describe("Mobile Attendance APIs", () => {
       expect(data.todayRecord.lateMinutes).toBe(5);
       expect(data.assignedBranches.length).toBe(1);
       expect(data.assignedBranches[0].geofenceRadiusMeters).toBe(150);
+    });
+
+    it("returns currentStatus COMPLETED and disables clock-in when shift is completed today", async () => {
+      vi.spyOn(prisma.employee, "findUnique").mockResolvedValueOnce({
+        id: "emp_100",
+        firstName: "Kwame",
+        lastName: "Mensah",
+        employeeCode: "EMP-100",
+        jobTitle: "Sous Chef",
+        status: "ACTIVE",
+        branchAssignments: [
+          {
+            branch: {
+              id: "branch_1",
+              name: "Accra Mall",
+              slug: "accra-mall",
+              latitude: 5.6219,
+              longitude: -0.1742,
+              geofenceRadiusMeters: 150,
+              geofenceEnabled: true,
+              timezone: "Africa/Accra",
+            },
+          },
+        ],
+      } as never);
+
+      // Completed shift (actualIn and actualOut populated)
+      vi.spyOn(prisma.attendanceDay, "findFirst").mockResolvedValueOnce({
+        id: "day_completed",
+        employeeId: "emp_100",
+        workDate: new Date("2026-09-10T00:00:00.000Z"),
+        branchId: "branch_1",
+        actualIn: new Date("2026-09-10T08:00:00.000Z"),
+        actualOut: new Date("2026-09-10T16:00:00.000Z"),
+        status: "SETTLED",
+        flags: [],
+      } as never);
+
+      vi.spyOn(prisma.attendanceEvent, "findMany").mockResolvedValueOnce([
+        {
+          id: "evt_2",
+          direction: AttendanceDirection.OUT,
+          occurredAt: new Date("2026-09-10T16:00:00.000Z"),
+          branchId: "branch_1",
+        },
+      ] as never);
+      vi.spyOn(prisma.attendanceCorrection, "findMany").mockResolvedValueOnce([] as never);
+      vi.spyOn(prisma.shift, "findMany").mockResolvedValueOnce([]);
+      vi.spyOn(prisma.employeeShiftAssignment, "findMany").mockResolvedValueOnce([]);
+      vi.spyOn(prisma.scheduleException, "findMany").mockResolvedValueOnce([]);
+      vi.spyOn(prisma.branch, "findMany").mockResolvedValueOnce([{ id: "branch_1", name: "Accra Mall" }] as never);
+      vi.spyOn(prisma.leaveRequest, "findMany").mockResolvedValueOnce([] as never);
+
+      const req = new NextRequest("http://localhost:3000/api/v1/attendance/status", {
+        headers: { Authorization: `Bearer ${validToken}` },
+      });
+
+      const res = await getStatus(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.ok).toBe(true);
+      expect(data.currentStatus).toBe("COMPLETED");
+      expect(data.dutyStatus).toBe("COMPLETED");
+      expect(data.canClockIn).toBe(false);
+      expect(data.canClockOut).toBe(false);
+      expect(data.clockInDisabledReason).toBe("SHIFT_COMPLETED");
+      expect(data.clockInDisabledMessage).toContain("Shift completed for today");
+    });
+
+    it("returns canClockIn false with NO_SHIFT_SCHEDULED when employee has no scheduled shift", async () => {
+      vi.spyOn(prisma.employee, "findUnique").mockResolvedValueOnce({
+        id: "emp_100",
+        firstName: "Kwame",
+        lastName: "Mensah",
+        employeeCode: "EMP-100",
+        status: "ACTIVE",
+        branchAssignments: [
+          {
+            branch: {
+              id: "branch_1",
+              name: "Accra Mall",
+              slug: "accra-mall",
+              latitude: 5.6219,
+              longitude: -0.1742,
+              geofenceRadiusMeters: 150,
+              geofenceEnabled: true,
+              timezone: "Africa/Accra",
+            },
+          },
+        ],
+      } as never);
+
+      vi.spyOn(prisma.attendanceDay, "findFirst").mockResolvedValueOnce(null);
+      vi.spyOn(prisma.attendanceEvent, "findMany").mockResolvedValueOnce([] as never);
+      vi.spyOn(prisma.attendanceCorrection, "findMany").mockResolvedValueOnce([] as never);
+      vi.spyOn(prisma.shift, "findMany").mockResolvedValueOnce([]);
+      vi.spyOn(prisma.employeeShiftAssignment, "findMany").mockResolvedValueOnce([]);
+      vi.spyOn(prisma.scheduleException, "findMany").mockResolvedValueOnce([]);
+      vi.spyOn(prisma.branch, "findMany").mockResolvedValueOnce([]);
+      vi.spyOn(prisma.leaveRequest, "findMany").mockResolvedValueOnce([] as never);
+
+      const req = new NextRequest("http://localhost:3000/api/v1/attendance/status", {
+        headers: { Authorization: `Bearer ${validToken}` },
+      });
+
+      const res = await getStatus(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.ok).toBe(true);
+      expect(data.currentStatus).toBe("CLOCKED_OUT");
+      expect(data.canClockIn).toBe(false);
+      expect(data.canClockOut).toBe(false);
+      expect(data.clockInDisabledReason).toBe("NO_SHIFT_SCHEDULED");
+      expect(data.clockInDisabledMessage).toContain("No shift scheduled for you today");
     });
   });
 

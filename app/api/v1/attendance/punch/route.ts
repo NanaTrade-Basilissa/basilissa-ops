@@ -127,7 +127,9 @@ export async function POST(request: NextRequest) {
     });
 
     const status =
-      result.error === "OUTSIDE_GEOFENCE"
+      result.error === "OUTSIDE_GEOFENCE" ||
+      result.error === "SHIFT_ALREADY_COMPLETED" ||
+      result.error === "NO_SCHEDULED_SHIFT"
         ? 422
         : result.error === "EMPLOYEE_NOT_FOUND" || result.error === "BRANCH_NOT_FOUND"
           ? 404

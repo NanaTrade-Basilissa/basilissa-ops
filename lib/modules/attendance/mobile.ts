@@ -8,9 +8,11 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import type { AuditActor } from "@/lib/platform/audit";
+import { dateKeyInZone } from "@/lib/platform/date";
 import { evaluateGeofence, type PunchCoordinates } from "./geofence";
 import { ingestEvent, type IngestCommand } from "./ingest";
 import type { ProjectedDay } from "./projection";
+import { resolveScheduleForDate } from "./schedule";
 
 export type RecordMobilePunchInput = {
   employeeId: string;
@@ -23,6 +25,7 @@ export type RecordMobilePunchInput = {
   isOffline?: boolean;
   actor?: AuditActor;
   _ingestFn?: typeof ingestEvent;
+  skipScheduleCheck?: boolean;
 };
 
 export type MobilePunchResult =
@@ -45,6 +48,8 @@ export type MobilePunchResult =
         | "BRANCH_NOT_FOUND"
         | "BRANCH_NOT_ASSIGNED"
         | "OUTSIDE_GEOFENCE"
+        | "SHIFT_ALREADY_COMPLETED"
+        | "NO_SCHEDULED_SHIFT"
         | "INGEST_FAILED";
       message: string;
       distanceMeters?: number | null;
@@ -120,6 +125,7 @@ export async function recordMobilePunch(
       geofenceRadiusMeters: true,
       maxAcceptableAccuracyMeters: true,
       geofenceEnabled: true,
+      timezone: true,
     },
   });
 
@@ -145,6 +151,90 @@ export async function recordMobilePunch(
       radiusMeters: branch.geofenceRadiusMeters,
       decision: geofenceResult.decision,
     };
+  }
+
+  // 4. For clock-in punches, enforce single-shift and scheduled shift policy
+  if (direction === AttendanceDirection.IN && !input.skipScheduleCheck) {
+    const branchTz = branch.timezone || "Africa/Accra";
+    const punchNow = occurredAt || new Date();
+    const todayKey = dateKeyInZone(punchNow, branchTz);
+    const todayDate = new Date(`${todayKey}T00:00:00.000Z`);
+
+    // 4a. Reject if today's shift is already completed (clocked in and clocked out)
+    const existingDay = await prisma.attendanceDay.findFirst({
+      where: {
+        employeeId,
+        workDate: todayDate,
+      },
+      select: {
+        actualIn: true,
+        actualOut: true,
+      },
+    });
+
+    if (existingDay && existingDay.actualIn !== null && existingDay.actualOut !== null) {
+      return {
+        ok: false,
+        error: "SHIFT_ALREADY_COMPLETED",
+        message:
+          "You have already completed your shift for today. If you need an adjustment, please contact your manager.",
+      };
+    }
+
+    // 4b. Reject if employee has no shift scheduled for today
+    const [shifts, shiftAssignments, exceptions] = await Promise.all([
+      prisma.shift.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          startMinute: true,
+          endMinute: true,
+          unpaidBreakMinutes: true,
+        },
+      }),
+      prisma.employeeShiftAssignment.findMany({
+        where: {
+          employeeId,
+          validFrom: { lte: punchNow },
+          OR: [{ validTo: null }, { validTo: { gte: punchNow } }],
+        },
+        select: {
+          employeeId: true,
+          shiftId: true,
+          daysOfWeek: true,
+          validFrom: true,
+          validTo: true,
+        },
+      }),
+      prisma.scheduleException.findMany({
+        where: {
+          employeeId,
+          date: todayDate,
+        },
+        select: { date: true, shiftId: true, type: true },
+      }),
+    ]);
+
+    const resolvedSchedule = resolveScheduleForDate(todayKey, {
+      timeZone: branchTz,
+      shifts,
+      assignments: shiftAssignments,
+      exceptions: exceptions.map((ex) => ({
+        dateKey: todayKey,
+        shiftId: ex.shiftId,
+        type: ex.type,
+      })),
+    });
+
+    if (!resolvedSchedule) {
+      return {
+        ok: false,
+        error: "NO_SCHEDULED_SHIFT",
+        message:
+          "You do not have a shift scheduled for today. Please contact your manager to be added to the rota.",
+      };
+    }
   }
 
   // 4. Stable idempotency key: 30s bucket prevents accidental client double-taps

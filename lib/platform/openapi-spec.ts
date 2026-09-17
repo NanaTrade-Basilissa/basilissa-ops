@@ -281,7 +281,7 @@ Ingests mobile clock-in/out punches from branch staff.
             },
           },
           "422": {
-            description: "Unprocessable Entity: Clock-in punch rejected because device is outside the branch geofence radius.",
+            description: "Unprocessable Entity: Clock-in punch rejected (e.g. outside geofence radius, shift already completed, or no scheduled shift).",
             content: {
               "application/json": {
                 schema: {
@@ -335,7 +335,11 @@ Ingests mobile clock-in/out punches from branch staff.
                         jobTitle: { type: "string", nullable: true },
                       },
                     },
-                    currentStatus: { type: "string", enum: ["CLOCKED_IN", "CLOCKED_OUT"], example: "CLOCKED_IN" },
+                    currentStatus: { type: "string", enum: ["CLOCKED_IN", "CLOCKED_OUT", "COMPLETED"], example: "CLOCKED_IN" },
+                    canClockIn: { type: "boolean", example: true },
+                    canClockOut: { type: "boolean", example: false },
+                    clockInDisabledReason: { type: "string", enum: ["SHIFT_COMPLETED", "NO_SHIFT_SCHEDULED", "ALREADY_ON_DUTY"], nullable: true, example: null },
+                    clockInDisabledMessage: { type: "string", nullable: true, example: null },
                     lastPunch: { type: "object", nullable: true },
                     todaySchedule: { type: "object", nullable: true },
                     todayRecord: { type: "object", nullable: true },

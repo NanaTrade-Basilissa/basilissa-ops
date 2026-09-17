@@ -283,7 +283,37 @@ export async function GET(request: NextRequest) {
   });
 
   const isCurrentlyIn = liveStatus === "ON_DUTY";
-  const currentStatus = isCurrentlyIn ? "CLOCKED_IN" : "CLOCKED_OUT";
+  const isCompleted = liveStatus === "COMPLETED";
+  const hasSchedule = resolvedSchedule !== null;
+
+  let canClockIn = false;
+  const canClockOut = isCurrentlyIn;
+  let clockInDisabledReason: "SHIFT_COMPLETED" | "NO_SHIFT_SCHEDULED" | "ALREADY_ON_DUTY" | null = null;
+  let clockInDisabledMessage: string | null = null;
+
+  if (isCurrentlyIn) {
+    canClockIn = false;
+    clockInDisabledReason = "ALREADY_ON_DUTY";
+    clockInDisabledMessage = "You are currently on duty. Clock out when you finish your shift.";
+  } else if (isCompleted) {
+    canClockIn = false;
+    clockInDisabledReason = "SHIFT_COMPLETED";
+    clockInDisabledMessage = "Shift completed for today. See you tomorrow!";
+  } else if (!hasSchedule) {
+    canClockIn = false;
+    clockInDisabledReason = "NO_SHIFT_SCHEDULED";
+    clockInDisabledMessage = "No shift scheduled for you today. Contact your manager to be added to the rota.";
+  } else {
+    canClockIn = true;
+    clockInDisabledReason = null;
+    clockInDisabledMessage = null;
+  }
+
+  const currentStatus = isCurrentlyIn
+    ? "CLOCKED_IN"
+    : isCompleted
+      ? "COMPLETED"
+      : "CLOCKED_OUT";
   const dutyStatus = liveStatus;
 
   const matchingShift = resolvedSchedule
@@ -304,7 +334,11 @@ export async function GET(request: NextRequest) {
       jobTitle: employee.jobTitle,
     },
     currentStatus,
-    dutyStatus: isCurrentlyIn ? "ON_DUTY" : "OFF_DUTY",
+    dutyStatus: isCurrentlyIn ? "ON_DUTY" : isCompleted ? "COMPLETED" : "OFF_DUTY",
+    canClockIn,
+    canClockOut,
+    clockInDisabledReason,
+    clockInDisabledMessage,
     todayKey,
     currentShift: matchingShift
       ? {
