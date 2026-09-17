@@ -78,7 +78,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
               : "Everyone on record."}
           </p>
         </div>
-        {can(actor, "employee:write") && (
+        {can(actor, "employees:create") && (
           <div className="flex gap-2">
             <Link href="/admin/employees/import" className={buttonVariants({ variant: "outline" })}>
               <Upload className="size-4" />

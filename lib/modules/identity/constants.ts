@@ -114,3 +114,25 @@ export type AuditLogSearchResult = {
   totalPages: number;
 };
 
+export type FormattedCustomRole = {
+  id: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  userCount: number;
+  permissionCount: number;
+  permissions: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: { id: string; name: string; email: string } | null;
+};
+
+export type RoleFormState =
+  | {
+      success?: boolean;
+      error?: string;
+      fieldErrors?: Record<string, string>;
+      roleId?: string;
+    }
+  | undefined;
+

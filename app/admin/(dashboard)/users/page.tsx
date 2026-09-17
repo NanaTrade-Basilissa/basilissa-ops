@@ -45,6 +45,7 @@ export default async function UsersPage() {
       status: true,
       lastLoginAt: true,
       mfaEnabledAt: true,
+      customRole: { select: { id: true, name: true } },
       roleAssignments: {
         where: { OR: [{ validTo: null }, { validTo: { gt: now } }] },
         select: { role: true, scopeType: true, scopeId: true },
@@ -127,6 +128,7 @@ export default async function UsersPage() {
             scopeType: a.scopeType,
             branchName: a.scopeType === "BRANCH" ? (branchName.get(a.scopeId) ?? null) : null,
           })),
+          customRoleName: user.customRole?.name ?? null,
         }))}
       />
     </div>

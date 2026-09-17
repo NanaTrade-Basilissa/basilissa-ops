@@ -21,6 +21,7 @@ export type UserRow = {
   recommendsMfa?: boolean;
   isSuperAdmin?: boolean;
   roles: { role: string; scopeType: string; branchName: string | null }[];
+  customRoleName?: string | null;
 };
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, UserRow>();
@@ -67,11 +68,21 @@ export function UsersTable({
     columnHelper.display({
       id: "roles",
       header: "Roles",
-      cell: ({ row }) =>
-        row.original.roles.length === 0 ? (
-          <span className="text-sm text-muted-foreground">None</span>
-        ) : (
+      cell: ({ row }) => {
+        const hasSystemRoles = row.original.roles.length > 0;
+        const customRole = row.original.customRoleName;
+
+        if (!hasSystemRoles && !customRole) {
+          return <span className="text-sm text-muted-foreground">None</span>;
+        }
+
+        return (
           <div className="flex flex-wrap gap-1">
+            {customRole && (
+              <Badge variant="secondary" className="text-xs font-medium">
+                {customRole}
+              </Badge>
+            )}
             {row.original.roles.map((assignment, index) => (
               <Badge key={index} variant="outline" className="text-xs">
                 {assignment.role.toLowerCase().replace(/_/g, " ")}
@@ -79,7 +90,8 @@ export function UsersTable({
               </Badge>
             ))}
           </div>
-        ),
+        );
+      },
     }),
     columnHelper.display({
       id: "mfa",

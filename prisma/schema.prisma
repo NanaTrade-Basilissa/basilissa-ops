@@ -86,6 +86,10 @@ model User {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
+  customRoleId        String?
+  customRole          CustomRole?          @relation(fields: [customRoleId], references: [id], onDelete: Restrict)
+  createdCustomRoles  CustomRole[]         @relation("CustomRoleCreatedBy")
+
   roleAssignments RoleAssignment[]
   sessions        Session[]
   mfaRecoveryCodes MfaRecoveryCode[]
@@ -94,6 +98,7 @@ model User {
   feedbackRecipients BranchFeedbackRecipient[]
 
   @@index([status])
+  @@index([customRoleId])
   @@map("users")
 }
 
@@ -166,6 +171,57 @@ model RoleAssignment {
   @@index([userId])
   @@index([scopeType, scopeId])
   @@map("role_assignments")
+}
+
+/// Custom roles created by Super Admin with configurable permissions.
+model CustomRole {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  isSystem    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  createdById String?
+  createdBy   User?            @relation("CustomRoleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  permissions RolePermission[]
+  users       User[]
+
+  @@map("roles")
+}
+
+/// A permission representing a resource + action capability.
+model PermissionRecord {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  resource    String
+  action      String
+  label       String
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  roles       RolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+  @@map("permissions")
+}
+
+/// Junction table connecting custom roles to specific permissions.
+model RolePermission {
+  id           String           @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime         @default(now())
+
+  role         CustomRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   PermissionRecord @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
 }
 
 /// A signed-in session. The session cookie is a signed JWT carrying this row's

@@ -18,7 +18,26 @@ import { Role, ScopeType, UserStatus } from "@prisma/client";
  *                  a branch manager reads another branch by changing a URL.
  */
 
-export type Permission =
+import { getAllPermissions, type PermissionKey } from "./permissions";
+
+export {
+  PERMISSION_REGISTRY,
+  MATRIX_ACTIONS,
+  getPermissionMatrix,
+  isValidPermissionKey,
+  getAllPermissions,
+} from "./permissions";
+
+export type {
+  MatrixRow,
+  MatrixActionKey,
+  PermissionKey,
+  ResourceKey,
+  ActionDefinition,
+  ResourceDefinition,
+} from "./permissions";
+
+export type SystemPermission =
   // Feedback platform (the surface that exists today)
   | "branch:read"
   | "branch:write"
@@ -72,6 +91,8 @@ export type Permission =
   | "email_queue:read"
   | "email_queue:manage";
 
+export type Permission = SystemPermission | PermissionKey | (string & {});
+
 /** A permission and the scope it was granted at. */
 type Grant = {
   permission: Permission;
@@ -86,12 +107,19 @@ export type ActorAssignment = {
   scopeId: string;
 };
 
+export type ActorCustomRole = {
+  id: string;
+  name: string;
+  permissions: string[];
+};
+
 export type Actor = {
   userId: string;
   name: string;
   email: string;
   status: UserStatus;
   assignments: ActorAssignment[];
+  customRole?: ActorCustomRole | null;
 };
 
 /**
@@ -226,6 +254,45 @@ function grantsOf(actor: Actor): Grant[] {
   );
 }
 
+export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
+  "employee:read": ["employees:read"],
+  "employee:write": ["employees:create", "employees:update", "employees:delete", "employees:export"],
+  "branch:read": ["branches:read"],
+  "branch:write": ["branches:create", "branches:update", "branches:delete"],
+  "question:read": ["questions:read"],
+  "question:write": ["questions:create", "questions:update", "questions:delete"],
+  "feedback:read": ["feedback:read", "feedback:export"],
+  "policy:read": ["policies:read"],
+  "policy:write": ["policies:update"],
+  "attendance:read": ["attendance:read", "attendance:export"],
+  "attendance:write": ["attendance:create", "attendance:update"],
+  "attendance:manual_entry": ["attendance:approve", "attendance:create"],
+  "schedule:read": ["schedules:read"],
+  "schedule:write": ["schedules:create", "schedules:update", "schedules:publish", "schedules:delete"],
+  "assessment:read": ["assessments:read"],
+  "assessment:write": ["assessments:create", "assessments:update", "assessments:delete", "assessments:publish", "assessments:assign"],
+  "aptitude:read": ["aptitude:read"],
+  "aptitude:write": ["aptitude:create", "aptitude:update", "aptitude:delete", "aptitude:publish", "aptitude:assign"],
+  "user:read": ["users:read", "roles:read"],
+  "user:write": ["users:create", "users:update", "users:delete"],
+  "role:assign": ["roles:assign", "users:assign", "roles:create", "roles:update"],
+  "email_queue:read": ["email_queue:read"],
+  "email_queue:manage": ["email_queue:manage"],
+};
+
+export const GRANULAR_TO_SYSTEM: Record<string, string> = {
+  "employees:read": "employee:read",
+  "branches:read": "branch:read",
+  "questions:read": "question:read",
+  "policies:read": "policy:read",
+  "attendance:read": "attendance:read",
+  "schedules:read": "schedule:read",
+  "assessments:read": "assessment:read",
+  "aptitude:read": "aptitude:read",
+  "users:read": "user:read",
+  "roles:read": "user:read",
+};
+
 export type ResourceScope = {
   /** The branch a resource belongs to, when it belongs to one. */
   branchId?: string;
@@ -234,36 +301,89 @@ export type ResourceScope = {
 /**
  * May `actor` perform `permission`?
  *
- * When `resource.branchId` is given, a BRANCH-scoped grant for that branch is
- * enough. When it is omitted the check is treated as branch-independent and
- * only a GLOBAL grant satisfies it — the safe reading, since "no branch named"
- * must never widen access.
- *
- * Special case: "admin:access" is the admin chrome gate. Any active assignment
- * carrying admin:access (including branch-scoped manager assignments) admits
- * the actor to the shell; every page inside applies its own specific checks.
+ * Super Admin bypasses normal permission checks and has unrestricted access.
+ * Custom roles are evaluated with strict deny-by-default: if not explicitly granted,
+ * the permission is refused.
  */
 export function can(actor: Actor, permission: Permission, resource?: ResourceScope): boolean {
-  const grants = grantsOf(actor).filter((grant) => grant.permission === permission);
-  if (grants.length === 0) return false;
+  if (actor.status !== UserStatus.ACTIVE) return false;
 
-  if (permission === "admin:access") return true;
+  // Super Admin bypass: unrestricted access throughout the application
+  if (isSuperAdmin(actor)) return true;
 
-  if (grants.some((grant) => grant.scopeType === ScopeType.GLOBAL)) return true;
+  // Special case: "admin:access" gates the admin chrome layout
+  if (permission === "admin:access") {
+    if (actor.customRole && actor.customRole.permissions.length > 0) return true;
+    const adminGrants = grantsOf(actor).filter((grant) => grant.permission === "admin:access");
+    return adminGrants.length > 0;
+  }
 
-  if (resource?.branchId === undefined) return false;
+  // Custom role checks: strict deny-by-default, no implicit inferences
+  if (actor.customRole?.permissions?.length) {
+    if (actor.customRole.permissions.includes(permission)) return true;
 
-  return grants.some(
-    (grant) => grant.scopeType === ScopeType.BRANCH && grant.scopeId === resource.branchId,
-  );
+    // Single-purpose legacy alias check (e.g. employee:read <-> employees:read)
+    const legacyAliases = SYSTEM_TO_GRANULAR[permission];
+    if (
+      legacyAliases &&
+      legacyAliases.length === 1 &&
+      actor.customRole.permissions.includes(legacyAliases[0]!)
+    ) {
+      return true;
+    }
+  }
+
+  // System role assignments check
+  const grants = grantsOf(actor);
+  const directGrants = grants.filter((grant) => grant.permission === permission);
+  if (directGrants.length > 0) {
+    if (directGrants.some((grant) => grant.scopeType === ScopeType.GLOBAL)) return true;
+    if (resource?.branchId !== undefined) {
+      if (
+        directGrants.some(
+          (grant) => grant.scopeType === ScopeType.BRANCH && grant.scopeId === resource.branchId,
+        )
+      ) {
+        return true;
+      }
+    }
+  }
+
+  // Granular action covered by a broader system role assignment (e.g. employee:write covering employees:create)
+  for (const grant of grants) {
+    const mapped = SYSTEM_TO_GRANULAR[grant.permission];
+    if (mapped && mapped.includes(permission)) {
+      if (grant.scopeType === ScopeType.GLOBAL) return true;
+      if (
+        resource?.branchId !== undefined &&
+        grant.scopeType === ScopeType.BRANCH &&
+        grant.scopeId === resource.branchId
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Reusable authorization helper:
+ *   hasPermission(user, "employees:read")
+ *   hasPermission(user, "employees:update")
+ *   hasPermission(user, "attendance:approve")
+ */
+export function hasPermission(
+  actor: Actor | null | undefined,
+  permission: Permission,
+  resource?: ResourceScope,
+): boolean {
+  if (!actor) return false;
+  return can(actor, permission, resource);
 }
 
 /**
  * Which branches may `actor` exercise `permission` over?
- *
- * Repositories use this to constrain queries. `all` means no branch predicate;
- * `branches` means `WHERE branchId IN (...)`; `none` means the caller must
- * return an empty result *without* querying — never fall through to unfiltered.
  */
 export type BranchScope =
   | { kind: "all" }
@@ -271,14 +391,30 @@ export type BranchScope =
   | { kind: "none" };
 
 export function branchScope(actor: Actor, permission: Permission): BranchScope {
-  const grants = grantsOf(actor).filter((grant) => grant.permission === permission);
-  if (grants.length === 0) return { kind: "none" };
+  if (actor.status !== UserStatus.ACTIVE) return { kind: "none" };
+  if (isSuperAdmin(actor)) return { kind: "all" };
 
-  if (grants.some((grant) => grant.scopeType === ScopeType.GLOBAL)) return { kind: "all" };
+  // Custom roles hold company-wide (global) access by default
+  if (actor.customRole?.permissions?.length) {
+    if (actor.customRole.permissions.includes(permission)) return { kind: "all" };
+    const legacy = SYSTEM_TO_GRANULAR[permission];
+    if (legacy && legacy.length === 1 && actor.customRole.permissions.includes(legacy[0]!)) {
+      return { kind: "all" };
+    }
+  }
+
+  const grants = grantsOf(actor);
+  const matchingGrants = grants.filter(
+    (grant) =>
+      grant.permission === permission || SYSTEM_TO_GRANULAR[grant.permission]?.includes(permission),
+  );
+  if (matchingGrants.length === 0) return { kind: "none" };
+
+  if (matchingGrants.some((grant) => grant.scopeType === ScopeType.GLOBAL)) return { kind: "all" };
 
   const branchIds = [
     ...new Set(
-      grants
+      matchingGrants
         .filter((grant) => grant.scopeType === ScopeType.BRANCH && grant.scopeId !== "")
         .map((grant) => grant.scopeId),
     ),
@@ -319,8 +455,17 @@ export function isSuperAdmin(actor: Actor): boolean {
  */
 export function hasAnyPermission(actor: Actor, permission: Permission): boolean {
   if (actor.status !== UserStatus.ACTIVE) return false;
+  if (isSuperAdmin(actor)) return true;
+  if (actor.customRole?.permissions?.includes(permission)) return true;
+  const legacy = SYSTEM_TO_GRANULAR[permission];
+  if (legacy && legacy.length === 1 && actor.customRole?.permissions?.includes(legacy[0]!)) {
+    return true;
+  }
 
-  const grants = grantsOf(actor).filter((grant) => grant.permission === permission);
+  const grants = grantsOf(actor).filter(
+    (grant) =>
+      grant.permission === permission || SYSTEM_TO_GRANULAR[grant.permission]?.includes(permission),
+  );
   if (grants.length === 0) return false;
 
   return grants.some(
@@ -337,6 +482,16 @@ export function hasAnyPermission(actor: Actor, permission: Permission): boolean 
 export function heldPermissions(actor: Actor): Permission[] {
   if (actor.status !== UserStatus.ACTIVE) return [];
 
+  if (isSuperAdmin(actor)) {
+    return [
+      ...new Set([
+        ...getAllPermissions().map((p) => p.key),
+        ...Object.values(ROLE_PERMISSIONS).flat(),
+        "admin:access",
+      ]),
+    ];
+  }
+
   const perms = new Set<Permission>();
   for (const grant of grantsOf(actor)) {
     if (
@@ -344,8 +499,22 @@ export function heldPermissions(actor: Actor): Permission[] {
       (grant.scopeType === ScopeType.BRANCH && grant.scopeId.length > 0)
     ) {
       perms.add(grant.permission);
+      const mapped = SYSTEM_TO_GRANULAR[grant.permission];
+      if (mapped) {
+        for (const m of mapped) perms.add(m);
+      }
     }
   }
+
+  if (actor.customRole?.permissions) {
+    perms.add("admin:access");
+    for (const p of actor.customRole.permissions) {
+      perms.add(p);
+      const leg = GRANULAR_TO_SYSTEM[p];
+      if (leg) perms.add(leg);
+    }
+  }
+
   return [...perms];
 }
 

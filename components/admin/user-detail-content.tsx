@@ -8,6 +8,7 @@ import {
   revokeUserRole,
 } from "@/lib/modules/identity/actions";
 import { RoleManager } from "@/components/admin/role-manager";
+import { UserCustomRoleCard } from "@/components/admin/user-custom-role-card";
 import { AccountStatusControls } from "@/components/admin/account-status-controls";
 import { ResetMfaButton } from "@/components/admin/reset-mfa-button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,8 @@ export function UserDetailContent({
   revoked,
   isSelf,
   emailConfigured,
+  customRole,
+  availableCustomRoles = [],
   onMutated,
 }: {
   user: {
@@ -67,6 +70,8 @@ export function UserDetailContent({
   revoked: RevokedRole[];
   isSelf: boolean;
   emailConfigured: boolean;
+  customRole?: { id: string; name: string; description?: string | null } | null;
+  availableCustomRoles?: { id: string; name: string; description?: string | null }[];
   onMutated?: () => void;
 }) {
   const requiresMfa = active.some((a) => a.requiresMfa);
@@ -104,6 +109,14 @@ export function UserDetailContent({
           </AlertDescription>
         </Alert>
       )}
+
+      <UserCustomRoleCard
+        userId={user.id}
+        customRole={customRole}
+        availableCustomRoles={availableCustomRoles}
+        canAssign={canAssign}
+        onMutated={onMutated}
+      />
 
       <Card>
         <CardHeader>

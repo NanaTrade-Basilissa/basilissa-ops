@@ -13,6 +13,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { FEEDBACK_QUESTIONS } from "../lib/modules/feedback/constants";
 import { SAMPLE_BRANCHES } from "./seed-data";
+import { syncPermissionRegistry } from "../lib/modules/identity/permissions";
 
 const prisma = new PrismaClient();
 
@@ -116,6 +117,8 @@ async function seedBranches() {
 }
 
 async function main() {
+  const synced = await syncPermissionRegistry(prisma);
+  console.log(`synced ${synced} permissions from registry`);
   await seedAdmin();
   await seedAttendancePolicy();
   await seedQuestions();

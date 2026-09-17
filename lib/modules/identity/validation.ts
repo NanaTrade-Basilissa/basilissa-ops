@@ -75,3 +75,11 @@ export const userStatusSchema = z.object({
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type GrantRoleInput = z.infer<typeof grantRoleSchema>;
+
+export const roleSchema = z.object({
+  name: z.string().trim().min(2, "Role name must be at least 2 characters").max(64),
+  description: z.string().trim().max(255).optional().nullable(),
+  permissions: z.array(z.string()).default([]),
+});
+
+export type RoleInput = z.infer<typeof roleSchema>;

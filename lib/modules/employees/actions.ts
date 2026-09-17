@@ -55,7 +55,7 @@ export async function createEmployee(
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const actor = await requirePermission("employee:write");
+  const actor = await requirePermission("employees:create");
 
   const parsed = parseEmployee(formData);
   if (!parsed.success) {
@@ -99,7 +99,7 @@ export async function updateEmployee(
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const actor = await requirePermission("employee:write");
+  const actor = await requirePermission("employees:update");
 
   const parsed = parseEmployee(formData);
   if (!parsed.success) {

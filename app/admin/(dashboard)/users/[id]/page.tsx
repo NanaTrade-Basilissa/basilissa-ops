@@ -37,6 +37,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         revoked={detail.revoked}
         isSelf={detail.isSelf}
         emailConfigured={detail.emailConfigured}
+        customRole={detail.user.customRole}
+        availableCustomRoles={detail.availableCustomRoles}
       />
     </div>
   );

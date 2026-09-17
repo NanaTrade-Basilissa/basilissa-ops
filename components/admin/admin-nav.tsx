@@ -9,6 +9,7 @@ import {
   ListChecks,
   Mail,
   MessageSquareText,
+  Shield,
   ShieldCheck,
   Store,
   UserCog,
@@ -81,6 +82,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "Administration",
     items: [
       { href: "/admin/users", label: "Users", icon: UserCog, exact: false, permission: "user:read" },
+      { href: "/admin/roles", label: "Roles & Permissions", icon: Shield, exact: false, permission: "roles:read" },
       { href: "/admin/security", label: "Security", icon: ShieldCheck, exact: false, permission: "user:read" },
       { href: "/admin/email-queue", label: "Email Queue", icon: Mail, exact: false, permission: "email_queue:read" },
     ],

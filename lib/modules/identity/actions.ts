@@ -39,7 +39,14 @@ import {
 } from "./mfa";
 import { requireAuth, requirePermission, verifySession } from "./dal";
 import { can, isSuperAdmin } from "./authorization";
-import { MFA_REQUIRED_ROLES } from "./constants";
+import { MFA_REQUIRED_ROLES, type RoleFormState } from "./constants";
+import { roleSchema } from "./validation";
+import {
+  createCustomRole,
+  updateCustomRole,
+  deleteCustomRole,
+  assignCustomRoleToUser,
+} from "./custom-roles";
 import { Role, ScopeType } from "@prisma/client";
 import { formatAccraDateTime } from "@/lib/platform/date";
 import { auditActorFrom } from "./audit";
@@ -49,6 +56,7 @@ import { scoped } from "@/lib/platform/logger";
 import { rateLimit } from "@/lib/platform/rate-limit";
 import type { FormState } from "@/lib/platform/forms";
 
+export type { RoleFormState };
 export type LoginFormState = { error?: string } | undefined;
 
 // Computed once, at module load, by the same library used to hash real
@@ -663,7 +671,7 @@ export async function resendInvite(
 export async function getUserDetailAction(userId: string) {
   const actor = await requirePermission("user:read");
 
-  const [user, branches] = await Promise.all([
+  const [user, branches, availableCustomRoles] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -675,6 +683,8 @@ export async function getUserDetailAction(userId: string) {
         passwordChangedAt: true,
         mfaEnabledAt: true,
         createdAt: true,
+        customRoleId: true,
+        customRole: { select: { id: true, name: true, description: true } },
         roleAssignments: {
           orderBy: { validFrom: "desc" },
           select: { id: true, role: true, scopeType: true, scopeId: true, validFrom: true, validTo: true },
@@ -683,6 +693,7 @@ export async function getUserDetailAction(userId: string) {
       },
     }),
     prisma.branch.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.customRole.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, description: true } }),
   ]);
   if (!user) return null;
 
@@ -709,11 +720,14 @@ export async function getUserDetailAction(userId: string) {
       mfaEnabledAt: user.mfaEnabledAt,
       createdAt: user.createdAt,
       mfaRecoveryCodesLeft: user._count.mfaRecoveryCodes,
+      customRoleId: user.customRoleId,
+      customRole: user.customRole,
     },
     canWrite: can(actor, "user:write"),
-    canAssign: can(actor, "role:assign"),
+    canAssign: can(actor, "role:assign") || isSuperAdmin(actor),
     roles: Object.values(Role),
     branches,
+    availableCustomRoles,
     isSelf: user.id === actor.userId,
     emailConfigured: isEmailConfigured(),
     active: activeAssignments.map((a) => ({
@@ -775,4 +789,122 @@ export async function cancelEmailJobAction(jobId: string): Promise<{ success: bo
     revalidatePath("/admin");
   }
   return result;
+}
+
+export async function createRoleAction(
+  _prevState: RoleFormState,
+  formData: FormData,
+): Promise<RoleFormState> {
+  const actor = await requirePermission("roles:create");
+
+  const name = String(formData.get("name") ?? "");
+  const description = String(formData.get("description") ?? "");
+  const permissionsRaw = formData.getAll("permissions") as string[];
+
+  const parsed = roleSchema.safeParse({
+    name,
+    description: description || null,
+    permissions: permissionsRaw,
+  });
+
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const field = issue.path[0];
+      if (typeof field === "string") fieldErrors[field] = issue.message;
+    }
+    return { error: "Please fix the errors below.", fieldErrors };
+  }
+
+  const result = await createCustomRole(parsed.data, auditActorFrom(actor));
+  if (!result.ok) {
+    return {
+      error: result.message,
+      fieldErrors: result.reason === "ROLE_NAME_EXISTS" ? { name: result.message } : undefined,
+    };
+  }
+
+  revalidatePath("/admin/roles");
+  return { success: true, roleId: result.roleId };
+}
+
+export async function updateRoleAction(
+  _prevState: RoleFormState,
+  formData: FormData,
+): Promise<RoleFormState> {
+  const actor = await requirePermission("roles:update");
+
+  const roleId = String(formData.get("roleId") ?? "");
+  if (!roleId) return { error: "Role ID is required." };
+
+  const name = String(formData.get("name") ?? "");
+  const description = String(formData.get("description") ?? "");
+  const permissionsRaw = formData.getAll("permissions") as string[];
+
+  const parsed = roleSchema.safeParse({
+    name,
+    description: description || null,
+    permissions: permissionsRaw,
+  });
+
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const field = issue.path[0];
+      if (typeof field === "string") fieldErrors[field] = issue.message;
+    }
+    return { error: "Please fix the errors below.", fieldErrors };
+  }
+
+  const result = await updateCustomRole(roleId, parsed.data, auditActorFrom(actor));
+  if (!result.ok) {
+    return {
+      error: result.message,
+      fieldErrors: result.reason === "ROLE_NAME_EXISTS" ? { name: result.message } : undefined,
+    };
+  }
+
+  revalidatePath("/admin/roles");
+  revalidatePath("/admin/users");
+  return { success: true, roleId };
+}
+
+export async function deleteRoleAction(
+  _prevState: RoleFormState,
+  formData: FormData,
+): Promise<RoleFormState> {
+  const actor = await requirePermission("roles:delete");
+
+  const roleId = String(formData.get("roleId") ?? "");
+  if (!roleId) return { error: "Role ID is required." };
+
+  const result = await deleteCustomRole(roleId, auditActorFrom(actor));
+  if (!result.ok) {
+    return { error: result.message };
+  }
+
+  revalidatePath("/admin/roles");
+  return { success: true };
+}
+
+export async function assignUserCustomRoleAction(
+  _prevState: RoleFormState,
+  formData: FormData,
+): Promise<RoleFormState> {
+  const actor = await requirePermission("roles:assign");
+
+  const userId = String(formData.get("userId") ?? "");
+  const customRoleIdRaw = formData.get("customRoleId");
+  const customRoleId = typeof customRoleIdRaw === "string" && customRoleIdRaw.trim() ? customRoleIdRaw.trim() : null;
+
+  if (!userId) return { error: "User ID is required." };
+
+  const result = await assignCustomRoleToUser(userId, customRoleId, auditActorFrom(actor));
+  if (!result.ok) {
+    return { error: result.message };
+  }
+
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${userId}`);
+  return { success: true };
 }

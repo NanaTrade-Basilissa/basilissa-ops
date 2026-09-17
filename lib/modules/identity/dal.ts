@@ -6,6 +6,7 @@ import { MFA_REQUIRED_ROLES, hasMfaEnabled } from "./mfa";
 import {
   branchScope,
   can,
+  hasPermission,
   type Actor,
   type BranchScope,
   type Permission,
@@ -34,6 +35,7 @@ export const verifySession = cache(async (): Promise<Actor | null> => {
     email: session.user.email,
     status: session.user.status,
     assignments: session.user.assignments,
+    customRole: session.user.customRole ?? null,
   };
 });
 
@@ -47,17 +49,37 @@ export async function requireAuth(): Promise<Actor> {
 /**
  * Require a specific permission, optionally against a specific resource.
  *
+ * Supports both:
+ *   requirePermission("employees:update")
+ *   requirePermission(actor, "employees:update")
+ *
  * An authenticated user who lacks the permission is sent to the dashboard
- * rather than the login page: bouncing a signed-in person to a login form
- * suggests their session broke, when the real answer is that they may not do
- * this.
+ * rather than the login page.
  */
 export async function requirePermission(
-  permission: Permission,
-  resource?: ResourceScope,
+  permissionOrActor: Permission | Actor,
+  maybeResourceOrPermission?: ResourceScope | Permission,
+  maybeResource?: ResourceScope,
 ): Promise<Actor> {
-  const actor = await requireAuth();
-  await requireMfaIfNeeded(actor);
+  let actor: Actor;
+  let permission: Permission;
+  let resource: ResourceScope | undefined;
+
+  if (
+    typeof permissionOrActor === "object" &&
+    permissionOrActor !== null &&
+    "userId" in permissionOrActor
+  ) {
+    actor = permissionOrActor as Actor;
+    permission = maybeResourceOrPermission as Permission;
+    resource = maybeResource;
+  } else {
+    actor = await requireAuth();
+    permission = permissionOrActor as Permission;
+    resource = maybeResourceOrPermission as ResourceScope | undefined;
+    await requireMfaIfNeeded(actor);
+  }
+
   if (!can(actor, permission, resource)) redirect("/admin?denied=1");
   return actor;
 }
@@ -172,5 +194,5 @@ export async function requireAnyBranchPermission(
   return { actor, scope };
 }
 
-export { can, branchScope };
+export { can, hasPermission, branchScope };
 export type { Actor, BranchScope, Permission, ResourceScope };

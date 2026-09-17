@@ -81,6 +81,8 @@ export function UserDetailSheet({
               revoked={detail.revoked}
               isSelf={detail.isSelf}
               emailConfigured={detail.emailConfigured}
+              customRole={detail.user.customRole}
+              availableCustomRoles={detail.availableCustomRoles}
               onMutated={load}
             />
           )}

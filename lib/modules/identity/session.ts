@@ -119,6 +119,11 @@ export type ResolvedSession = {
       scopeType: import("@prisma/client").ScopeType;
       scopeId: string;
     }[];
+    customRole?: {
+      id: string;
+      name: string;
+      permissions: string[];
+    } | null;
   };
 };
 
@@ -154,6 +159,19 @@ export async function getSession(): Promise<ResolvedSession | null> {
             },
             select: { role: true, scopeType: true, scopeId: true },
           },
+          customRole: {
+            select: {
+              id: true,
+              name: true,
+              permissions: {
+                select: {
+                  permission: {
+                    select: { key: true },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -176,6 +194,13 @@ export async function getSession(): Promise<ResolvedSession | null> {
       email: session.user.email,
       status: session.user.status,
       assignments: session.user.roleAssignments,
+      customRole: session.user.customRole
+        ? {
+            id: session.user.customRole.id,
+            name: session.user.customRole.name,
+            permissions: session.user.customRole.permissions.map((p) => p.permission.key),
+          }
+        : null,
     },
   };
 }
