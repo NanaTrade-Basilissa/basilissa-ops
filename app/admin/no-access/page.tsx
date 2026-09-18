@@ -31,15 +31,13 @@ export default async function NoAccessPage() {
             form they just completed reads as a broken session, and they retry
             the same credentials instead of asking for the access they need.
           */}
-          <CardDescription>
-            You are signed in as {actor.email}, so there is nothing wrong with your
-            password. This account simply is not set up to use these pages.
+          <CardDescription className="text-xs">
+            Signed in as {actor.email}. This account lacks admin portal access.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            If you should have access, ask an administrator to grant it. Mention the
-            address above; that is what they will need to find your account.
+          <p className="text-xs text-muted-foreground">
+            Contact an administrator to request access for this account.
           </p>
           <div className="flex flex-wrap gap-2">
             <Link href="/" className={buttonVariants({ variant: "outline" })}>

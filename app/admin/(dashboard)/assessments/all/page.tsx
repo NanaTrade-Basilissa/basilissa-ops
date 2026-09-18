@@ -34,8 +34,8 @@ export default async function AllAssessmentsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">All assessments</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Scored tests sent to one person at a time, so results are attributable.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Full list of staff assessments and statuses.
           </p>
         </div>
         {canWrite && (
@@ -57,7 +57,7 @@ export default async function AllAssessmentsPage() {
               <ClipboardCheck />
             </EmptyMedia>
             <EmptyTitle>Nothing here yet</EmptyTitle>
-            <EmptyDescription>An assessment is a set of sections, each with its own questions.</EmptyDescription>
+            <EmptyDescription className="text-xs">Create an assessment to get started.</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (

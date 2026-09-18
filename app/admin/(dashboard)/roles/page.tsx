@@ -32,9 +32,8 @@ export default async function RolesPage() {
               Roles &amp; Permissions
             </h1>
           </div>
-          <p className="max-w-2xl text-sm text-muted-foreground mt-1">
-            Create custom roles and define exactly which resources and actions each role can access.
-            Authorization is strictly deny-by-default.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Manage custom roles and access permissions.
           </p>
         </div>
 

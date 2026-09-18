@@ -134,22 +134,20 @@ export default async function AttendanceDayPage({
         <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-200">
           <Clock className="size-4 text-amber-600 dark:text-amber-400" />
           <AlertTitle className="font-semibold">No Attendance Recorded</AlertTitle>
-          <AlertDescription>
+          <AlertDescription className="text-xs">
             {shiftName ? (
               <span>
-                Employee is scheduled for <strong>{shiftName}</strong>
+                Scheduled for <strong>{shiftName}</strong>
                 {day.scheduledStart && day.scheduledEnd
                   ? ` (${time(day.scheduledStart)} – ${time(day.scheduledEnd)})`
                   : ""}
-                , but no clock-in or clock-out punches have been recorded for this date yet.
+                , but no punches recorded yet.
               </span>
             ) : (
-              <span>
-                No clock-in or clock-out punches have been recorded for this employee on this date.
-              </span>
+              <span>No clock-in or clock-out punches recorded for this date.</span>
             )}
             {can(actor, "attendance:manual_entry", { branchId: day.branchId }) && (
-              <span> You can record manual attendance using the button above.</span>
+              <span> Use button above to add manual entry.</span>
             )}
           </AlertDescription>
         </Alert>
@@ -158,10 +156,8 @@ export default async function AttendanceDayPage({
       {isAutoClosed && (
         <Alert className="border-purple-500/30 bg-purple-500/10 text-purple-950 dark:text-purple-200">
           <AlertTitle className="font-semibold">Shift Automatically Closed</AlertTitle>
-          <AlertDescription>
-            This shift was automatically closed by the system because no clock-out was recorded.
-            Per company policy, zero overtime was credited. If the employee worked past the scheduled end,
-            use &ldquo;Correct attendance&rdquo; above to record the actual time.
+          <AlertDescription className="text-xs">
+            Automatically closed due to missing clock-out. Zero overtime credited.
           </AlertDescription>
         </Alert>
       )}
@@ -202,9 +198,8 @@ export default async function AttendanceDayPage({
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
             <CardTitle className="text-base">What was recorded</CardTitle>
-            <CardDescription>
-              Every signal received, including ones that did not count. A punch superseded by
-              a stronger record, or set aside by a correction, stays here.
+            <CardDescription className="text-xs">
+              All raw punch signals and corrections.
             </CardDescription>
           </div>
           {canWrite && isRecorded && events.length > 0 && (
@@ -338,9 +333,8 @@ export default async function AttendanceDayPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Corrections</CardTitle>
-            <CardDescription>
-              What was changed, by whom and why. Corrections are added, never edited, so
-              this list only ever grows.
+            <CardDescription className="text-xs">
+              Audit log of manual edits and adjustments.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -72,9 +72,8 @@ export function AttemptDetailContent({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Left the test tab</CardTitle>
-            <CardDescription>
-              {tabAbsences.length} {tabAbsences.length === 1 ? "time" : "times"} during the attempt. Not
-              blocked, only recorded — worth a look if any of these run long.
+            <CardDescription className="text-xs">
+              Logged browser tab switch events.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -108,7 +107,7 @@ export function AttemptDetailContent({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Score</CardTitle>
-            <CardDescription>Recorded at submission. It does not change if the test is edited afterwards.</CardDescription>
+            <CardDescription className="text-xs">Submission score record.</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-foreground">

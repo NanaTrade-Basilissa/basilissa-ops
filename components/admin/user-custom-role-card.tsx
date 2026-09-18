@@ -52,8 +52,8 @@ export function UserCustomRoleCard({
           <Shield className="size-4 text-primary" />
           Custom Role &amp; Permissions
         </CardTitle>
-        <CardDescription>
-          Assign an administrator-defined custom role. Permissions are strictly deny-by-default.
+        <CardDescription className="text-xs">
+          Assign an administrator-defined custom role.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

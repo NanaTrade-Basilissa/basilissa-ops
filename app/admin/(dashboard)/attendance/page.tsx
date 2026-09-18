@@ -140,9 +140,8 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="font-heading text-2xl font-bold text-foreground">Attendance Hub</h1>
-          <p className="text-sm text-muted-foreground">
-            {scope.kind === "branches" ? "Your branches." : "Every branch."} Daily logs, live
-            roster, and payroll timesheets.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Daily logs, live roster, and timesheets.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -270,8 +269,7 @@ async function DailyRosterView({
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             <span>
               {summary.needingReview}{" "}
-              {summary.needingReview === 1 ? "day requires" : "days require"} manager review
-              (missing clock-outs, late arrivals, or anomalies).
+              {summary.needingReview === 1 ? "record requires" : "records require"} review.
             </span>
             <Link
               href={`/admin/attendance?view=daily&date=${date}${branchId ? `&branchId=${branchId}` : ""}&exceptions=1`}

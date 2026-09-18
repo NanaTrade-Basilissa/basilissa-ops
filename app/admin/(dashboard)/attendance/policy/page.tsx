@@ -56,10 +56,10 @@ export default async function AttendancePolicyPage({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="font-heading text-2xl font-bold text-foreground">Attendance policy</h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-0.5">
               {selectedBranch
-                ? `Managing attendance rules and thresholds for ${selectedBranch.name}.`
-                : "Global policy in effect across all branches unless overridden."}
+                ? `Rules and thresholds for ${selectedBranch.name}.`
+                : "Global attendance rules and thresholds."}
             </p>
           </div>
           {selectedBranch ? (

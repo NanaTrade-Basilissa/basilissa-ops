@@ -52,9 +52,8 @@ export function ResponseDetailContent({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Score</CardTitle>
-            <CardDescription>
-              Recorded at submission. It does not change if the assessment is edited
-              afterwards.
+            <CardDescription className="text-xs">
+              Submission score record.
             </CardDescription>
           </CardHeader>
           <CardContent>

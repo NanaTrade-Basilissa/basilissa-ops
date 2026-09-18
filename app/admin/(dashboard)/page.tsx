@@ -10,13 +10,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
-import {
-  requirePermission,
-  branchScope,
-  can,
-  getJobQueueStats,
-  listAllJobs,
-} from "@/lib/modules/identity/server";
+import { requirePermission, branchScope } from "@/lib/modules/identity/server";
 import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from "@/components/ui/card";
@@ -24,7 +18,6 @@ import { StatCard } from "@/components/admin/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { GeneralQrButton } from "@/components/admin/general-qr-button";
-import { DashboardJobsCard } from "@/components/admin/dashboard-jobs-card";
 import { getEnv } from "@/lib/platform/env";
 import { cn } from "@/lib/utils";
 
@@ -33,8 +26,6 @@ export const dynamic = "force-dynamic";
 
 export default async function OperationsDashboardPage() {
   const actor = await requirePermission("admin:access");
-  const canViewJobs = can(actor, "jobs:read");
-  const canManageJobs = can(actor, "jobs:manage");
   const attScope = branchScope(actor, "attendance:read");
 
   const now = new Date();
@@ -53,8 +44,6 @@ export default async function OperationsDashboardPage() {
     branches,
     activeEmployeeCount,
     todayAttendanceDays,
-    jobStats,
-    recentJobs,
   ] = await Promise.all([
     prisma.branch.findMany({
       where: branchWhere,
@@ -107,8 +96,6 @@ export default async function OperationsDashboardPage() {
       },
       orderBy: { scheduledStart: "asc" },
     }),
-    canViewJobs ? getJobQueueStats() : Promise.resolve(null),
-    canViewJobs ? listAllJobs({ pageSize: 6 }) : Promise.resolve(null),
   ]);
 
   // Load employee details for today active roster
@@ -158,17 +145,11 @@ export default async function OperationsDashboardPage() {
               <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {todayKey} (Accra)
             </span>
-            {canViewJobs && jobStats && jobStats.dead > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                <span className="size-1.5 rounded-full bg-rose-500 animate-ping" />
-                {jobStats.dead} Failed Job{jobStats.dead > 1 ? "s" : ""}
-              </span>
-            )}
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {attScope.kind === "branches" && branches.length === 1
-              ? `Operational overview and live status for ${branches[0]?.name}.`
-              : "Consolidated operational oversight across all branch facilities."}
+              ? `Live operations for ${branches[0]?.name}.`
+              : "Live operations and branch activity."}
           </p>
         </div>
 
@@ -190,7 +171,7 @@ export default async function OperationsDashboardPage() {
           subtext={
             scheduledCount > 0
               ? `${completedCount} completed · ${scheduledCount} scheduled`
-              : "No scheduled shifts today"
+              : "No shifts scheduled"
           }
           icon={ClipboardList}
           tone="good"
@@ -211,8 +192,8 @@ export default async function OperationsDashboardPage() {
           }
           subtext={
             exceptionCount > 0
-              ? `${exceptionCount} shifts flagged for review`
-              : "All shifts tracking normally"
+              ? `${exceptionCount} flagged for review`
+              : "Tracking normally"
           }
           icon={CalendarClock}
           tone={exceptionCount > 0 ? "critical" : "info"}
@@ -239,7 +220,7 @@ export default async function OperationsDashboardPage() {
               {geofencedBranches.length} geofenced
             </span>
           }
-          subtext={`${branches.length} total operational locations`}
+          subtext={`${branches.length} locations`}
           icon={Store}
           tone="default"
         />
@@ -254,7 +235,7 @@ export default async function OperationsDashboardPage() {
               Today&apos;s Attendance & Floor Status
             </CardTitle>
             <CardDescription className="text-xs mt-0.5">
-              Live roster tracking and shift progress across branch terminals and mobile clock-ins for {todayKey}.
+              Live roster and shift activity for today.
             </CardDescription>
           </div>
           <CardAction>
@@ -283,7 +264,7 @@ export default async function OperationsDashboardPage() {
               <div className="text-xl font-bold text-foreground mt-0.5">{exceptionCount}</div>
             </div>
             <div className="rounded-xl bg-slate-50/90 p-3 border-b-2 border-slate-600">
-              <div className="text-[11px] text-muted-foreground font-medium">Total Scheduled</div>
+              <div className="text-[11px] text-muted-foreground font-medium">Scheduled</div>
               <div className="text-xl font-bold text-foreground mt-0.5">{scheduledCount}</div>
             </div>
           </div>
@@ -294,9 +275,9 @@ export default async function OperationsDashboardPage() {
               <div className="flex size-10 items-center justify-center rounded-xl bg-background border border-border/50 text-primary mb-3">
                 <CalendarClock className="size-5" />
               </div>
-              <p className="text-sm font-semibold text-foreground">No staff clocked in yet today</p>
-              <p className="text-xs text-muted-foreground max-w-xs mt-1 leading-relaxed">
-                Attendance punches will appear here in real time as staff clock in at branch terminals or via mobile.
+              <p className="text-sm font-semibold text-foreground">No staff clocked in today</p>
+              <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                Punches will appear in real time as staff clock in.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-2.5 mt-4">
                 <Link
@@ -309,7 +290,7 @@ export default async function OperationsDashboardPage() {
                   href="/admin/shifts"
                   className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-xs h-8 text-muted-foreground hover:text-foreground")}
                 >
-                  View Shift Rota &rarr;
+                  Shift Rota &rarr;
                 </Link>
               </div>
             </div>
@@ -387,26 +368,17 @@ export default async function OperationsDashboardPage() {
               href="/admin/attendance"
               className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
             >
-              Go to Attendance Hub <ArrowRight className="size-3" />
+              Attendance Hub <ArrowRight className="size-3" />
             </Link>
             <Link
               href="/admin/shifts"
               className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
             >
-              Manage Shift Rota &rarr;
+              Shift Rota &rarr;
             </Link>
           </div>
         </CardContent>
       </Card>
-
-      {/* Background and System Jobs Section */}
-      {canViewJobs && jobStats && recentJobs && (
-        <DashboardJobsCard
-          stats={jobStats}
-          jobs={recentJobs.jobs}
-          canManage={canManageJobs}
-        />
-      )}
     </div>
   );
 }

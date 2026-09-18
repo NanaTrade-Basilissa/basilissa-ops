@@ -29,8 +29,8 @@ export default async function AllAptitudeTestsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">All aptitude tests</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Timed screening tests for job candidates.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Full list of candidate screening tests.
           </p>
         </div>
         {canWrite && (
@@ -52,7 +52,7 @@ export default async function AllAptitudeTestsPage() {
               <Timer />
             </EmptyMedia>
             <EmptyTitle>Nothing here yet</EmptyTitle>
-            <EmptyDescription>A test is a set of sections, each with its own questions.</EmptyDescription>
+            <EmptyDescription className="text-xs">Create a test to get started.</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (

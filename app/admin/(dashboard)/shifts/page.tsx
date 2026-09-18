@@ -84,10 +84,10 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
           <h1 className="font-heading text-2xl font-bold text-foreground">
             {activeTab === "schedule" ? "Weekly Schedule" : "Shift Templates"}
           </h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {activeTab === "schedule"
-              ? "Plan and manage weekly rotas, shift coverage, and day-to-day staff overrides."
-              : "Reusable templates, resolved against each branch's timezone."}
+              ? "Weekly rotas, shift coverage, and staff assignments."
+              : "Reusable shift patterns and templates."}
           </p>
         </div>
         {activeTab === "templates" && canCreate && (

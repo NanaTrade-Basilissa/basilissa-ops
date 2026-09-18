@@ -144,8 +144,8 @@ export default async function SecurityPage({
           <TabsContent value="audit" className="space-y-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">System & Activity Audit Trail</h2>
-              <p className="text-sm text-muted-foreground">
-                Append-only record of security, policy, shift, and attendance administrative events.
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Administrative security and policy activity log.
               </p>
             </div>
             {auditData && <AuditLogTable data={auditData} />}

@@ -54,7 +54,7 @@ export default async function BranchesPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Branches</h1>
-          <p className="text-sm text-muted-foreground">Manage locations and their feedback QR codes.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Physical locations and QR codes.</p>
         </div>
         {canCreate && (
           <BranchDialog

@@ -84,7 +84,7 @@ export default async function AllFeedbackSubmissionsPage({ searchParams }: { sea
     <div className="space-y-4">
       <div>
         <h1 className="font-heading text-2xl font-bold text-foreground">All Submissions</h1>
-        <p className="text-sm text-muted-foreground">Every customer submission across all branches.</p>
+        <p className="text-xs text-muted-foreground mt-0.5">All customer feedback submissions.</p>
       </div>
 
       <Suspense fallback={<div className="h-[74px]" />}>

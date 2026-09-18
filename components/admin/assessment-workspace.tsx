@@ -205,8 +205,8 @@ export function AssessmentWorkspace({
                     <Users className="size-4" />
                     Participant responses
                   </CardTitle>
-                  <CardDescription>
-                    Track invitation delivery, employee participation, and assessment scores.
+                  <CardDescription className="text-xs">
+                    Invitations, participation, and test scores.
                   </CardDescription>
                 </div>
                 {publicLinkValues.enabled && (

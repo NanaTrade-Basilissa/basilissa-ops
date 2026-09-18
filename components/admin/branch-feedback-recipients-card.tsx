@@ -110,9 +110,8 @@ export function BranchFeedbackRecipientsCard({
               <Mail className="size-4 text-primary" />
               Customer Feedback Email Routing
             </CardTitle>
-            <CardDescription>
-              Assign who receives notification emails when a customer submits feedback for this branch.
-              Branch Managers and Area Managers are enabled by default.
+            <CardDescription className="text-xs">
+              Staff receiving email notifications for this branch.
             </CardDescription>
           </div>
           {canWrite && (

@@ -91,9 +91,8 @@ export default async function EmailQueuePage({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Email Queue</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Monitor outgoing transactional emails dispatched by background workers. Inspect delivery
-            states, view failure causes, or trigger resends and retries.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Outgoing transactional emails and delivery states.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -112,28 +111,28 @@ export default async function EmailQueuePage({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Queued / Scheduled"
+          label="Queued"
           value={stats.pending}
-          subtext="Waiting for worker pickup"
+          subtext="Waiting for pickup"
           icon={Clock}
         />
         <StatCard
-          label="Currently Sending"
+          label="Sending"
           value={stats.running}
           subtext="Under active lock"
           icon={Loader2}
         />
         <StatCard
-          label="Delivered / Sent"
+          label="Delivered"
           value={stats.succeeded}
-          subtext="Successfully completed"
+          subtext="Sent successfully"
           icon={CheckCircle2}
           tone="good"
         />
         <StatCard
-          label="Failed / Dead"
+          label="Failed"
           value={stats.dead}
-          subtext={stats.dead > 0 ? "Requires administrative review" : "No dead jobs"}
+          subtext={stats.dead > 0 ? "Requires review" : "No failed emails"}
           icon={AlertCircle}
           tone={stats.dead > 0 ? "critical" : "default"}
         />

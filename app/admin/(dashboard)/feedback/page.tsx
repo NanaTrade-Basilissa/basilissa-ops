@@ -84,10 +84,10 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Feedback Overview</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {scope.kind === "branches" && branches.length === 1
-              ? `Customer feedback for ${branches[0]?.name}, live.`
-              : "Customer feedback across every branch, live."}
+              ? `Customer feedback for ${branches[0]?.name}.`
+              : "Customer feedback across branches."}
           </p>
         </div>
         <GeneralQrButton feedbackUrl={`${getEnv().NEXT_PUBLIC_APP_URL}/feedback`} />
@@ -143,8 +143,8 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
         <Card>
           <CardHeader>
             <CardTitle>Rating distribution</CardTitle>
-            <CardDescription>
-              {filters.questionId ? "For the selected question" : "Overall score across all submissions"}
+            <CardDescription className="text-xs">
+              {filters.questionId ? "Selected question scores." : "Overall score distribution."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -155,7 +155,7 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
         <Card>
           <CardHeader>
             <CardTitle>Feedback trend</CardTitle>
-            <CardDescription>Average score per day over the selected period</CardDescription>
+            <CardDescription className="text-xs">Average score per day.</CardDescription>
           </CardHeader>
           <CardContent>
             <TrendChart data={data.trend} />
@@ -166,7 +166,7 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
           <Card>
             <CardHeader>
               <CardTitle>Branch comparison</CardTitle>
-              <CardDescription>Average overall score by branch, highest first</CardDescription>
+              <CardDescription className="text-xs">Average overall score by branch.</CardDescription>
             </CardHeader>
             <CardContent>
               <BranchComparisonChart data={data.branchComparison} />
@@ -177,7 +177,7 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
         <Card className={branches.length <= 1 ? "lg:col-span-2" : undefined}>
           <CardHeader>
             <CardTitle>Average score per question</CardTitle>
-            <CardDescription>Where customers are happiest and where they&apos;re not</CardDescription>
+            <CardDescription className="text-xs">Average score breakdown by question.</CardDescription>
           </CardHeader>
           <CardContent>
             <QuestionAveragesChart data={data.questionAverages} />
@@ -188,7 +188,7 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
       <Card>
         <CardHeader>
           <CardTitle>Recent submissions</CardTitle>
-          <CardDescription>The 10 most recent submissions matching the current filters</CardDescription>
+          <CardDescription className="text-xs">Latest filtered submissions.</CardDescription>
           <CardAction>
             <Link href="/admin/feedback/all" className={buttonVariants({ variant: "outline", size: "sm" })}>
               View all

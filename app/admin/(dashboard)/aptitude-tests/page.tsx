@@ -31,9 +31,8 @@ export default async function AptitudeTestsOverviewPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Aptitude Tests</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Timed screening tests for job candidates, separate from Assessments, which is for
-            staff already on payroll.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Timed screening tests for job candidates.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -69,7 +68,7 @@ export default async function AptitudeTestsOverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Recent tests</CardTitle>
-            <CardDescription>The last ones created, whatever their status.</CardDescription>
+            <CardDescription className="text-xs">Latest created tests.</CardDescription>
           </CardHeader>
           <CardContent>
             {overview.recentTests.length === 0 ? (
@@ -112,7 +111,7 @@ export default async function AptitudeTestsOverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Recent activity</CardTitle>
-            <CardDescription>The last completed submissions, across every test.</CardDescription>
+            <CardDescription className="text-xs">Latest completed submissions.</CardDescription>
           </CardHeader>
           <CardContent>
             {overview.recentActivity.length === 0 ? (

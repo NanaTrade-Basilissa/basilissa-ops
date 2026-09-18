@@ -32,8 +32,8 @@ export default async function AssessmentsOverviewPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Assessments</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Scored tests sent to one person at a time, so results are attributable.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Staff tests and evaluation results.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -69,7 +69,7 @@ export default async function AssessmentsOverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Recent assessments</CardTitle>
-            <CardDescription>The last ones created, whatever their status.</CardDescription>
+            <CardDescription className="text-xs">Latest created assessments.</CardDescription>
           </CardHeader>
           <CardContent>
             {overview.recentAssessments.length === 0 ? (
@@ -112,7 +112,7 @@ export default async function AssessmentsOverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Recent activity</CardTitle>
-            <CardDescription>The last completed submissions, across every assessment.</CardDescription>
+            <CardDescription className="text-xs">Latest completed submissions.</CardDescription>
           </CardHeader>
           <CardContent>
             {overview.recentActivity.length === 0 ? (

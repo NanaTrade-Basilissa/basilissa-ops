@@ -136,7 +136,7 @@ export default async function BranchDetailPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Feedback QR code</CardTitle>
-            <CardDescription>Print this at the branch or share the link directly.</CardDescription>
+            <CardDescription className="text-xs">Scan or share directly.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-3">
             <div className="overflow-hidden rounded-lg border border-border">
@@ -166,7 +166,7 @@ export default async function BranchDetailPage({
         <Card>
           <CardHeader>
             <CardTitle>Rating distribution</CardTitle>
-            <CardDescription>Overall score across this branch&apos;s submissions</CardDescription>
+            <CardDescription className="text-xs">Overall score distribution.</CardDescription>
           </CardHeader>
           <CardContent>
             <RatingDistributionChart data={branchData.ratingDistribution} />
@@ -178,7 +178,7 @@ export default async function BranchDetailPage({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <CardTitle>Trend</CardTitle>
-                <CardDescription>Average score over time</CardDescription>
+                <CardDescription className="text-xs">Average score over time.</CardDescription>
               </div>
               <div className="flex gap-1">
                 {GRANULARITIES.map((g) => (
@@ -213,7 +213,7 @@ export default async function BranchDetailPage({
         <Card>
           <CardHeader>
             <CardTitle>Performance vs. other branches</CardTitle>
-            <CardDescription>{branch.name} highlighted against the network average</CardDescription>
+            <CardDescription className="text-xs">{branch.name} vs. network average.</CardDescription>
           </CardHeader>
           <CardContent>
             <BranchComparisonChart data={allBranchesData.branchComparison} />
@@ -224,7 +224,7 @@ export default async function BranchDetailPage({
       <Card>
         <CardHeader>
           <CardTitle>Recent submissions</CardTitle>
-          <CardDescription>The 10 most recent submissions for this branch</CardDescription>
+          <CardDescription className="text-xs">Latest submissions for this branch.</CardDescription>
           <CardAction>
             <Link
               href={`/admin/feedbacks?branchId=${branch.id}`}

@@ -113,7 +113,7 @@ export function EmployeeDetailContent({
             <Building2 className="size-4" />
             Branches
           </CardTitle>
-          <CardDescription>Where this person may clock in.</CardDescription>
+          <CardDescription className="text-xs">Authorized clock-in branches.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {employee.branchAssignments.length === 0 ? (
@@ -158,7 +158,7 @@ export function EmployeeDetailContent({
               <CalendarClock className="size-4" />
               Shift
             </CardTitle>
-            <CardDescription>Which shift they work, and on which days.</CardDescription>
+            <CardDescription className="text-xs">Assigned schedule and working days.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {shiftAssignments.length === 0 ? (
@@ -217,14 +217,14 @@ export function EmployeeDetailContent({
                   : "No Device Bound"}
               </Badge>
             </div>
-            <CardDescription>
-              Hardware binding secures clock-in so employees cannot punch for each other.
+            <CardDescription className="text-xs">
+              Hardware binding preventing proxy clock-ins.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {(!employee.deviceIdentities || employee.deviceIdentities.length === 0) ? (
-              <p className="text-sm text-muted-foreground">
-                No active mobile phone is currently bound to this employee account. When the employee logs into the mobile app, their phone will be automatically paired.
+              <p className="text-xs text-muted-foreground">
+                No mobile device paired. Devices bind automatically on first sign-in.
               </p>
             ) : (
               <ul className="divide-y divide-border text-sm">

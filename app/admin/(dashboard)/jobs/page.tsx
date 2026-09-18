@@ -111,9 +111,8 @@ export default async function BackgroundJobsPage({
               Physical Queue
             </span>
           </div>
-          <p className="max-w-2xl text-sm text-muted-foreground mt-1">
-            Physical Postgres background job queue and worker executions across all domain tasks.
-            Inspect execution payloads, observe error traces, and retry failed operations.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            System task queue and worker executions.
           </p>
         </div>
 
@@ -134,13 +133,13 @@ export default async function BackgroundJobsPage({
       {/* Metrics Pods */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Queued / Scheduled"
+          label="Queued"
           value={stats.pending}
-          subtext="Waiting for worker pickup"
+          subtext="Waiting for pickup"
           icon={Clock}
         />
         <StatCard
-          label="Currently Running"
+          label="Running"
           value={stats.running}
           subtext="Under active lock"
           icon={Loader2}
@@ -148,14 +147,14 @@ export default async function BackgroundJobsPage({
         <StatCard
           label="Succeeded"
           value={stats.succeeded}
-          subtext="Successfully executed"
+          subtext="Executed successfully"
           icon={CheckCircle2}
           tone="good"
         />
         <StatCard
-          label="Dead / Failed"
+          label="Failed"
           value={stats.dead}
-          subtext={stats.dead > 0 ? "Requires review or retry" : "No failed jobs"}
+          subtext={stats.dead > 0 ? "Requires review" : "No failed jobs"}
           icon={AlertCircle}
           tone={stats.dead > 0 ? "critical" : "default"}
         />

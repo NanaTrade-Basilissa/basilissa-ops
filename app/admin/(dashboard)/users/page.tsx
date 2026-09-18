@@ -78,8 +78,8 @@ export default async function UsersPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Users</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Accounts that can sign in. Most staff only need an employee record, not this.
+          <p className="text-xs text-muted-foreground mt-0.5">
+            System accounts with admin portal access.
           </p>
         </div>
         {canWrite && (
@@ -103,8 +103,7 @@ export default async function UsersPage() {
             two-step verification
           </AlertTitle>
           <AlertDescription>
-            They can sign in but cannot reach anything privileged until they set it up.
-            Nobody is locked out. They are sent to the security page instead.
+            MFA setup required before accessing privileged actions.
           </AlertDescription>
         </Alert>
       )}

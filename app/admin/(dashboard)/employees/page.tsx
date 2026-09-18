@@ -72,10 +72,8 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">Employees</h1>
-          <p className="text-sm text-muted-foreground">
-            {scope.kind === "branches"
-              ? "Employees at the branches you manage."
-              : "Everyone on record."}
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Staff records and branch assignments.
           </p>
         </div>
         {can(actor, "employees:create") && (

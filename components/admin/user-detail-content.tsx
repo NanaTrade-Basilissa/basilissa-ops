@@ -121,8 +121,8 @@ export function UserDetailContent({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Roles</CardTitle>
-          <CardDescription>
-            What they may do, and where.{!canAssign && " Only a super admin can change this."}
+          <CardDescription className="text-xs">
+            Assigned system roles and access scopes.
           </CardDescription>
         </CardHeader>
         <CardContent>

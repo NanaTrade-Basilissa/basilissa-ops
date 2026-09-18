@@ -200,8 +200,8 @@ export function AptitudeTestWorkspace({
                     <Users className="size-4" />
                     Candidate responses
                   </CardTitle>
-                  <CardDescription>
-                    Track invitation delivery, candidate progress, and test scores.
+                  <CardDescription className="text-xs">
+                    Invitations, candidate progress, and test scores.
                   </CardDescription>
                 </div>
                 {publicLinkValues.enabled && (
