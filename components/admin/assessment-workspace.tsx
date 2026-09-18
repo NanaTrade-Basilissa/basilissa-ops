@@ -53,6 +53,7 @@ export function AssessmentWorkspace({
   addSectionAction,
   updateSectionAction,
   addQuestionAction,
+  updateQuestionAction,
   deleteQuestionAction,
   summary,
   invitations,
@@ -76,6 +77,7 @@ export function AssessmentWorkspace({
   addSectionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   updateSectionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   addQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
+  updateQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   deleteQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   summary: { invited: number; submitted: number; averagePercent: number | null };
   invitations: Invitation[];
@@ -131,6 +133,7 @@ export function AssessmentWorkspace({
           addSectionAction={addSectionAction}
           updateSectionAction={updateSectionAction}
           addQuestionAction={addQuestionAction}
+          updateQuestionAction={updateQuestionAction}
           deleteQuestionAction={deleteQuestionAction}
         />
       </TabsContent>

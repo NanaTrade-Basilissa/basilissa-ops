@@ -32,6 +32,7 @@ export function AssessmentEditor({
   addSectionAction,
   updateSectionAction,
   addQuestionAction,
+  updateQuestionAction,
   deleteQuestionAction,
   detailsAction,
   detailsValues,
@@ -44,6 +45,7 @@ export function AssessmentEditor({
   addSectionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   updateSectionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   addQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
+  updateQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   deleteQuestionAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   detailsAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   detailsValues: {
@@ -86,6 +88,7 @@ export function AssessmentEditor({
           addSectionAction={addSectionAction}
           updateSectionAction={updateSectionAction}
           addQuestionAction={addQuestionAction}
+          updateQuestionAction={updateQuestionAction}
           deleteQuestionAction={deleteQuestionAction}
         />
       </TabsContent>

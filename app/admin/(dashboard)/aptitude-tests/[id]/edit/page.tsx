@@ -10,6 +10,7 @@ import {
   addSectionAction,
   deleteQuestionAction,
   updateAptitudeTestAction,
+  updateQuestionAction,
   updateSectionAction,
 } from "@/lib/modules/aptitude/actions";
 import { AptitudeTestEditor } from "@/components/admin/aptitude-test-editor";
@@ -58,6 +59,7 @@ export default async function EditAptitudeTestPage({ params }: { params: Promise
         addSectionAction={addSectionAction.bind(null, test.id)}
         updateSectionAction={updateSectionAction.bind(null, test.id)}
         addQuestionAction={addQuestionAction.bind(null, test.id)}
+        updateQuestionAction={updateQuestionAction.bind(null, test.id)}
         deleteQuestionAction={deleteQuestionAction.bind(null, test.id)}
         detailsAction={updateAptitudeTestAction.bind(null, test.id)}
         detailsValues={{

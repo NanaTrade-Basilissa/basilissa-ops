@@ -37,6 +37,10 @@ export const publicLinkConfigSchema = z.object({
 export const sectionSchema = z.object({
   title: z.string().trim().min(1, "Give the section a title").max(200),
   description: z.string().trim().max(1000).optional(),
+  timeLimitMinutes: z.preprocess(
+    (val) => (val === "" || val === undefined || val === null ? undefined : val),
+    z.coerce.number().int().min(1, "At least 1 minute").max(180, "At most 180 minutes").optional(),
+  ),
 });
 
 const optionSchema = z.object({

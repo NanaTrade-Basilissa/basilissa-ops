@@ -34,6 +34,7 @@ import {
   deleteQuestion,
   publishAssessment,
   updateAssessmentDetails,
+  updateQuestion,
   updateSection,
 } from "./authoring";
 import {
@@ -196,6 +197,38 @@ export async function addQuestionAction(
   }
 
   const outcome = await addQuestion(parsed.data.sectionId, parsed.data, auditActorFrom(actor));
+  if (!outcome.ok) return { error: outcome.message };
+
+  revalidatePath(`/admin/assessments/${assessmentId}`);
+  return { saved: true };
+}
+
+export async function updateQuestionAction(
+  assessmentId: string,
+  _prev: AssessmentFormState,
+  formData: FormData,
+): Promise<AssessmentFormState> {
+  const actor = await requirePermission("assessment:write");
+
+  const questionId = String(formData.get("questionId") ?? "");
+  const texts = formData.getAll("optionText").map(String);
+  const correctIndexes = new Set(formData.getAll("optionCorrect").map((v) => String(v)));
+
+  const parsed = questionSchema.safeParse({
+    sectionId: formData.get("sectionId"),
+    kind: formData.get("kind"),
+    text: formData.get("text"),
+    points: formData.get("points"),
+    required: formData.get("required") === "on",
+    options: texts
+      .map((text, index) => ({ text, isCorrect: correctIndexes.has(String(index)) }))
+      .filter((option) => option.text.trim().length > 0),
+  });
+  if (!parsed.success) {
+    return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  const outcome = await updateQuestion(questionId, parsed.data, auditActorFrom(actor));
   if (!outcome.ok) return { error: outcome.message };
 
   revalidatePath(`/admin/assessments/${assessmentId}`);

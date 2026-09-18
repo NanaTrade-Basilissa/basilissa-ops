@@ -20,6 +20,7 @@ type Section = {
   id: string;
   title: string;
   description: string | null;
+  timeLimitMinutes: number | null;
   questions: {
     id: string;
     kind: AptitudeQuestionKind;
@@ -49,6 +50,7 @@ export function AptitudeTestWorkspace({
   addSectionAction,
   updateSectionAction,
   addQuestionAction,
+  updateQuestionAction,
   deleteQuestionAction,
   summary,
   invitations,
@@ -71,6 +73,7 @@ export function AptitudeTestWorkspace({
   addSectionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   updateSectionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   addQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
+  updateQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   deleteQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   summary: { invited: number; submitted: number; averagePercent: number | null };
   invitations: Invitation[];
@@ -123,11 +126,13 @@ export function AptitudeTestWorkspace({
         )}
         <AptitudeTestBuilder
           testId={testId}
+          testTimeLimitMinutes={detailsValues.timeLimitMinutes}
           editable={canWrite && isDraft}
           sections={sections}
           addSectionAction={addSectionAction}
           updateSectionAction={updateSectionAction}
           addQuestionAction={addQuestionAction}
+          updateQuestionAction={updateQuestionAction}
           deleteQuestionAction={deleteQuestionAction}
         />
       </TabsContent>
@@ -227,7 +232,12 @@ export function AptitudeTestWorkspace({
 
       <TabsContent value="settings" className="space-y-6 pt-6">
         {canWrite && !isClosed ? (
-          <AptitudeTestDetailsForm action={detailsAction} submitLabel="Save details" values={detailsValues} />
+          <AptitudeTestDetailsForm
+            action={detailsAction}
+            submitLabel="Save details"
+            values={detailsValues}
+            totalSectionMinutes={sections.reduce((sum, s) => sum + (s.timeLimitMinutes ?? 0), 0)}
+          />
         ) : (
           <Empty className="border">
             <EmptyDescription>

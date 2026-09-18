@@ -10,6 +10,7 @@ import {
   addSectionAction,
   deleteQuestionAction,
   updateAssessmentAction,
+  updateQuestionAction,
   updateSectionAction,
 } from "@/lib/modules/assessments/actions";
 import { AssessmentEditor } from "@/components/admin/assessment-editor";
@@ -58,6 +59,7 @@ export default async function EditAssessmentPage({ params }: { params: Promise<{
         addSectionAction={addSectionAction.bind(null, assessment.id)}
         updateSectionAction={updateSectionAction.bind(null, assessment.id)}
         addQuestionAction={addQuestionAction.bind(null, assessment.id)}
+        updateQuestionAction={updateQuestionAction.bind(null, assessment.id)}
         deleteQuestionAction={deleteQuestionAction.bind(null, assessment.id)}
         detailsAction={updateAssessmentAction.bind(null, assessment.id)}
         detailsValues={{

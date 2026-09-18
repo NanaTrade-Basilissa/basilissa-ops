@@ -41,6 +41,7 @@ export type TakingSection = {
   id: string;
   title: string;
   description: string | null;
+  timeLimitMinutes: number | null;
   questions: TakingQuestion[];
 };
 
@@ -67,6 +68,9 @@ export type TakingView = {
    * untimed.
    */
   timeLimitMinutes: number | null;
+  isSectionTimed: boolean;
+  currentSectionIndex: number;
+  sectionDeadlineAt: string | null;
   sections: TakingSection[];
 };
 
@@ -101,6 +105,7 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
               id: true,
               title: true,
               description: true,
+              timeLimitMinutes: true,
               questions: {
                 orderBy: { order: "asc" },
                 select: {
@@ -126,6 +131,8 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
           id: true,
           submittedAt: true,
           deadlineAt: true,
+          currentSectionIndex: true,
+          sectionStartedAt: true,
           declaredName: true,
           answers: { select: { questionId: true, selectedOptionIds: true, text: true } },
         },
@@ -147,20 +154,36 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
     return { ok: false, reason: "CLOSED", message: "This is no longer open." };
   }
 
+  const sections = invitation.test.sections;
+  const isSectionTimed = sections.some((s) => (s.timeLimitMinutes ?? 0) > 0);
+
   // Created on first open rather than when the invitation is issued, so
   // `startedAt` means what it says and the deadline is computed against the
   // moment the candidate actually began, not when HR sent the link.
   let attempt = invitation.attempt;
   if (!attempt) {
-    const deadlineAt = invitation.test.timeLimitMinutes
-      ? new Date(Date.now() + invitation.test.timeLimitMinutes * 60_000)
-      : null;
+    let deadlineAt: Date | null = null;
+    if (isSectionTimed) {
+      const totalSectionMinutes = sections.reduce((sum, s) => sum + (s.timeLimitMinutes ?? 0), 0);
+      const minutes = Math.max(invitation.test.timeLimitMinutes ?? 0, totalSectionMinutes);
+      if (minutes > 0) deadlineAt = new Date(Date.now() + minutes * 60_000);
+    } else if (invitation.test.timeLimitMinutes) {
+      deadlineAt = new Date(Date.now() + invitation.test.timeLimitMinutes * 60_000);
+    }
+
     attempt = await prisma.aptitudeAttempt.create({
-      data: { invitationId: invitation.id, deadlineAt },
+      data: {
+        invitationId: invitation.id,
+        deadlineAt,
+        currentSectionIndex: 0,
+        sectionStartedAt: isSectionTimed ? new Date() : null,
+      },
       select: {
         id: true,
         submittedAt: true,
         deadlineAt: true,
+        currentSectionIndex: true,
+        sectionStartedAt: true,
         declaredName: true,
         answers: { select: { questionId: true, selectedOptionIds: true, text: true } },
       },
@@ -181,6 +204,58 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
       reason: "TIME_UP",
       message: "Time ran out before this was submitted. Your answers up to that point were recorded.",
     };
+  }
+
+  let currentSectionIndex = attempt.currentSectionIndex;
+  let sectionStartedAt = attempt.sectionStartedAt ?? new Date();
+  let sectionDeadlineAt: string | null = null;
+
+  if (isSectionTimed) {
+    if (!attempt.sectionStartedAt) {
+      await prisma.aptitudeAttempt.update({
+        where: { id: attempt.id },
+        data: { sectionStartedAt },
+      });
+    }
+
+    const now = Date.now();
+    while (currentSectionIndex < sections.length) {
+      const currentSec = sections[currentSectionIndex];
+      const limitMinutes = currentSec?.timeLimitMinutes ?? 0;
+      if (limitMinutes > 0) {
+        const secDeadlineMs = sectionStartedAt.getTime() + limitMinutes * 60_000;
+        if (now >= secDeadlineMs) {
+          currentSectionIndex++;
+          sectionStartedAt = new Date(secDeadlineMs);
+          continue;
+        } else {
+          sectionDeadlineAt = new Date(secDeadlineMs).toISOString();
+          break;
+        }
+      } else {
+        sectionDeadlineAt = null;
+        break;
+      }
+    }
+
+    if (currentSectionIndex >= sections.length) {
+      await finalizeAttempt(attempt.id);
+      return {
+        ok: false,
+        reason: "TIME_UP",
+        message: "Time ran out before this was submitted. Your answers up to that point were recorded.",
+      };
+    }
+
+    if (
+      currentSectionIndex !== attempt.currentSectionIndex ||
+      sectionStartedAt.getTime() !== (attempt.sectionStartedAt?.getTime() ?? 0)
+    ) {
+      await prisma.aptitudeAttempt.update({
+        where: { id: attempt.id },
+        data: { currentSectionIndex, sectionStartedAt },
+      });
+    }
   }
 
   const identity = invitation.isPublic
@@ -211,10 +286,14 @@ export async function loadForTaking(token: string): Promise<TakingOutcome> {
       identity,
       deadlineAt: attempt.deadlineAt ? attempt.deadlineAt.toISOString() : null,
       timeLimitMinutes: invitation.test.timeLimitMinutes,
+      isSectionTimed,
+      currentSectionIndex,
+      sectionDeadlineAt,
       sections: invitation.test.sections.map((section) => ({
         id: section.id,
         title: section.title,
         description: section.description,
+        timeLimitMinutes: section.timeLimitMinutes,
         questions: section.questions.map((question) => ({
           id: question.id,
           kind: question.kind,
@@ -305,8 +384,25 @@ export async function saveAnswer(
       id: true,
       expiresAt: true,
       revokedAt: true,
-      test: { select: { id: true, status: true } },
-      attempt: { select: { id: true, submittedAt: true, deadlineAt: true } },
+      test: {
+        select: {
+          id: true,
+          status: true,
+          sections: {
+            orderBy: { order: "asc" },
+            select: { id: true, timeLimitMinutes: true },
+          },
+        },
+      },
+      attempt: {
+        select: {
+          id: true,
+          submittedAt: true,
+          deadlineAt: true,
+          currentSectionIndex: true,
+          sectionStartedAt: true,
+        },
+      },
     },
   });
 
@@ -320,6 +416,46 @@ export async function saveAnswer(
     invitation.test.status !== "PUBLISHED"
   ) {
     return { ok: false };
+  }
+
+  const isSectionTimed = invitation.test.sections.some((s) => (s.timeLimitMinutes ?? 0) > 0);
+  if (isSectionTimed) {
+    const currentSection = invitation.test.sections[invitation.attempt.currentSectionIndex];
+    if (!currentSection) return { ok: false };
+
+    // Check if current section time has expired (with 10s network grace period)
+    if (currentSection.timeLimitMinutes && invitation.attempt.sectionStartedAt) {
+      const secDeadline =
+        invitation.attempt.sectionStartedAt.getTime() + currentSection.timeLimitMinutes * 60_000 + 10_000;
+      if (now.getTime() > secDeadline) {
+        return { ok: false };
+      }
+    }
+
+    const question = await prisma.aptitudeQuestion.findFirst({
+      where: { id: input.questionId, sectionId: currentSection.id },
+      select: { id: true, kind: true, options: { select: { id: true } } },
+    });
+    if (!question) return { ok: false };
+
+    const validOptionIds = new Set(question.options.map((o) => o.id));
+    let selected = (input.selectedOptionIds ?? []).filter((id) => validOptionIds.has(id));
+
+    if (question.kind === AptitudeQuestionKind.SINGLE_CHOICE && selected.length > 1) {
+      selected = selected.slice(0, 1);
+    }
+    if (question.kind === AptitudeQuestionKind.FREE_TEXT) selected = [];
+
+    const text =
+      question.kind === AptitudeQuestionKind.FREE_TEXT ? (input.text ?? "").slice(0, MAX_FREE_TEXT_LENGTH) : null;
+
+    await prisma.aptitudeAnswer.upsert({
+      where: { attemptId_questionId: { attemptId: invitation.attempt.id, questionId: question.id } },
+      create: { attemptId: invitation.attempt.id, questionId: question.id, selectedOptionIds: selected, text },
+      update: { selectedOptionIds: selected, text },
+    });
+
+    return { ok: true };
   }
 
   const question = await prisma.aptitudeQuestion.findFirst({
@@ -346,6 +482,79 @@ export async function saveAnswer(
   });
 
   return { ok: true };
+}
+
+export type AdvanceSectionOutcome =
+  | { ok: true; submitted: false; currentSectionIndex: number; sectionDeadlineAt: string | null }
+  | { ok: true; submitted: true }
+  | { ok: false; message: string };
+
+export async function advanceSection(token: string): Promise<AdvanceSectionOutcome> {
+  const invitation = await prisma.aptitudeInvitation.findUnique({
+    where: { tokenHash: hashInvitationToken(token) },
+    select: {
+      id: true,
+      expiresAt: true,
+      revokedAt: true,
+      test: {
+        select: {
+          id: true,
+          status: true,
+          sections: {
+            orderBy: { order: "asc" },
+            select: { id: true, timeLimitMinutes: true },
+          },
+        },
+      },
+      attempt: {
+        select: {
+          id: true,
+          submittedAt: true,
+          currentSectionIndex: true,
+        },
+      },
+    },
+  });
+
+  if (!invitation?.attempt || invitation.attempt.submittedAt) {
+    return { ok: false, message: "This test has already been completed or is invalid." };
+  }
+  if (invitation.revokedAt || (invitation.expiresAt && invitation.expiresAt <= new Date())) {
+    return { ok: false, message: "This link is no longer valid." };
+  }
+  if (invitation.test.status !== "PUBLISHED") {
+    return { ok: false, message: "This test is no longer open." };
+  }
+
+  const sections = invitation.test.sections;
+  const nextIndex = invitation.attempt.currentSectionIndex + 1;
+
+  if (nextIndex >= sections.length) {
+    await finalizeAttempt(invitation.attempt.id);
+    return { ok: true, submitted: true };
+  }
+
+  const nextSection = sections[nextIndex];
+  const now = new Date();
+  const nextDeadline =
+    (nextSection?.timeLimitMinutes ?? 0) > 0
+      ? new Date(now.getTime() + nextSection!.timeLimitMinutes! * 60_000).toISOString()
+      : null;
+
+  await prisma.aptitudeAttempt.update({
+    where: { id: invitation.attempt.id },
+    data: {
+      currentSectionIndex: nextIndex,
+      sectionStartedAt: now,
+    },
+  });
+
+  return {
+    ok: true,
+    submitted: false,
+    currentSectionIndex: nextIndex,
+    sectionDeadlineAt: nextDeadline,
+  };
 }
 
 export type TabAbsence = { leftAt: string; durationMs: number };
@@ -422,7 +631,12 @@ export async function submitResponse(token: string): Promise<SubmitOutcome> {
           // Only what `unansweredRequired` actually reads — id, kind,
           // required. Neither points nor correctness are needed to check
           // completeness, so neither is fetched here.
-          sections: { select: { questions: { select: { id: true, kind: true, required: true } } } },
+          sections: {
+            select: {
+              timeLimitMinutes: true,
+              questions: { select: { id: true, kind: true, required: true } },
+            },
+          },
         },
       },
       attempt: {
@@ -449,8 +663,9 @@ export async function submitResponse(token: string): Promise<SubmitOutcome> {
   }
 
   const pastDeadline = invitation.attempt.deadlineAt !== null && invitation.attempt.deadlineAt <= new Date();
+  const isSectionTimed = invitation.test.sections.some((s) => (s.timeLimitMinutes ?? 0) > 0);
 
-  if (!pastDeadline) {
+  if (!pastDeadline && !isSectionTimed) {
     // `points` and `options` are never read by `unansweredRequired` — filled
     // with harmless placeholders purely to satisfy `ScorableQuestion`'s
     // shape, not fetched from the database.

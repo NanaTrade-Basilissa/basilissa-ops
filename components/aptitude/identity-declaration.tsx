@@ -21,6 +21,7 @@ export function IdentityDeclaration({
   emailMode,
   personal,
   timeLimitMinutes,
+  isSectionTimed,
 }: {
   action: (prev: DeclarationState, formData: FormData) => Promise<DeclarationState>;
   nameMode: IdentityFieldMode;
@@ -31,6 +32,7 @@ export function IdentityDeclaration({
    * screen — this is purely so nobody discovers it's timed only after
    * starting. */
   timeLimitMinutes: number | null;
+  isSectionTimed?: boolean;
 }) {
   const [state, formAction, isPending] = useActionState<DeclarationState, FormData>(action, undefined);
 
@@ -45,7 +47,15 @@ export function IdentityDeclaration({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {timeLimitMinutes !== null && (
+        {isSectionTimed ? (
+          <Alert>
+            <Timer className="size-4" />
+            <AlertDescription>
+              This test is timed section-by-section. When each section&apos;s time expires, the test
+              automatically advances to the next section.
+            </AlertDescription>
+          </Alert>
+        ) : timeLimitMinutes !== null ? (
           <Alert>
             <Timer className="size-4" />
             <AlertDescription>
@@ -53,7 +63,7 @@ export function IdentityDeclaration({
               start. The clock does not pause.
             </AlertDescription>
           </Alert>
-        )}
+        ) : null}
         <Alert>
           <ShieldAlert className="size-4" />
           <AlertDescription>

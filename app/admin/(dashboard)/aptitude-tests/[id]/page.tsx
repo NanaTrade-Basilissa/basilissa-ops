@@ -82,7 +82,14 @@ export default async function AptitudeTestPage({
           </div>
           <p className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
             <span>{test.sections.length} sections · {questionCount} questions</span>
-            <span>· {test.timeLimitMinutes ? `${test.timeLimitMinutes} min timer` : "untimed"}</span>
+            <span>
+              ·{" "}
+              {test.sections.some((s) => (s.timeLimitMinutes ?? 0) > 0)
+                ? `${test.sections.reduce((sum, s) => sum + (s.timeLimitMinutes ?? 0), 0)} min total (section-timed)`
+                : test.timeLimitMinutes
+                  ? `${test.timeLimitMinutes} min timer`
+                  : "untimed"}
+            </span>
             {test.passMarkPercent !== null && <span>· {test.passMarkPercent}% pass mark</span>}
             {!test.showScoreToCandidate && <span>· score hidden from candidate</span>}
           </p>

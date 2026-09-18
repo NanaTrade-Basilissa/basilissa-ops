@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { loadForTaking } from "@/lib/modules/aptitude/server";
 import {
+  advanceAptitudeSectionAction,
   declareIdentityAction,
   recordTabAbsenceAction,
   saveAnswerAction,
@@ -71,13 +72,18 @@ export default async function TakeAptitudeTestPage({ params }: { params: Promise
             emailMode={view.identity.emailMode}
             personal={!view.isPublic}
             timeLimitMinutes={view.timeLimitMinutes}
+            isSectionTimed={view.isSectionTimed}
           />
         ) : (
           <AptitudeRunner
             sections={view.sections}
             declaredName={view.declaredName}
             deadlineAt={view.deadlineAt}
+            isSectionTimed={view.isSectionTimed}
+            initialSectionIndex={view.currentSectionIndex}
+            initialSectionDeadlineAt={view.sectionDeadlineAt}
             saveAction={saveAnswerAction.bind(null, decodeURIComponent(token))}
+            advanceSectionAction={advanceAptitudeSectionAction.bind(null, decodeURIComponent(token))}
             submitAction={submitAptitudeTestAction.bind(null, decodeURIComponent(token))}
             recordAbsenceAction={recordTabAbsenceAction.bind(null, decodeURIComponent(token))}
           />

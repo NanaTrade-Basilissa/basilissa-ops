@@ -26,6 +26,7 @@ import {
   deleteQuestion,
   publishAptitudeTest,
   updateAptitudeTestDetails,
+  updateQuestion,
   updateSection,
 } from "./authoring";
 import {
@@ -37,7 +38,7 @@ import {
   type IssuedInvitation,
 } from "./invitations";
 import { APTITUDE_INVITATION_SEND } from "./jobs";
-import { declareIdentity, recordTabAbsence, saveAnswer, submitResponse } from "./taking";
+import { advanceSection, declareIdentity, recordTabAbsence, saveAnswer, submitResponse } from "./taking";
 
 export type AptitudeFormState = (NonNullable<FormState> & { saved?: boolean }) | undefined;
 
@@ -86,7 +87,12 @@ export async function updateAptitudeTestAction(
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
   }
 
-  const outcome = await updateAptitudeTestDetails(testId, parsed.data, auditActorFrom(actor));
+  const clearSectionTimers = formData.get("clearSectionTimers") === "true";
+  const outcome = await updateAptitudeTestDetails(
+    testId,
+    { ...parsed.data, clearSectionTimers },
+    auditActorFrom(actor),
+  );
   if (!outcome.ok) return { error: outcome.message };
 
   revalidatePath(`/admin/aptitude-tests/${testId}`);
@@ -126,12 +132,18 @@ export async function addSectionAction(
   const parsed = sectionSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description") || undefined,
+    timeLimitMinutes: formData.get("timeLimitMinutes") || undefined,
   });
   if (!parsed.success) {
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
   }
 
-  const outcome = await addSection(testId, parsed.data, auditActorFrom(actor));
+  const overrideOverallTime = formData.get("overrideOverallTime") === "true";
+  const outcome = await addSection(
+    testId,
+    { ...parsed.data, overrideOverallTime },
+    auditActorFrom(actor),
+  );
   if (!outcome.ok) return { error: outcome.message };
 
   revalidatePath(`/admin/aptitude-tests/${testId}`);
@@ -148,14 +160,16 @@ export async function updateSectionAction(
   const parsed = sectionSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description") || undefined,
+    timeLimitMinutes: formData.get("timeLimitMinutes") || undefined,
   });
   if (!parsed.success) {
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
   }
 
+  const overrideOverallTime = formData.get("overrideOverallTime") === "true";
   const outcome = await updateSection(
     String(formData.get("sectionId") ?? ""),
-    parsed.data,
+    { ...parsed.data, overrideOverallTime },
     auditActorFrom(actor),
   );
   if (!outcome.ok) return { error: outcome.message };
@@ -189,6 +203,38 @@ export async function addQuestionAction(
   }
 
   const outcome = await addQuestion(parsed.data.sectionId, parsed.data, auditActorFrom(actor));
+  if (!outcome.ok) return { error: outcome.message };
+
+  revalidatePath(`/admin/aptitude-tests/${testId}`);
+  return { saved: true };
+}
+
+export async function updateQuestionAction(
+  testId: string,
+  _prev: AptitudeFormState,
+  formData: FormData,
+): Promise<AptitudeFormState> {
+  const actor = await requirePermission("aptitude:write");
+
+  const questionId = String(formData.get("questionId") ?? "");
+  const texts = formData.getAll("optionText").map(String);
+  const correctIndexes = new Set(formData.getAll("optionCorrect").map((v) => String(v)));
+
+  const parsed = questionSchema.safeParse({
+    sectionId: formData.get("sectionId"),
+    kind: formData.get("kind"),
+    text: formData.get("text"),
+    points: formData.get("points"),
+    required: formData.get("required") === "on",
+    options: texts
+      .map((text, index) => ({ text, isCorrect: correctIndexes.has(String(index)) }))
+      .filter((option) => option.text.trim().length > 0),
+  });
+  if (!parsed.success) {
+    return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  const outcome = await updateQuestion(questionId, parsed.data, auditActorFrom(actor));
   if (!outcome.ok) return { error: outcome.message };
 
   revalidatePath(`/admin/aptitude-tests/${testId}`);
@@ -455,4 +501,31 @@ export async function submitAptitudeTestAction(token: string, _prev: SubmitState
   }
 
   redirect(`/aptitude/${token}/done`);
+}
+
+export type AdvanceSectionState = {
+  ok: boolean;
+  error?: string;
+  nextIndex?: number;
+  sectionDeadlineAt?: string | null;
+  submitted?: boolean;
+};
+
+export async function advanceAptitudeSectionAction(token: string): Promise<AdvanceSectionState> {
+  const limit = await rateLimit(`aptitude-advance:${await clientIp()}`, 60, 15 * 60 * 1000);
+  if (!limit.success) return { ok: false, error: "Too many requests. Please wait a moment." };
+
+  const outcome = await advanceSection(token);
+  if (!outcome.ok) {
+    return { ok: false, error: outcome.message };
+  }
+  if (outcome.submitted) {
+    redirect(`/aptitude/${token}/done`);
+  }
+  return {
+    ok: true,
+    nextIndex: outcome.currentSectionIndex,
+    sectionDeadlineAt: outcome.sectionDeadlineAt,
+    submitted: false,
+  };
 }

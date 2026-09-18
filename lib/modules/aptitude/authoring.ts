@@ -93,6 +93,7 @@ export async function updateAptitudeTestDetails(
     invitationsExpire?: boolean;
     invitationTtlHours?: number;
     timeLimitMinutes?: number;
+    clearSectionTimers?: boolean;
   },
   actor: AuditActor,
 ): Promise<AuthoringOutcome> {
@@ -115,17 +116,26 @@ export async function updateAptitudeTestDetails(
     return fail("NOT_DRAFT", "This test is closed.");
   }
 
-  await prisma.aptitudeTest.update({
-    where: { id: testId },
-    data: {
-      title: input.title.trim(),
-      description: input.description?.trim() || null,
-      showScoreToCandidate: input.showScoreToCandidate,
-      passMarkPercent: input.passMarkPercent ?? null,
-      timeLimitMinutes: input.timeLimitMinutes ?? null,
-      ...(input.invitationsExpire !== undefined ? { invitationsExpire: input.invitationsExpire } : {}),
-      ...(input.invitationTtlHours !== undefined ? { invitationTtlHours: input.invitationTtlHours } : {}),
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.aptitudeTest.update({
+      where: { id: testId },
+      data: {
+        title: input.title.trim(),
+        description: input.description?.trim() || null,
+        showScoreToCandidate: input.showScoreToCandidate,
+        passMarkPercent: input.passMarkPercent ?? null,
+        timeLimitMinutes: input.timeLimitMinutes ?? null,
+        ...(input.invitationsExpire !== undefined ? { invitationsExpire: input.invitationsExpire } : {}),
+        ...(input.invitationTtlHours !== undefined ? { invitationTtlHours: input.invitationTtlHours } : {}),
+      },
+    });
+
+    if (input.clearSectionTimers) {
+      await tx.aptitudeSection.updateMany({
+        where: { testId },
+        data: { timeLimitMinutes: null },
+      });
+    }
   });
 
   await recordAudit({
@@ -141,11 +151,24 @@ export async function updateAptitudeTestDetails(
 
 export async function addSection(
   testId: string,
-  input: { title: string; description?: string | null },
+  input: {
+    title: string;
+    description?: string | null;
+    timeLimitMinutes?: number | null;
+    overrideOverallTime?: boolean;
+  },
   actor: AuditActor,
 ): Promise<AuthoringOutcome<string>> {
   const refusal = await refuseUnlessDraft(testId);
   if (refusal) return refusal;
+
+  const test = await prisma.aptitudeTest.findUnique({
+    where: { id: testId },
+    select: {
+      timeLimitMinutes: true,
+      sections: { select: { timeLimitMinutes: true } },
+    },
+  });
 
   const last = await prisma.aptitudeSection.findFirst({
     where: { testId },
@@ -153,14 +176,34 @@ export async function addSection(
     select: { order: true },
   });
 
-  const section = await prisma.aptitudeSection.create({
-    data: {
-      testId,
-      title: input.title.trim(),
-      description: input.description?.trim() || null,
-      order: (last?.order ?? 0) + 1,
-    },
-    select: { id: true },
+  const existingSectionsTotal = test?.sections.reduce((sum, s) => sum + (s.timeLimitMinutes ?? 0), 0) ?? 0;
+  const newCombinedTotal = existingSectionsTotal + (input.timeLimitMinutes ?? 0);
+  const shouldBumpOverall =
+    Boolean(input.overrideOverallTime) &&
+    input.timeLimitMinutes != null &&
+    test?.timeLimitMinutes != null &&
+    newCombinedTotal > test.timeLimitMinutes;
+
+  const section = await prisma.$transaction(async (tx) => {
+    const created = await tx.aptitudeSection.create({
+      data: {
+        testId,
+        title: input.title.trim(),
+        description: input.description?.trim() || null,
+        timeLimitMinutes: input.timeLimitMinutes ?? null,
+        order: (last?.order ?? 0) + 1,
+      },
+      select: { id: true },
+    });
+
+    if (shouldBumpOverall) {
+      await tx.aptitudeTest.update({
+        where: { id: testId },
+        data: { timeLimitMinutes: newCombinedTotal },
+      });
+    }
+
+    return created;
   });
 
   await recordAudit({
@@ -168,29 +211,73 @@ export async function addSection(
     action: "aptitude.section_added",
     entityType: "AptitudeTest",
     entityId: testId,
-    after: { sectionId: section.id, title: input.title.trim() },
+    after: {
+      sectionId: section.id,
+      title: input.title.trim(),
+      timeLimitMinutes: input.timeLimitMinutes ?? null,
+      bumpedOverallTimerTo: shouldBumpOverall ? newCombinedTotal : undefined,
+    },
   });
   return { ok: true, value: section.id };
 }
 
 export async function updateSection(
   sectionId: string,
-  input: { title: string; description?: string | null },
+  input: {
+    title: string;
+    description?: string | null;
+    timeLimitMinutes?: number | null;
+    overrideOverallTime?: boolean;
+  },
   actor: AuditActor,
 ): Promise<AuthoringOutcome> {
   const section = await prisma.aptitudeSection.findUnique({
     where: { id: sectionId },
-    select: { id: true, title: true, description: true, testId: true },
+    select: { id: true, title: true, description: true, timeLimitMinutes: true, testId: true },
   });
   if (!section) return fail("NOT_FOUND", "No such section.");
 
   const refusal = await refuseUnlessDraft(section.testId);
   if (refusal) return refusal;
 
-  const after = await prisma.aptitudeSection.update({
-    where: { id: sectionId },
-    data: { title: input.title.trim(), description: input.description?.trim() || null },
-    select: { title: true, description: true },
+  const test = await prisma.aptitudeTest.findUnique({
+    where: { id: section.testId },
+    select: {
+      timeLimitMinutes: true,
+      sections: {
+        where: { id: { not: sectionId } },
+        select: { timeLimitMinutes: true },
+      },
+    },
+  });
+
+  const otherSectionsTotal = test?.sections.reduce((sum, s) => sum + (s.timeLimitMinutes ?? 0), 0) ?? 0;
+  const newCombinedTotal = otherSectionsTotal + (input.timeLimitMinutes ?? 0);
+  const shouldBumpOverall =
+    Boolean(input.overrideOverallTime) &&
+    input.timeLimitMinutes != null &&
+    test?.timeLimitMinutes != null &&
+    newCombinedTotal > test.timeLimitMinutes;
+
+  const after = await prisma.$transaction(async (tx) => {
+    const updated = await tx.aptitudeSection.update({
+      where: { id: sectionId },
+      data: {
+        title: input.title.trim(),
+        description: input.description?.trim() || null,
+        timeLimitMinutes: input.timeLimitMinutes ?? null,
+      },
+      select: { title: true, description: true, timeLimitMinutes: true },
+    });
+
+    if (shouldBumpOverall) {
+      await tx.aptitudeTest.update({
+        where: { id: section.testId },
+        data: { timeLimitMinutes: newCombinedTotal },
+      });
+    }
+
+    return updated;
   });
 
   await recordAudit({
@@ -198,8 +285,8 @@ export async function updateSection(
     action: "aptitude.section_updated",
     entityType: "AptitudeTest",
     entityId: section.testId,
-    before: { title: section.title, description: section.description },
-    after,
+    before: { title: section.title, description: section.description, timeLimitMinutes: section.timeLimitMinutes },
+    after: { ...after, bumpedOverallTimerTo: shouldBumpOverall ? newCombinedTotal : undefined },
   });
   return DONE;
 }
@@ -273,6 +360,88 @@ export async function addQuestion(
     },
   });
   return { ok: true, value: question.id };
+}
+
+export async function updateQuestion(
+  questionId: string,
+  input: {
+    kind: "SINGLE_CHOICE" | "MULTI_CHOICE" | "FREE_TEXT";
+    text: string;
+    points: number;
+    required: boolean;
+    options: { text: string; isCorrect: boolean }[];
+  },
+  actor: AuditActor,
+): Promise<AuthoringOutcome> {
+  const question = await prisma.aptitudeQuestion.findUnique({
+    where: { id: questionId },
+    select: {
+      id: true,
+      kind: true,
+      text: true,
+      points: true,
+      required: true,
+      section: { select: { testId: true } },
+    },
+  });
+  if (!question) return fail("NOT_FOUND", "No such question.");
+
+  const refusal = await refuseUnlessDraft(question.section.testId);
+  if (refusal) return refusal;
+
+  if (input.kind !== "FREE_TEXT" && !input.options.some((o) => o.isCorrect)) {
+    return fail(
+      "QUESTION_WITHOUT_ANSWER",
+      "Mark at least one option as correct, or make this a written answer.",
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.aptitudeOption.deleteMany({ where: { questionId } });
+    await tx.aptitudeQuestion.update({
+      where: { id: questionId },
+      data: {
+        kind: input.kind,
+        text: input.text.trim(),
+        points: input.kind === "FREE_TEXT" ? 0 : Math.max(0, input.points),
+        required: input.required,
+        options:
+          input.kind === "FREE_TEXT"
+            ? undefined
+            : {
+                create: input.options.map((option, index) => ({
+                  text: option.text.trim(),
+                  isCorrect: option.isCorrect,
+                  order: index + 1,
+                })),
+              },
+      },
+    });
+  });
+
+  await recordAudit({
+    actor,
+    action: "aptitude.question_updated",
+    entityType: "AptitudeTest",
+    entityId: question.section.testId,
+    before: {
+      questionId,
+      kind: question.kind,
+      text: question.text,
+      points: question.points,
+      required: question.required,
+    },
+    after: {
+      questionId,
+      kind: input.kind,
+      text: input.text.trim(),
+      points: input.points,
+      required: input.required,
+      correctOptions: input.options.filter((o) => o.isCorrect).map((o) => o.text.trim()),
+    },
+  });
+
+  return DONE;
 }
 
 export async function deleteQuestion(questionId: string, actor: AuditActor): Promise<AuthoringOutcome> {

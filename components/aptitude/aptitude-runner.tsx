@@ -1,14 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Check, Loader2, Send, Timer } from "lucide-react";
+import { ArrowRight, Check, Loader2, Send, Timer } from "lucide-react";
 import type { AptitudeQuestionKind } from "@prisma/client";
-import type { AnswerState, SubmitState } from "@/lib/modules/aptitude/actions";
+import type { AnswerState, SubmitState, AdvanceSectionState } from "@/lib/modules/aptitude/actions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type Question = {
@@ -25,6 +33,7 @@ type Section = {
   id: string;
   title: string;
   description: string | null;
+  timeLimitMinutes: number | null;
   questions: Question[];
 };
 
@@ -65,10 +74,10 @@ function CountdownBar({ deadlineAt, onExpire }: { deadlineAt: string; onExpire: 
     }
   }, [remainingMs, onExpire]);
 
-  // Warning tone in the last 5 minutes, or the last 20% of however much time
-  // was left when this first rendered — whichever is smaller. Approximate on
-  // purpose: nothing here needs to know the test's original minute count.
-  const warningThresholdMs = useMemo(() => Math.min(5 * 60_000, remainingMs > 0 ? remainingMs * 0.2 + 60_000 : 5 * 60_000), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const warningThresholdMs = useMemo(
+    () => Math.min(5 * 60_000, remainingMs > 0 ? remainingMs * 0.2 + 60_000 : 5 * 60_000),
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const low = remainingMs > 0 && remainingMs <= warningThresholdMs;
   const done = remainingMs <= 0;
 
@@ -90,31 +99,134 @@ function CountdownBar({ deadlineAt, onExpire }: { deadlineAt: string; onExpire: 
 }
 
 /**
- * Answers are saved as they are chosen — see Assessments' `AssessmentRunner`
- * for the reasoning, unchanged here. The one addition is the countdown: a
- * pure display, wired to auto-fire the same final submit the "Finish and
- * submit" button uses once it reaches zero. The server has already stopped
- * accepting new answers by then (`saveAnswer` checks the same deadline
- * independently) — this is what tells the candidate that happened, and
- * finalises whatever they got to.
+ * WhatsApp / Instagram Story Style Segmented Progress Bar:
+ * - Equal horizontal segments corresponding to each section.
+ * - Completed sections are 100% filled.
+ * - Current active section fills dynamically from 0% to 100% as section time elapses.
+ * - Upcoming sections are empty.
+ * - Shows current section title, answered count, and countdown clock.
  */
-/**
- * Anti-cheating deterrents, not enforcement: nothing here blocks the
- * candidate or changes the attempt's status. Disclosed up front on the
- * "before you start" screen, not covert.
- *
- * - Copy, cut, paste, and the right-click menu are suppressed on this
- *   screen. A browser still lets text be selected and edited inside the
- *   candidate's own answer fields regardless of `select-none` on an
- *   ancestor — that's native form-control behaviour, not something this
- *   overrides — so typing and fixing typos is unaffected.
- * - Every time the tab goes hidden and comes back, one record is sent:
- *   when it happened and how long it lasted. Paired client-side from two
- *   Visibility API events, not a guess — an attempt that's abandoned
- *   entirely (closed, never reopened) never produces a "came back" half,
- *   so nothing is recorded for it beyond what the deadline mechanism
- *   already tells HR (unsubmitted, or auto-submitted at the deadline).
- */
+function SectionStoryProgressBar({
+  sections,
+  currentSectionIndex,
+  sectionDeadlineAt,
+  onSectionExpire,
+  answeredCount,
+  totalQuestions,
+}: {
+  sections: Section[];
+  currentSectionIndex: number;
+  sectionDeadlineAt: string | null;
+  onSectionExpire: () => void;
+  answeredCount: number;
+  totalQuestions: number;
+}) {
+  const currentSection = sections[currentSectionIndex];
+  const limitMinutes = currentSection?.timeLimitMinutes ?? 0;
+  const deadlineMs = useMemo(
+    () => (sectionDeadlineAt ? new Date(sectionDeadlineAt).getTime() : null),
+    [sectionDeadlineAt],
+  );
+
+  const [now, setNow] = useState(() => Date.now());
+  const expiredRef = useRef(false);
+
+  useEffect(() => {
+    expiredRef.current = false;
+  }, [currentSectionIndex, sectionDeadlineAt]);
+
+  useEffect(() => {
+    if (!deadlineMs) return;
+    const interval = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(interval);
+  }, [deadlineMs]);
+
+  const remainingMs = deadlineMs ? Math.max(0, deadlineMs - now) : null;
+  const totalDurationMs = limitMinutes > 0 ? limitMinutes * 60_000 : 0;
+  const elapsedMs = totalDurationMs > 0 && remainingMs !== null ? Math.max(0, totalDurationMs - remainingMs) : 0;
+  const activeProgress =
+    totalDurationMs > 0 ? Math.min(100, Math.max(0, (elapsedMs / totalDurationMs) * 100)) : 0;
+
+  useEffect(() => {
+    if (remainingMs !== null && remainingMs <= 0 && !expiredRef.current) {
+      expiredRef.current = true;
+      onSectionExpire();
+    }
+  }, [remainingMs, onSectionExpire]);
+
+  const isLow = remainingMs !== null && remainingMs <= 60_000 && remainingMs > 0;
+  const isExpired = remainingMs !== null && remainingMs <= 0;
+
+  return (
+    <div className="sticky top-0 z-20 space-y-2.5 rounded-xl border border-border/80 bg-background/95 p-3.5 shadow-xs backdrop-blur">
+      {/* Segmented status bars */}
+      <div className="flex items-center gap-1.5 w-full">
+        {sections.map((section, idx) => {
+          const isCompleted = idx < currentSectionIndex;
+          const isActive = idx === currentSectionIndex;
+          const progress = isCompleted ? 100 : isActive ? activeProgress : 0;
+
+          return (
+            <div
+              key={section.id}
+              className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted dark:bg-muted/60"
+              title={`Section ${idx + 1}: ${section.title}${section.timeLimitMinutes ? ` (${section.timeLimitMinutes} mins)` : ""}`}
+            >
+              <div
+                className={cn(
+                  "h-full rounded-full transition-[width] duration-200 ease-linear",
+                  isCompleted
+                    ? "bg-primary w-full"
+                    : isActive
+                      ? isLow || isExpired
+                        ? "bg-amber-500"
+                        : "bg-primary"
+                      : "w-0",
+                )}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Header labels: section title and live timer */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-baseline gap-1.5">
+          <span className="font-semibold text-foreground">
+            Section {currentSectionIndex + 1} of {sections.length}
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span className="font-medium text-foreground truncate max-w-[200px] sm:max-w-xs">
+            {currentSection?.title}
+          </span>
+          <span className="text-muted-foreground hidden sm:inline">
+            ({answeredCount} of {totalQuestions} answered)
+          </span>
+        </div>
+
+        {remainingMs !== null ? (
+          <div
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-xs font-semibold shrink-0",
+              isExpired
+                ? "bg-destructive/15 text-destructive animate-pulse"
+                : isLow
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 animate-pulse"
+                  : "bg-secondary text-foreground",
+            )}
+          >
+            <Timer className="size-3.5 shrink-0" />
+            {isExpired ? "Time's up!" : `${formatRemaining(remainingMs)} remaining`}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">Untimed section</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function useTabAbsenceTracking(recordAbsence: (leftAt: string, durationMs: number) => void) {
   const recordAbsenceRef = useRef(recordAbsence);
   useEffect(() => {
@@ -148,14 +260,22 @@ export function AptitudeRunner({
   sections,
   declaredName,
   deadlineAt,
+  isSectionTimed = false,
+  initialSectionIndex = 0,
+  initialSectionDeadlineAt = null,
   saveAction,
+  advanceSectionAction,
   submitAction,
   recordAbsenceAction,
 }: {
   sections: Section[];
   declaredName: string;
   deadlineAt: string | null;
+  isSectionTimed?: boolean;
+  initialSectionIndex?: number;
+  initialSectionDeadlineAt?: string | null;
   saveAction: (prev: AnswerState, formData: FormData) => Promise<AnswerState>;
+  advanceSectionAction?: () => Promise<AdvanceSectionState>;
   submitAction: (prev: SubmitState) => Promise<SubmitState>;
   recordAbsenceAction: (leftAt: string, durationMs: number) => Promise<void>;
 }) {
@@ -174,16 +294,47 @@ export function AptitudeRunner({
   const [isSubmitting, startSubmit] = useTransition();
   const [timeUp, setTimeUp] = useState(false);
 
+  // Section timing state
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(initialSectionIndex);
+  const [sectionDeadlineAt, setSectionDeadlineAt] = useState<string | null>(initialSectionDeadlineAt);
+  const [isAdvancing, startAdvance] = useTransition();
+  const [showConfirmNext, setShowConfirmNext] = useState(false);
+
   useTabAbsenceTracking((leftAt, durationMs) => void recordAbsenceAction(leftAt, durationMs));
 
   const allQuestions = sections.flatMap((s) => s.questions);
   const unanswered = new Set(submitState?.unanswered ?? []);
-  const locked = timeUp || isSubmitting;
+  const locked = timeUp || isSubmitting || isAdvancing;
 
   function doSubmit() {
     startSubmit(async () => {
       setSubmitState(await submitAction(undefined));
     });
+  }
+
+  function doAdvance() {
+    if (!advanceSectionAction) return;
+    startAdvance(async () => {
+      const outcome = await advanceSectionAction();
+      if (outcome.ok) {
+        if (!outcome.submitted && typeof outcome.nextIndex === "number") {
+          setCurrentSectionIndex(outcome.nextIndex);
+          setSectionDeadlineAt(outcome.sectionDeadlineAt ?? null);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      } else if (outcome.error) {
+        setSubmitState({ error: outcome.error });
+      }
+    });
+  }
+
+  function handleSectionExpire() {
+    if (currentSectionIndex < sections.length - 1) {
+      doAdvance();
+    } else {
+      setTimeUp(true);
+      doSubmit();
+    }
   }
 
   async function persist(question: Question, next: { options: string[]; text: string }) {
@@ -224,6 +375,29 @@ export function AptitudeRunner({
     return q.kind === "FREE_TEXT" ? (answer?.text ?? "").trim().length > 0 : (answer?.options.length ?? 0) > 0;
   }).length;
 
+  const currentSection = sections[currentSectionIndex];
+  const questionsInCurrent = currentSection?.questions ?? [];
+  const answeredInCurrent = questionsInCurrent.filter((q) => {
+    const answer = answers[q.id];
+    return q.kind === "FREE_TEXT" ? (answer?.text ?? "").trim().length > 0 : (answer?.options.length ?? 0) > 0;
+  }).length;
+  const unansweredInCurrent = questionsInCurrent.length - answeredInCurrent;
+
+  function handleNextClick() {
+    if (unansweredInCurrent > 0) {
+      setShowConfirmNext(true);
+    } else {
+      doAdvance();
+    }
+  }
+
+  // Which sections to render: in section-timed mode, render only current section
+  const visibleSections = isSectionTimed
+    ? currentSection
+      ? [{ section: currentSection, originalIndex: currentSectionIndex }]
+      : []
+    : sections.map((section, idx) => ({ section, originalIndex: idx }));
+
   return (
     <div
       className="space-y-6 select-none"
@@ -232,29 +406,40 @@ export function AptitudeRunner({
       onPaste={blockClipboardEvent}
       onContextMenu={blockClipboardEvent}
     >
-      {deadlineAt && (
-        <CountdownBar
-          deadlineAt={deadlineAt}
-          onExpire={() => {
-            setTimeUp(true);
-            doSubmit();
-          }}
+      {isSectionTimed ? (
+        <SectionStoryProgressBar
+          sections={sections}
+          currentSectionIndex={currentSectionIndex}
+          sectionDeadlineAt={sectionDeadlineAt}
+          onSectionExpire={handleSectionExpire}
+          answeredCount={answeredInCurrent}
+          totalQuestions={questionsInCurrent.length}
         />
+      ) : (
+        deadlineAt && (
+          <CountdownBar
+            deadlineAt={deadlineAt}
+            onExpire={() => {
+              setTimeUp(true);
+              doSubmit();
+            }}
+          />
+        )
       )}
 
       <p className="text-sm text-muted-foreground">
         Answering as <span className="font-medium text-foreground">{declaredName}</span> · {answeredCount} of{" "}
-        {allQuestions.length} answered
+        {allQuestions.length} total answered
       </p>
 
-      {sections.map((section, index) => {
-        const offset = sections.slice(0, index).reduce((sum, s) => sum + s.questions.length, 0);
+      {visibleSections.map(({ section, originalIndex }) => {
+        const offset = sections.slice(0, originalIndex).reduce((sum, s) => sum + s.questions.length, 0);
 
         return (
           <Card key={section.id}>
             <CardHeader>
               <CardTitle className="text-lg">
-                <span className="text-muted-foreground">Section {index + 1} · </span>
+                <span className="text-muted-foreground">Section {originalIndex + 1} · </span>
                 {section.title}
               </CardTitle>
               {section.description && (
@@ -287,59 +472,59 @@ export function AptitudeRunner({
                       {!question.required && <span className="ml-1 font-normal text-muted-foreground">(optional)</span>}
                     </legend>
 
-                  {question.kind === "MULTI_CHOICE" && (
-                    <p className="mb-2 text-xs text-muted-foreground">Choose all that apply.</p>
-                  )}
-
-                  {question.kind === "FREE_TEXT" ? (
-                    <Textarea
-                      rows={4}
-                      value={answer.text}
-                      onChange={(e) => write(question, e.target.value)}
-                      onBlur={() => !locked && void persist(question, answer)}
-                      aria-label={question.text}
-                      disabled={locked}
-                    />
-                  ) : (
-                    <div className="space-y-2">
-                      {question.options.map((option) => {
-                        const checked = answer.options.includes(option.id);
-                        return (
-                          <Label
-                            key={option.id}
-                            className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border p-3 text-sm font-normal has-checked:border-primary has-checked:bg-primary/5 has-disabled:cursor-not-allowed has-disabled:opacity-60"
-                          >
-                            <input
-                              type={question.kind === "MULTI_CHOICE" ? "checkbox" : "radio"}
-                              name={question.id}
-                              value={option.id}
-                              checked={checked}
-                              onChange={() => choose(question, option.id)}
-                              disabled={locked}
-                              className="mt-0.5 size-4 accent-primary"
-                            />
-                            <span>{option.text}</span>
-                          </Label>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <p className="mt-1.5 h-4 text-xs text-muted-foreground">
-                    {status === "saving" && "Saving…"}
-                    {status === "saved" && (
-                      <span className="inline-flex items-center gap-1">
-                        <Check className="size-3" /> Saved
-                      </span>
+                    {question.kind === "MULTI_CHOICE" && (
+                      <p className="mb-2 text-xs text-muted-foreground">Choose all that apply.</p>
                     )}
-                    {status === "failed" && (
-                      <span className="text-destructive">Not saved. Check your connection and try again.</span>
+
+                    {question.kind === "FREE_TEXT" ? (
+                      <Textarea
+                        rows={4}
+                        value={answer.text}
+                        onChange={(e) => write(question, e.target.value)}
+                        onBlur={() => !locked && void persist(question, answer)}
+                        aria-label={question.text}
+                        disabled={locked}
+                      />
+                    ) : (
+                      <div className="space-y-2">
+                        {question.options.map((option) => {
+                          const checked = answer.options.includes(option.id);
+                          return (
+                            <Label
+                              key={option.id}
+                              className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border p-3 text-sm font-normal has-checked:border-primary has-checked:bg-primary/5 has-disabled:cursor-not-allowed has-disabled:opacity-60"
+                            >
+                              <input
+                                type={question.kind === "MULTI_CHOICE" ? "checkbox" : "radio"}
+                                name={question.id}
+                                value={option.id}
+                                checked={checked}
+                                onChange={() => choose(question, option.id)}
+                                disabled={locked}
+                                className="mt-0.5 size-4 accent-primary"
+                              />
+                              <span>{option.text}</span>
+                            </Label>
+                          );
+                        })}
+                      </div>
                     )}
-                    {missing && !status && <span className="text-destructive">This one still needs an answer.</span>}
-                  </p>
-                </fieldset>
-              );
-            })}
+
+                    <p className="mt-1.5 h-4 text-xs text-muted-foreground">
+                      {status === "saving" && "Saving…"}
+                      {status === "saved" && (
+                        <span className="inline-flex items-center gap-1">
+                          <Check className="size-3" /> Saved
+                        </span>
+                      )}
+                      {status === "failed" && (
+                        <span className="text-destructive">Not saved. Check your connection and try again.</span>
+                      )}
+                      {missing && !status && <span className="text-destructive">This one still needs an answer.</span>}
+                    </p>
+                  </fieldset>
+                );
+              })}
             </CardContent>
           </Card>
         );
@@ -351,16 +536,61 @@ export function AptitudeRunner({
         </Alert>
       )}
 
-      <Button type="button" className="w-full" disabled={locked} onClick={doSubmit}>
-        {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-        Finish and submit
-      </Button>
+      {isSectionTimed && currentSectionIndex < sections.length - 1 ? (
+        <div className="space-y-2">
+          <Button
+            type="button"
+            className="w-full"
+            disabled={locked}
+            onClick={handleNextClick}
+          >
+            {isAdvancing ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+            Next section ({currentSectionIndex + 2} of {sections.length})
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            Once you proceed to the next section, this section will be locked and its answers finalised.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Button type="button" className="w-full" disabled={locked} onClick={doSubmit}>
+            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            Finish and submit
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            {deadlineAt || isSectionTimed
+              ? "Your answers are saved as you go. Submitting, or running out of time, closes the test and the link stops working."
+              : "Your answers are saved as you go. Submitting closes the test and the link stops working."}
+          </p>
+        </div>
+      )}
 
-      <p className="text-center text-xs text-muted-foreground">
-        {deadlineAt
-          ? "Your answers are saved as you go. Submitting, or running out of time, closes the test and the link stops working."
-          : "Your answers are saved as you go. Submitting closes the test and the link stops working."}
-      </p>
+      {/* Confirmation dialog when clicking Next with unanswered questions */}
+      <Dialog open={showConfirmNext} onOpenChange={setShowConfirmNext}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Proceed to next section?</DialogTitle>
+            <DialogDescription>
+              You have {unansweredInCurrent} unanswered question{unansweredInCurrent === 1 ? "" : "s"} in this
+              section. Once you proceed, you cannot return to this section.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setShowConfirmNext(false)}>
+              Keep answering
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setShowConfirmNext(false);
+                doAdvance();
+              }}
+            >
+              Proceed to next section
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

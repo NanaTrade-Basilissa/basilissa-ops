@@ -290,6 +290,88 @@ export async function addQuestion(
   return { ok: true, value: question.id };
 }
 
+export async function updateQuestion(
+  questionId: string,
+  input: {
+    kind: "SINGLE_CHOICE" | "MULTI_CHOICE" | "FREE_TEXT";
+    text: string;
+    points: number;
+    required: boolean;
+    options: { text: string; isCorrect: boolean }[];
+  },
+  actor: AuditActor,
+): Promise<AuthoringOutcome> {
+  const question = await prisma.assessmentQuestion.findUnique({
+    where: { id: questionId },
+    select: {
+      id: true,
+      kind: true,
+      text: true,
+      points: true,
+      required: true,
+      section: { select: { assessmentId: true } },
+    },
+  });
+  if (!question) return fail("NOT_FOUND", "No such question.");
+
+  const refusal = await refuseUnlessDraft(question.section.assessmentId);
+  if (refusal) return refusal;
+
+  if (input.kind !== "FREE_TEXT" && !input.options.some((o) => o.isCorrect)) {
+    return fail(
+      "QUESTION_WITHOUT_ANSWER",
+      "Mark at least one option as correct, or make this a written answer.",
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.assessmentOption.deleteMany({ where: { questionId } });
+    await tx.assessmentQuestion.update({
+      where: { id: questionId },
+      data: {
+        kind: input.kind,
+        text: input.text.trim(),
+        points: input.kind === "FREE_TEXT" ? 0 : Math.max(0, input.points),
+        required: input.required,
+        options:
+          input.kind === "FREE_TEXT"
+            ? undefined
+            : {
+                create: input.options.map((option, index) => ({
+                  text: option.text.trim(),
+                  isCorrect: option.isCorrect,
+                  order: index + 1,
+                })),
+              },
+      },
+    });
+  });
+
+  await recordAudit({
+    actor,
+    action: "assessment.question_updated",
+    entityType: "Assessment",
+    entityId: question.section.assessmentId,
+    before: {
+      questionId,
+      kind: question.kind,
+      text: question.text,
+      points: question.points,
+      required: question.required,
+    },
+    after: {
+      questionId,
+      kind: input.kind,
+      text: input.text.trim(),
+      points: input.points,
+      required: input.required,
+      correctOptions: input.options.filter((o) => o.isCorrect).map((o) => o.text.trim()),
+    },
+  });
+
+  return DONE;
+}
+
 export async function deleteQuestion(
   questionId: string,
   actor: AuditActor,

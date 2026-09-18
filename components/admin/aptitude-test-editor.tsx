@@ -13,6 +13,7 @@ type Section = {
   id: string;
   title: string;
   description: string | null;
+  timeLimitMinutes: number | null;
   questions: {
     id: string;
     kind: AptitudeQuestionKind;
@@ -32,6 +33,7 @@ export function AptitudeTestEditor({
   addSectionAction,
   updateSectionAction,
   addQuestionAction,
+  updateQuestionAction,
   deleteQuestionAction,
   detailsAction,
   detailsValues,
@@ -44,6 +46,7 @@ export function AptitudeTestEditor({
   addSectionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   updateSectionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   addQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
+  updateQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   deleteQuestionAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   detailsAction: (prev: AptitudeFormState, formData: FormData) => Promise<AptitudeFormState>;
   detailsValues: {
@@ -82,18 +85,25 @@ export function AptitudeTestEditor({
         )}
         <AptitudeTestBuilder
           testId={testId}
+          testTimeLimitMinutes={detailsValues.timeLimitMinutes}
           editable={canWrite && isDraft}
           sections={sections}
           addSectionAction={addSectionAction}
           updateSectionAction={updateSectionAction}
           addQuestionAction={addQuestionAction}
+          updateQuestionAction={updateQuestionAction}
           deleteQuestionAction={deleteQuestionAction}
         />
       </TabsContent>
 
       <TabsContent value="settings" className="space-y-6 pt-2">
         {canWrite && !isClosed ? (
-          <AptitudeTestDetailsForm action={detailsAction} submitLabel="Save details" values={detailsValues} />
+          <AptitudeTestDetailsForm
+            action={detailsAction}
+            submitLabel="Save details"
+            values={detailsValues}
+            totalSectionMinutes={sections.reduce((sum, s) => sum + (s.timeLimitMinutes ?? 0), 0)}
+          />
         ) : (
           <Empty className="border">
             <EmptyDescription className="text-xs">

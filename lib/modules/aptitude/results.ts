@@ -91,6 +91,7 @@ export async function getAptitudeTestForEditing(testId: string) {
           title: true,
           description: true,
           order: true,
+          timeLimitMinutes: true,
           questions: {
             orderBy: { order: "asc" },
             select: {
@@ -214,6 +215,7 @@ export async function getAttemptDetail(attemptId: string) {
                 select: {
                   id: true,
                   title: true,
+                  timeLimitMinutes: true,
                   questions: {
                     orderBy: { order: "asc" },
                     select: {
@@ -244,6 +246,7 @@ export async function getAttemptDetail(attemptId: string) {
     sections: attempt.invitation.test.sections.map((section) => ({
       id: section.id,
       title: section.title,
+      timeLimitMinutes: section.timeLimitMinutes,
       questions: section.questions.map((question) => {
         const answer = byQuestion.get(question.id);
         const selected = new Set(answer?.selectedOptionIds ?? []);
