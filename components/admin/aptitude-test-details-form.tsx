@@ -17,8 +17,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SettingsRow } from "@/components/admin/settings-row";
+import { Separator } from "../ui/separator";
 
-/** A labeled group of fields, styled like a card, without its own `<form>` — this whole page is one submission. */
+/** A labeled group of fields, without its own `<form>` — this whole page is one submission. */
 function SettingsGroup({
   title,
   description,
@@ -29,13 +32,13 @@ function SettingsGroup({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="mb-4">
-        <h3 className="font-heading text-sm font-semibold text-foreground">{title}</h3>
-        {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
-      </div>
-      <div className="space-y-4">{children}</div>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">{title}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="space-y-4">{children}</CardContent>
+    </Card>
   );
 }
 
@@ -139,35 +142,31 @@ export function AptitudeTestDetailsForm({
               aria-describedby="description-hint"
             />
             {errors.description && <p className="text-xs text-destructive">{errors.description}</p>}
-            <p id="description-hint" className="text-xs text-muted-foreground">
-              Shown to the candidate on their identity verification / start screen before the test
-              begins.
-            </p>
           </div>
         </SettingsGroup>
 
         <SettingsGroup title="Scoring" description="How results are presented to candidates.">
-          <div className="flex items-start gap-3">
-            <Switch
-              id="showScoreToCandidate"
-              name="showScoreToCandidate"
-              defaultChecked={values?.showScoreToCandidate ?? false}
+          <div className="divide-y divide-border">
+            <SettingsRow
+              htmlFor="showScoreToCandidate"
+              label="Show the score to the candidate"
+              description="Off by default. HR sees the score either way."
+              control={
+                <Switch
+                  id="showScoreToCandidate"
+                  name="showScoreToCandidate"
+                  defaultChecked={values?.showScoreToCandidate ?? false}
+                />
+              }
             />
-            <div className="space-y-1">
-              <Label htmlFor="showScoreToCandidate" className="font-medium">
-                Show the score to the candidate
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Off by default. HR sees the score either way — this only controls whether the
-                candidate does too on their thank-you screen.
-              </p>
-            </div>
           </div>
+
+          <Separator/>
 
           {values && (
             <div className="space-y-1.5">
               <Label htmlFor="passMarkPercent">
-                Pass mark <span className="text-muted-foreground">(optional)</span>
+                Pass mark (%) <span className="text-muted-foreground">(optional)</span>
               </Label>
               <Input
                 id="passMarkPercent"
@@ -182,10 +181,6 @@ export function AptitudeTestDetailsForm({
                 aria-describedby="passMarkPercent-hint"
               />
               {errors.passMarkPercent && <p className="text-xs text-destructive">{errors.passMarkPercent}</p>}
-              <p id="passMarkPercent-hint" className="text-xs text-muted-foreground">
-                Percent of points needed to pass. Leave blank if this is a diagnostic rather than a
-                pass/fail screen.
-              </p>
             </div>
           )}
         </SettingsGroup>
@@ -195,24 +190,16 @@ export function AptitudeTestDetailsForm({
             title="Timing"
             description="A single countdown for the whole test, or configure individual section timers in Questions."
           >
-            <div className="flex items-start gap-3">
-              <Switch
-                id="timed"
-                checked={timed}
-                onChange={(e) => setTimed(e.target.checked)}
+            <div className="divide-y divide-border">
+              <SettingsRow
+                htmlFor="timed"
+                label="Overall test timer"
+                description="Off means no overall time limit. On sets one countdown for the whole test."
+                control={<Switch id="timed" checked={timed} onChange={(e) => setTimed(e.target.checked)} />}
               />
-              <div className="space-y-1">
-                <Label htmlFor="timed" className="font-medium">
-                  Overall test timer
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Off means candidates can take as long as they like (unless individual sections have their own
-                  time limits set in the Questions tab). On sets a single countdown for the whole test.
-                </p>
-              </div>
             </div>
             {timed && (
-              <div className="space-y-1.5 pl-[calc(1rem+0.75rem)]">
+              <div className="space-y-1.5">
                 <Label htmlFor="timeLimitMinutes">Total test minutes</Label>
                 <Input
                   id="timeLimitMinutes"
@@ -227,43 +214,35 @@ export function AptitudeTestDetailsForm({
                   aria-describedby="timeLimitMinutes-hint"
                 />
                 {errors.timeLimitMinutes && <p className="text-xs text-destructive">{errors.timeLimitMinutes}</p>}
-                <p id="timeLimitMinutes-hint" className="text-xs text-muted-foreground">
-                  Applies to attempts that start from now on — someone already partway through
-                  keeps the deadline they were given when they opened the link.
-                </p>
               </div>
             )}
             {!timed && <input type="hidden" name="timeLimitMinutes" value="" />}
             <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
-              💡 <strong>Section timing:</strong> To time individual sections (e.g. Section 1 = 5m, Section 2 = 10m),
-              set the minutes when creating or editing each section under the <strong>Questions</strong> tab.
-              Candidates will take the test section-by-section with live progress bars and auto-advance.
+              💡 <strong>Section timing:</strong> Set each section’s time limit under <strong>Questions</strong>.
+  Candidates progress section-by-section with live progress and auto-advance.
             </div>
           </SettingsGroup>
         )}
 
         {values && (
           <SettingsGroup title="Access" description="Controls how long an issued link stays usable.">
-            <div className="flex items-start gap-3">
-              <Switch
-                id="invitationsExpire"
-                name="invitationsExpire"
-                checked={invitationsExpire}
-                onChange={(e) => setInvitationsExpire(e.target.checked)}
+            <div className="divide-y divide-border">
+              <SettingsRow
+                htmlFor="invitationsExpire"
+                label="Links expire on their own"
+                description="Off means the link stays valid until submitted or withdrawn. No time-based expiry."
+                control={
+                  <Switch
+                    id="invitationsExpire"
+                    name="invitationsExpire"
+                    checked={invitationsExpire}
+                    onChange={(e) => setInvitationsExpire(e.target.checked)}
+                  />
+                }
               />
-              <div className="space-y-1">
-                <Label htmlFor="invitationsExpire" className="font-medium">
-                  Links expire on their own
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Off means an issued link only stops working once the candidate submits it (or
-                  you withdraw it). It never times out on a clock — separate from the test timer
-                  above, which only starts once they actually open it.
-                </p>
-              </div>
             </div>
             {invitationsExpire && (
-              <div className="space-y-1.5 pl-[calc(1rem+0.75rem)]">
+              <div className="space-y-1.5">
                 <Label htmlFor="invitationTtlHours">Expires after (hours)</Label>
                 <Input
                   id="invitationTtlHours"
@@ -277,9 +256,6 @@ export function AptitudeTestDetailsForm({
                   aria-describedby="invitationTtlHours-hint"
                 />
                 {errors.invitationTtlHours && <p className="text-xs text-destructive">{errors.invitationTtlHours}</p>}
-                <p id="invitationTtlHours-hint" className="text-xs text-muted-foreground">
-                  168 is a week. Applies to links issued from now on.
-                </p>
               </div>
             )}
           </SettingsGroup>

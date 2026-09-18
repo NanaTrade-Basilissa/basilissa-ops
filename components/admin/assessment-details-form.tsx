@@ -9,8 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SettingsRow } from "@/components/admin/settings-row";
 
-/** A labeled group of fields, styled like a card, without its own `<form>` — this whole page is one submission. */
+/** A labeled group of fields, without its own `<form>` — this whole page is one submission. */
 function SettingsGroup({
   title,
   description,
@@ -21,13 +23,13 @@ function SettingsGroup({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="mb-4">
-        <h3 className="font-heading text-sm font-semibold text-foreground">{title}</h3>
-        {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
-      </div>
-      <div className="space-y-4">{children}</div>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">{title}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="space-y-4">{children}</CardContent>
+    </Card>
   );
 }
 
@@ -99,26 +101,23 @@ export function AssessmentDetailsForm({
       </SettingsGroup>
 
       <SettingsGroup title="Scoring">
-        <div className="flex items-start gap-3">
-          <Switch
-            id="showScoreToTaker"
-            name="showScoreToTaker"
-            defaultChecked={values?.showScoreToTaker ?? false}
+        {/*
+          Off by default and worth explaining, because the reflex is to turn
+          it on.
+        */}
+        <div className="divide-y divide-border">
+          <SettingsRow
+            htmlFor="showScoreToTaker"
+            label="Show the score to the person taking it"
+            description="Off by default. A visible score turns a diagnostic into an exam. People compare results, and the honest answers you wanted stop arriving. Leave it off unless the score itself is the point."
+            control={
+              <Switch
+                id="showScoreToTaker"
+                name="showScoreToTaker"
+                defaultChecked={values?.showScoreToTaker ?? false}
+              />
+            }
           />
-          <div className="space-y-1">
-            <Label htmlFor="showScoreToTaker" className="font-medium">
-              Show the score to the person taking it
-            </Label>
-            {/*
-              Off by default and worth explaining, because the reflex is to turn
-              it on.
-            */}
-            <p className="text-xs text-muted-foreground">
-              Off by default. A visible score turns a diagnostic into an exam. People compare
-              results, and the honest answers you wanted stop arriving. Leave it off unless the
-              score itself is the point.
-            </p>
-          </div>
         </div>
 
         {/*
@@ -158,22 +157,20 @@ export function AssessmentDetailsForm({
       {/* Same reasoning as pass mark: nothing to expire before a link exists. */}
       {values && (
         <SettingsGroup title="Access" description="Controls how long an issued link stays usable.">
-          <div className="flex items-start gap-3">
-            <Switch
-              id="invitationsExpire"
-              name="invitationsExpire"
-              checked={invitationsExpire}
-              onChange={(e) => setInvitationsExpire(e.target.checked)}
+          <div className="divide-y divide-border">
+            <SettingsRow
+              htmlFor="invitationsExpire"
+              label="Links expire on their own"
+              description="Off means an issued link only stops working once the person submits it (or you withdraw it). It never times out on a clock."
+              control={
+                <Switch
+                  id="invitationsExpire"
+                  name="invitationsExpire"
+                  checked={invitationsExpire}
+                  onChange={(e) => setInvitationsExpire(e.target.checked)}
+                />
+              }
             />
-            <div className="space-y-1">
-              <Label htmlFor="invitationsExpire" className="font-medium">
-                Links expire on their own
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Off means an issued link only stops working once the person submits it (or you
-                withdraw it). It never times out on a clock.
-              </p>
-            </div>
           </div>
           {invitationsExpire && (
             <div className="space-y-1.5 pl-[calc(1rem+0.75rem)]">

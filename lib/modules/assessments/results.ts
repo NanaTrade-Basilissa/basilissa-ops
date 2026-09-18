@@ -144,7 +144,14 @@ export async function listInvitations(assessmentId: string) {
 export async function listInvitationsPaginated(assessmentId: string, params?: { page?: number; pageSize?: number }) {
   const page = Math.max(1, params?.page ?? 1);
   const pageSize = params?.pageSize ?? 10;
-  const where = { assessmentId };
+  const where: Prisma.AssessmentInvitationWhereInput = {
+    assessmentId,
+    NOT: {
+      isPublic: true,
+      openedAt: null,
+      response: null,
+    },
+  };
 
   const [invitations, total] = await Promise.all([
     prisma.assessmentInvitation.findMany({
@@ -335,7 +342,16 @@ export async function assessmentOverview() {
 /** Headline numbers for the invitation list. */
 export async function assessmentSummary(assessmentId: string) {
   const [invited, submitted, scores] = await Promise.all([
-    prisma.assessmentInvitation.count({ where: { assessmentId } }),
+    prisma.assessmentInvitation.count({
+      where: {
+        assessmentId,
+        NOT: {
+          isPublic: true,
+          openedAt: null,
+          response: null,
+        },
+      },
+    }),
     prisma.assessmentResponse.count({
       where: { invitation: { assessmentId }, submittedAt: { not: null } },
     }),

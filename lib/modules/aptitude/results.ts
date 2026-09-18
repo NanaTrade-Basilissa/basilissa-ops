@@ -142,7 +142,14 @@ export async function listInvitations(testId: string) {
 export async function listInvitationsPaginated(testId: string, params?: { page?: number; pageSize?: number }) {
   const page = Math.max(1, params?.page ?? 1);
   const pageSize = params?.pageSize ?? 10;
-  const where = { testId };
+  const where: Prisma.AptitudeInvitationWhereInput = {
+    testId,
+    NOT: {
+      isPublic: true,
+      openedAt: null,
+      attempt: null,
+    },
+  };
 
   const [invitations, total] = await Promise.all([
     prisma.aptitudeInvitation.findMany({
@@ -313,7 +320,16 @@ export async function aptitudeOverview() {
 /** Headline numbers for the invitation list. */
 export async function aptitudeTestSummary(testId: string) {
   const [invited, submitted, scores] = await Promise.all([
-    prisma.aptitudeInvitation.count({ where: { testId } }),
+    prisma.aptitudeInvitation.count({
+      where: {
+        testId,
+        NOT: {
+          isPublic: true,
+          openedAt: null,
+          attempt: null,
+        },
+      },
+    }),
     prisma.aptitudeAttempt.count({ where: { invitation: { testId }, submittedAt: { not: null } } }),
     prisma.aptitudeAttempt.findMany({
       where: { invitation: { testId }, submittedAt: { not: null } },

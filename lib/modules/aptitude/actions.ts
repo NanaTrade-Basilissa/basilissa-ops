@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { auditActorFrom, requirePermission } from "@/lib/modules/identity/server";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { getEnv, isEmailConfigured } from "@/lib/platform/env";
@@ -13,6 +13,7 @@ import {
   aptitudeTestDetailsSchema,
   invitationSchema,
   parseBulkCandidateLines,
+  publicDeclarationSchema,
   publicLinkConfigSchema,
   questionSchema,
   sectionSchema,
@@ -30,11 +31,13 @@ import {
   updateSection,
 } from "./authoring";
 import {
+  getPublicAptitudeTest,
   issueInvitation,
   issueInvitationsByEmail,
   resendInvitation,
   revokeInvitation,
   setPublicLinkConfig,
+  startPublicAttempt,
   type IssuedInvitation,
 } from "./invitations";
 import { APTITUDE_INVITATION_SEND } from "./jobs";
@@ -446,6 +449,44 @@ export async function declareIdentityAction(
 
   revalidatePath(`/aptitude/${token}`);
   return { done: true };
+}
+
+export async function startPublicAptitudeTestAction(
+  publicLinkToken: string,
+  _prev: DeclarationState,
+  formData: FormData,
+): Promise<DeclarationState> {
+  const limit = await rateLimit(`aptitude-public-start:${await clientIp()}`, 30, 15 * 60 * 1000);
+  if (!limit.success) return { error: "Too many attempts. Please try again shortly." };
+
+  const testOutcome = await getPublicAptitudeTest(publicLinkToken);
+  if (!testOutcome.ok) return { error: testOutcome.message };
+
+  const { identity } = testOutcome.test;
+  const parsed = publicDeclarationSchema(identity.nameMode, identity.emailMode).safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Please check what you entered." };
+  }
+
+  const outcome = await startPublicAttempt(publicLinkToken, {
+    name: parsed.data.name,
+    email: parsed.data.email || null,
+  });
+  if (!outcome.ok) return { error: outcome.message };
+
+  const cookieStore = await cookies();
+  cookieStore.set(`aptitude_active_${testOutcome.test.id}`, outcome.token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24, // 24 hours
+  });
+
+  redirect(`/aptitude/${encodeURIComponent(outcome.token)}`);
 }
 
 export type AnswerState = { error?: string; savedQuestionId?: string } | undefined;

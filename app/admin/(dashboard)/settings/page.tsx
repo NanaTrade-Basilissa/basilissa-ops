@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { SettingsRow } from "@/components/admin/settings-row";
 
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
@@ -91,26 +92,25 @@ export default async function SettingsPage({
             Your signed-in account details and assigned roles.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
-            <div>
-              <span className="text-xs text-muted-foreground block">Name</span>
-              <span className="font-medium">{actor.name}</span>
-            </div>
-            <div>
-              <span className="text-xs text-muted-foreground block">Email</span>
-              <span className="font-medium font-mono text-xs">{actor.email}</span>
-            </div>
-          </div>
-          <div>
-            <span className="text-xs text-muted-foreground block mb-1">Assigned roles</span>
-            <div className="flex flex-wrap gap-1.5">
-              {roles.map((r, i) => (
-                <Badge key={i} variant="outline" className="text-xs">
-                  {r.toLowerCase().replace(/_/g, " ")}
-                </Badge>
-              ))}
-            </div>
+        <CardContent>
+          <div className="divide-y divide-border">
+            <SettingsRow label="Name" control={<span className="text-sm font-medium">{actor.name}</span>} />
+            <SettingsRow
+              label="Email"
+              control={<span className="font-mono text-xs">{actor.email}</span>}
+            />
+            <SettingsRow
+              label="Assigned roles"
+              control={
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {roles.map((r, i) => (
+                    <Badge key={i} variant="outline" className="text-xs">
+                      {r.toLowerCase().replace(/_/g, " ")}
+                    </Badge>
+                  ))}
+                </div>
+              }
+            />
           </div>
         </CardContent>
       </Card>

@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
+import type { IdentityFieldMode } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { recordAudit, type AuditActor } from "@/lib/platform/audit";
 import { scoped } from "@/lib/platform/logger";
@@ -289,6 +290,83 @@ export async function setPublicLinkConfig(
   return { ok: true };
 }
 
+export type PublicTestView = {
+  id: string;
+  title: string;
+  description: string | null;
+  timeLimitMinutes: number | null;
+  isSectionTimed: boolean;
+  sectionsCount: number;
+  totalQuestions: number;
+  identity: {
+    nameMode: IdentityFieldMode;
+    emailMode: IdentityFieldMode;
+  };
+};
+
+export type PublicTestOutcome =
+  | { ok: true; test: PublicTestView }
+  | { ok: false; reason: "NOT_FOUND" | "DISABLED" | "CLOSED"; message: string };
+
+/**
+ * Pure read-only query for public link entry. Never mutates the database,
+ * making it safe against prefetching, crawlers, and re-renders.
+ */
+export async function getPublicAptitudeTest(publicLinkToken: string): Promise<PublicTestOutcome> {
+  const test = await prisma.aptitudeTest.findUnique({
+    where: { publicLinkToken },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      publicLinkEnabled: true,
+      publicLinkNameMode: true,
+      publicLinkEmailMode: true,
+      timeLimitMinutes: true,
+      deletedAt: true,
+      sections: {
+        orderBy: { order: "asc" },
+        select: {
+          id: true,
+          timeLimitMinutes: true,
+          _count: { select: { questions: true } },
+        },
+      },
+    },
+  });
+
+  if (!test || test.deletedAt) {
+    return { ok: false, reason: "NOT_FOUND", message: "This link is not valid." };
+  }
+  if (!test.publicLinkEnabled) {
+    return { ok: false, reason: "DISABLED", message: "This link is no longer active." };
+  }
+  if (test.status !== "PUBLISHED") {
+    return { ok: false, reason: "CLOSED", message: "This test is no longer open." };
+  }
+
+  const isSectionTimed = test.sections.some((s) => (s.timeLimitMinutes ?? 0) > 0);
+  const totalQuestions = test.sections.reduce((sum, s) => sum + s._count.questions, 0);
+
+  return {
+    ok: true,
+    test: {
+      id: test.id,
+      title: test.title,
+      description: test.description,
+      timeLimitMinutes: test.timeLimitMinutes,
+      isSectionTimed,
+      sectionsCount: test.sections.length,
+      totalQuestions,
+      identity: {
+        nameMode: test.publicLinkNameMode,
+        emailMode: test.publicLinkEmailMode,
+      },
+    },
+  };
+}
+
 export type PublicAttemptFailure = "NOT_FOUND" | "DISABLED" | IssueFailure;
 
 export type PublicAttemptOutcome =
@@ -296,25 +374,67 @@ export type PublicAttemptOutcome =
   | { ok: false; reason: PublicAttemptFailure; message: string };
 
 /**
- * Mints a fresh, ordinary invitation for whoever just opened the public
- * link. No session, no cookie — opening it twice makes two attempts, exactly
- * as two different people opening it does.
+ * Mints an invitation and initializes the attempt when the candidate explicitly
+ * clicks "Begin test". Avoids phantom rows and starts the timer only when the candidate begins.
  */
-export async function startPublicAttempt(publicLinkToken: string): Promise<PublicAttemptOutcome> {
+export async function startPublicAttempt(
+  publicLinkToken: string,
+  identity?: { name?: string; email?: string | null },
+): Promise<PublicAttemptOutcome> {
   const test = await prisma.aptitudeTest.findUnique({
     where: { publicLinkToken },
-    select: { id: true, publicLinkEnabled: true },
+    select: {
+      id: true,
+      publicLinkEnabled: true,
+      status: true,
+      timeLimitMinutes: true,
+      deletedAt: true,
+      sections: {
+        orderBy: { order: "asc" },
+        select: { timeLimitMinutes: true },
+      },
+    },
   });
-  if (!test) return { ok: false, reason: "NOT_FOUND", message: "This link is not valid." };
-  if (!test.publicLinkEnabled) {
+  if (!test || test.deletedAt) return { ok: false, reason: "NOT_FOUND", message: "This link is not valid." };
+  if (!test.publicLinkEnabled || test.status !== "PUBLISHED") {
     return { ok: false, reason: "DISABLED", message: "This link is no longer active." };
   }
 
+  const candidateName = identity?.name?.trim() || "Public respondent";
+  const candidateEmail = identity?.email?.trim() || null;
+
   const outcome = await issueInvitation(
-    { testId: test.id, isPublic: true },
+    { testId: test.id, name: candidateName, email: candidateEmail, isPublic: true },
     { userId: null, email: null, role: null },
   );
   if (!outcome.ok) return outcome;
+
+  const isSectionTimed = test.sections.some((s) => (s.timeLimitMinutes ?? 0) > 0);
+  let deadlineAt: Date | null = null;
+  if (isSectionTimed) {
+    const totalSectionMinutes = test.sections.reduce((sum, s) => sum + (s.timeLimitMinutes ?? 0), 0);
+    const minutes = Math.max(test.timeLimitMinutes ?? 0, totalSectionMinutes);
+    if (minutes > 0) deadlineAt = new Date(Date.now() + minutes * 60_000);
+  } else if (test.timeLimitMinutes) {
+    deadlineAt = new Date(Date.now() + test.timeLimitMinutes * 60_000);
+  }
+
+  await prisma.$transaction([
+    prisma.aptitudeInvitation.update({
+      where: { id: outcome.invitation.invitationId },
+      data: { openedAt: new Date() },
+    }),
+    prisma.aptitudeAttempt.create({
+      data: {
+        invitationId: outcome.invitation.invitationId,
+        declaredName: identity?.name !== undefined ? identity.name.trim() : candidateName,
+        declaredEmail: candidateEmail,
+        deadlineAt,
+        currentSectionIndex: 0,
+        sectionStartedAt: isSectionTimed ? new Date() : null,
+      },
+    }),
+  ]);
 
   return { ok: true, token: outcome.invitation.token };
 }

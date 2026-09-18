@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { SettingsRow } from "@/components/admin/settings-row";
 
 export type PolicyValues = {
   graceInMinutes: number;
@@ -273,22 +274,19 @@ export function AttendancePolicyForm({
           </div>
 
           <div className="rounded-xl border border-border p-4 space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <Label htmlFor="autoCloseEnabled" className="text-base font-semibold">
-                  Auto-close missing clock-outs
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  When enabled, shifts left open past their scheduled end time are automatically
-                  closed with a SYSTEM_AUTO_CLOSE event, flagged with AUTO_CLOSED, and credited 0 overtime.
-                </p>
-              </div>
-              <Switch
-                id="autoCloseEnabled"
-                checked={autoCloseEnabled}
-                onChange={(e) => setAutoCloseEnabled(e.target.checked)}
-              />
-            </div>
+            <SettingsRow
+              htmlFor="autoCloseEnabled"
+              label="Auto-close missing clock-outs"
+              description="When enabled, shifts left open past their scheduled end time are automatically closed with a SYSTEM_AUTO_CLOSE event, flagged with AUTO_CLOSED, and credited 0 overtime."
+              control={
+                <Switch
+                  id="autoCloseEnabled"
+                  checked={autoCloseEnabled}
+                  onChange={(e) => setAutoCloseEnabled(e.target.checked)}
+                />
+              }
+              className="py-0"
+            />
 
             {autoCloseEnabled ? (
               <Field
@@ -336,21 +334,19 @@ export function AttendancePolicyForm({
               You can grant this authority to Branch Managers as well.
             </p>
           </div>
-          <div className="flex items-center justify-between rounded-xl border border-border p-4">
-            <div>
-              <Label htmlFor="branchManagerCanAuthorizeOvertime" className="font-semibold">
-                Allow Branch Managers to authorize payable overtime
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                When enabled, branch managers can sign off on payable overtime minutes for employees assigned to their branch.
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              id="branchManagerCanAuthorizeOvertime"
-              name="branchManagerCanAuthorizeOvertime"
-              defaultChecked={values.branchManagerCanAuthorizeOvertime}
-              className="size-4 rounded border-input"
+          <div className="rounded-xl border border-border p-4">
+            <SettingsRow
+              htmlFor="branchManagerCanAuthorizeOvertime"
+              label="Allow Branch Managers to authorize payable overtime"
+              description="When enabled, branch managers can sign off on payable overtime minutes for employees assigned to their branch."
+              control={
+                <Switch
+                  id="branchManagerCanAuthorizeOvertime"
+                  name="branchManagerCanAuthorizeOvertime"
+                  defaultChecked={values.branchManagerCanAuthorizeOvertime}
+                />
+              }
+              className="py-0"
             />
           </div>
         </section>

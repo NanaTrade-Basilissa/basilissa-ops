@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
+import type { IdentityFieldMode } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { recordAudit, type AuditActor } from "@/lib/platform/audit";
 import { scoped } from "@/lib/platform/logger";
@@ -386,6 +387,76 @@ export async function setPublicLinkConfig(
   return { ok: true };
 }
 
+export type PublicAssessmentView = {
+  id: string;
+  title: string;
+  description: string | null;
+  sectionsCount: number;
+  totalQuestions: number;
+  identity: {
+    nameMode: IdentityFieldMode;
+    emailMode: IdentityFieldMode;
+  };
+};
+
+export type PublicAssessmentOutcome =
+  | { ok: true; assessment: PublicAssessmentView }
+  | { ok: false; reason: "NOT_FOUND" | "DISABLED" | "CLOSED"; message: string };
+
+/**
+ * Pure read-only query for public link entry. Never mutates the database,
+ * making it safe against prefetching, crawlers, and re-renders.
+ */
+export async function getPublicAssessment(publicLinkToken: string): Promise<PublicAssessmentOutcome> {
+  const assessment = await prisma.assessment.findUnique({
+    where: { publicLinkToken },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      publicLinkEnabled: true,
+      publicLinkNameMode: true,
+      publicLinkEmailMode: true,
+      deletedAt: true,
+      sections: {
+        orderBy: { order: "asc" },
+        select: {
+          id: true,
+          _count: { select: { questions: true } },
+        },
+      },
+    },
+  });
+
+  if (!assessment || assessment.deletedAt) {
+    return { ok: false, reason: "NOT_FOUND", message: "This link is not valid." };
+  }
+  if (!assessment.publicLinkEnabled) {
+    return { ok: false, reason: "DISABLED", message: "This link is no longer active." };
+  }
+  if (assessment.status !== "PUBLISHED") {
+    return { ok: false, reason: "CLOSED", message: "This assessment is no longer open." };
+  }
+
+  const totalQuestions = assessment.sections.reduce((sum, s) => sum + s._count.questions, 0);
+
+  return {
+    ok: true,
+    assessment: {
+      id: assessment.id,
+      title: assessment.title,
+      description: assessment.description,
+      sectionsCount: assessment.sections.length,
+      totalQuestions,
+      identity: {
+        nameMode: assessment.publicLinkNameMode,
+        emailMode: assessment.publicLinkEmailMode,
+      },
+    },
+  };
+}
+
 export type PublicAttemptFailure = "NOT_FOUND" | "DISABLED" | IssueFailure;
 
 export type PublicAttemptOutcome =
@@ -393,27 +464,44 @@ export type PublicAttemptOutcome =
   | { ok: false; reason: PublicAttemptFailure; message: string };
 
 /**
- * Mints a fresh, ordinary invitation for whoever just opened the public
- * link, and hands back its token so the caller can send them straight into
- * the normal per-invitation taking flow. Called once per visit — there is no
- * session here, no cookie; opening the public link twice makes two attempts,
- * exactly as two different people opening it does.
+ * Mints an invitation and initializes the response when the taker explicitly
+ * clicks "Begin assessment". Avoids phantom rows and duplicate invitations.
  */
-export async function startPublicAttempt(publicLinkToken: string): Promise<PublicAttemptOutcome> {
+export async function startPublicAttempt(
+  publicLinkToken: string,
+  identity?: { name?: string; email?: string | null },
+): Promise<PublicAttemptOutcome> {
   const assessment = await prisma.assessment.findUnique({
     where: { publicLinkToken },
-    select: { id: true, publicLinkEnabled: true },
+    select: { id: true, publicLinkEnabled: true, status: true, deletedAt: true },
   });
-  if (!assessment) return { ok: false, reason: "NOT_FOUND", message: "This link is not valid." };
-  if (!assessment.publicLinkEnabled) {
+  if (!assessment || assessment.deletedAt) return { ok: false, reason: "NOT_FOUND", message: "This link is not valid." };
+  if (!assessment.publicLinkEnabled || assessment.status !== "PUBLISHED") {
     return { ok: false, reason: "DISABLED", message: "This link is no longer active." };
   }
 
+  const inviteeName = identity?.name?.trim() || "Public respondent";
+  const inviteeEmail = identity?.email?.trim() || null;
+
   const outcome = await issueInvitation(
-    { assessmentId: assessment.id, isPublic: true },
+    { assessmentId: assessment.id, name: inviteeName, email: inviteeEmail, isPublic: true },
     { userId: null, email: null, role: null },
   );
   if (!outcome.ok) return outcome;
+
+  await prisma.$transaction([
+    prisma.assessmentInvitation.update({
+      where: { id: outcome.invitation.invitationId },
+      data: { openedAt: new Date() },
+    }),
+    prisma.assessmentResponse.create({
+      data: {
+        invitationId: outcome.invitation.invitationId,
+        declaredName: identity?.name !== undefined ? identity.name.trim() : inviteeName,
+        declaredEmail: inviteeEmail,
+      },
+    }),
+  ]);
 
   return { ok: true, token: outcome.invitation.token };
 }

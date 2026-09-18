@@ -1,7 +1,15 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { startPublicAttempt } from "@/lib/modules/assessments/server";
+import Link from "next/link";
+import { cookies } from "next/headers";
+import { ArrowRight, Timer } from "lucide-react";
+import { prisma } from "@/lib/platform/prisma";
+import { getPublicAssessment, hashInvitationToken } from "@/lib/modules/assessments/server";
+import { startPublicAssessmentAction } from "@/lib/modules/assessments/actions";
+import { IdentityDeclaration } from "@/components/assessment/identity-declaration";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "cn";
 import { Logo } from "@/components/brand/logo";
 
 export const metadata: Metadata = {
@@ -10,23 +18,14 @@ export const metadata: Metadata = {
 };
 export const dynamic = "force-dynamic";
 
-/**
- * The public link's entry point. Not a taking page itself — it mints an
- * ordinary invitation for whoever just opened it (see `startPublicAttempt`)
- * and hands off to the same per-invitation flow every personal link uses, so
- * there is exactly one taking implementation, not two.
- *
- * A fresh attempt on every visit, deliberately: there is no session here, so
- * "the same person opened it twice" and "two different people opened it"
- * look identical, and are treated the same way — two attempts.
- */
 export default async function PublicAssessmentEntryPage({
   params,
 }: {
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const outcome = await startPublicAttempt(decodeURIComponent(token));
+  const decodedToken = decodeURIComponent(token);
+  const outcome = await getPublicAssessment(decodedToken);
 
   if (!outcome.ok) {
     return (
@@ -49,5 +48,78 @@ export default async function PublicAssessmentEntryPage({
     );
   }
 
-  redirect(`/assessment/${encodeURIComponent(outcome.token)}`);
+  const { assessment } = outcome;
+
+  // Check if this browser already has an active, unsubmitted attempt
+  const cookieStore = await cookies();
+  const activeToken = cookieStore.get(`assessment_active_${assessment.id}`)?.value;
+  let hasActiveAttempt = false;
+
+  if (activeToken) {
+    const existing = await prisma.assessmentInvitation.findUnique({
+      where: { tokenHash: hashInvitationToken(activeToken) },
+      select: {
+        revokedAt: true,
+        response: {
+          select: {
+            submittedAt: true,
+          },
+        },
+      },
+    });
+
+    if (
+      existing &&
+      !existing.revokedAt &&
+      existing.response &&
+      !existing.response.submittedAt
+    ) {
+      hasActiveAttempt = true;
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-secondary/40 px-4 py-8">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <Logo />
+
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-foreground">
+            {assessment.title}
+          </h1>
+          {assessment.description && (
+            <p className="mt-1 text-sm text-muted-foreground">{assessment.description}</p>
+          )}
+        </div>
+
+        {hasActiveAttempt && activeToken && (
+          <Alert className="border-primary/40 bg-primary/5">
+            <Timer className="size-4 text-primary" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+              <div>
+                <AlertTitle className="text-sm font-semibold">Assessment in progress</AlertTitle>
+                <AlertDescription className="text-xs text-muted-foreground">
+                  You already have an active session for this assessment.
+                </AlertDescription>
+              </div>
+              <Link
+                href={`/assessment/${encodeURIComponent(activeToken)}`}
+                className={cn(buttonVariants({ size: "sm" }), "gap-1.5 shrink-0")}
+              >
+                Resume assessment
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
+          </Alert>
+        )}
+
+        <IdentityDeclaration
+          action={startPublicAssessmentAction.bind(null, decodedToken)}
+          nameMode={assessment.identity.nameMode}
+          emailMode={assessment.identity.emailMode}
+          personal={false}
+        />
+      </div>
+    </main>
+  );
 }

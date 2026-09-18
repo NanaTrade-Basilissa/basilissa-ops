@@ -16,11 +16,12 @@ export type AssessmentFormState =
 import { getEnv, isEmailConfigured } from "@/lib/platform/env";
 import { enqueue } from "@/lib/platform/jobs";
 import { rateLimit } from "@/lib/platform/rate-limit";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import {
   assessmentDetailsSchema,
   answerSchema,
   invitationSchema,
+  publicDeclarationSchema,
   publicLinkConfigSchema,
   questionSchema,
   sectionSchema,
@@ -38,11 +39,13 @@ import {
   updateSection,
 } from "./authoring";
 import {
+  getPublicAssessment,
   issueInvitation,
   issueInvitations,
   resendInvitation,
   revokeInvitation,
   setPublicLinkConfig,
+  startPublicAttempt,
   type IssuedInvitation,
 } from "./invitations";
 import { ASSESSMENT_INVITATION_SEND } from "./jobs";
@@ -479,6 +482,44 @@ export async function declareIdentityAction(
   // exactly what to type instead.
   revalidatePath(`/assessment/${token}`);
   return { done: true };
+}
+
+export async function startPublicAssessmentAction(
+  publicLinkToken: string,
+  _prev: DeclarationState,
+  formData: FormData,
+): Promise<DeclarationState> {
+  const limit = await rateLimit(`assessment-public-start:${await clientIp()}`, 30, 15 * 60 * 1000);
+  if (!limit.success) return { error: "Too many attempts. Please try again shortly." };
+
+  const assessmentOutcome = await getPublicAssessment(publicLinkToken);
+  if (!assessmentOutcome.ok) return { error: assessmentOutcome.message };
+
+  const { identity } = assessmentOutcome.assessment;
+  const parsed = publicDeclarationSchema(identity.nameMode, identity.emailMode).safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Please check what you entered." };
+  }
+
+  const outcome = await startPublicAttempt(publicLinkToken, {
+    name: parsed.data.name,
+    email: parsed.data.email || null,
+  });
+  if (!outcome.ok) return { error: outcome.message };
+
+  const cookieStore = await cookies();
+  cookieStore.set(`assessment_active_${assessmentOutcome.assessment.id}`, outcome.token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24, // 24 hours
+  });
+
+  redirect(`/assessment/${encodeURIComponent(outcome.token)}`);
 }
 
 export type AnswerState = { error?: string; savedQuestionId?: string } | undefined;
