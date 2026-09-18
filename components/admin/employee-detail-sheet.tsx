@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { getEmployeeDetailAction } from "@/lib/modules/employees/actions";
 import { EmployeeDetailContent } from "@/components/admin/employee-detail-content";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,30 +44,43 @@ function EmployeeDetailSkeleton() {
 export function EmployeeDetailSheet({
   employeeId,
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
-  employeeId: string;
-  trigger: React.ReactElement;
+  employeeId: string | null;
+  trigger?: React.ReactElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [detail, setDetail] = useState<Detail | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const load = useCallback(() => {
+    if (!employeeId) return;
     startTransition(async () => {
       setDetail(await getEmployeeDetailAction(employeeId));
     });
   }, [employeeId]);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setDetail(null);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      load();
+    }
+  }, [open, load]);
+
   return (
-    <Sheet
-      onOpenChange={(open) => {
-        if (open) {
-          load();
-        } else {
-          setDetail(null);
-        }
-      }}
-    >
-      <SheetTrigger render={trigger} />
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      {trigger ? <SheetTrigger render={trigger} /> : null}
       <SheetContent className="w-full data-[side=right]:w-full sm:max-w-full data-[side=right]:sm:max-w-full lg:w-1/3 data-[side=right]:lg:w-1/3 lg:max-w-none data-[side=right]:lg:max-w-none overflow-y-auto">
         <SheetHeader>
 

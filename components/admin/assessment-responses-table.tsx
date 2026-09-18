@@ -9,6 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog,
@@ -172,7 +173,16 @@ export function AssessmentResponsesTable({
                     <TableCell className="font-medium">
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-foreground">{invitation.inviteeName}</span>
+                          {isFinished ? (
+                            <Link
+                              href={`/admin/assessments/${assessmentId}/responses/${response.id}`}
+                              className="font-medium text-foreground underline-offset-4 hover:underline"
+                            >
+                              {invitation.inviteeName}
+                            </Link>
+                          ) : (
+                            <span className="font-medium text-foreground">{invitation.inviteeName}</span>
+                          )}
                           {response?.identityMismatch && (
                             <Badge variant="destructive" className="text-[10px] px-1 py-0">
                               name mismatch: &ldquo;{response.declaredName}&rdquo;
@@ -218,75 +228,59 @@ export function AssessmentResponsesTable({
                     </TableCell>
 
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {isFinished && (
-                          <Link
-                            href={`/admin/assessments/${assessmentId}/responses/${response.id}`}
-                            className={buttonVariants({ variant: "outline", size: "sm" })}
-                          >
-                            <span>Answers</span>
-                            <ExternalLink className="size-3.5" />
-                          </Link>
-                        )}
-
-                        {canModify && (
-                          <>
-                            <form action={resend}>
-                              <input type="hidden" name="invitationId" value={invitation.id} />
-                              <Button
-                                type="submit"
-                                variant="ghost"
-                                size="sm"
-                                disabled={resending}
-                                className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
-                                title="Issues a fresh link"
-                              >
-                                {resending ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
-                                Resend
-                              </Button>
-                            </form>
-
-                            <AlertDialog>
-                              <AlertDialogTrigger
-                                render={
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled={revoking}
-                                    className="h-8 gap-1 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                  >
-                                    <X className="size-3.5" />
-                                    Withdraw
-                                  </Button>
-                                }
-                              />
-                              <AlertDialogContent size="sm">
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Withdraw invitation?</AlertDialogTitle>
-                                  <AlertDialogDescription className="text-xs">
-                                    This will immediately revoke access for{" "}
-                                    <strong>{invitation.inviteeName}</strong>.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <form action={revoke}>
-                                    <input type="hidden" name="invitationId" value={invitation.id} />
-                                    <AlertDialogAction
-                                      type="submit"
-                                      variant="destructive"
-                                      disabled={revoking}
-                                    >
-                                      {revoking ? <Loader2 className="size-4 animate-spin" /> : "Withdraw link"}
-                                    </AlertDialogAction>
-                                  </form>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </>
-                        )}
-                      </div>
+                      <TableRowActions
+                        actions={[
+                          isFinished && {
+                            id: "answers",
+                            label: "View answers",
+                            href: `/admin/assessments/${assessmentId}/responses/${response.id}`,
+                            icon: ExternalLink,
+                          },
+                          canModify && {
+                            id: "resend",
+                            label: "Resend link",
+                            icon: RotateCw,
+                            disabled: resending,
+                            onClick: () => {
+                              const fd = new FormData();
+                              fd.append("invitationId", invitation.id);
+                              resend(fd);
+                            },
+                          },
+                          canModify && {
+                            id: "withdraw",
+                            label: "Withdraw link",
+                            icon: X,
+                            variant: "destructive",
+                            dialog: (props) => (
+                              <AlertDialog open={props.open} onOpenChange={props.onOpenChange}>
+                                <AlertDialogContent size="sm">
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Withdraw invitation?</AlertDialogTitle>
+                                    <AlertDialogDescription className="text-xs">
+                                      This will immediately revoke access for{" "}
+                                      <strong>{invitation.inviteeName}</strong>.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <form action={revoke}>
+                                      <input type="hidden" name="invitationId" value={invitation.id} />
+                                      <AlertDialogAction
+                                        type="submit"
+                                        variant="destructive"
+                                        disabled={revoking}
+                                      >
+                                        {revoking ? <Loader2 className="size-4 animate-spin" /> : "Withdraw link"}
+                                      </AlertDialogAction>
+                                    </form>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            ),
+                          },
+                        ]}
+                      />
                     </TableCell>
                   </TableRow>
                 );

@@ -33,13 +33,19 @@ export function RoleDialog({
   matrix,
   trigger,
   onSaved,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   role?: FormattedCustomRole;
   matrix: MatrixRow[];
   trigger?: React.ReactElement;
   onSaved?: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const isEditing = Boolean(role);
 
   const [name, setName] = useState(role?.name ?? "");
@@ -118,16 +124,18 @@ export function RoleDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          trigger ?? (
+      {trigger ? (
+        <DialogTrigger render={trigger} />
+      ) : controlledOpen === undefined ? (
+        <DialogTrigger
+          render={
             <Button size="sm">
               <Plus className="size-4 mr-1.5" />
               Create role
             </Button>
-          )
-        }
-      />
+          }
+        />
+      ) : null}
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEditing ? `Edit Role: ${role?.name}` : "Create Custom Role"}</DialogTitle>

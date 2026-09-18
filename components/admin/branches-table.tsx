@@ -6,7 +6,8 @@ import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { toggleBranchActive, updateBranch } from "@/lib/modules/branches/actions";
 import { BranchDialog } from "@/components/admin/branch-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Eye, Edit2, Ban, CheckCircle2 } from "lucide-react";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +17,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 export type BranchRow = {
@@ -40,12 +40,15 @@ const columns = columnHelper.columns([
   columnHelper.accessor("name", {
     header: "Branch",
     cell: (info) => (
-      <>
-        <Link href={`/admin/branches/${info.row.original.id}`} className="font-medium text-foreground hover:underline">
+      <div>
+        <Link
+          href={`/admin/branches/${info.row.original.id}`}
+          className="font-medium text-foreground underline-offset-4 hover:underline"
+        >
           {info.getValue()}
         </Link>
         <p className="text-xs text-muted-foreground">{info.row.original.location}</p>
-      </>
+      </div>
     ),
   }),
   columnHelper.accessor("isActive", {
@@ -84,79 +87,91 @@ const columns = columnHelper.columns([
   }),
   columnHelper.display({
     id: "actions",
-    header: () => <div className="text-right">Actions</div>,
-    cell: ({ row }) => (
-      <div className="flex justify-end gap-1.5">
-        <Link href={`/admin/branches/${row.original.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
-          View
-        </Link>
-        {row.original.canWrite !== false && (
-          <>
-            <BranchDialog
-              action={updateBranch.bind(null, row.original.id)}
-              submitLabel="Save changes"
-              title="Edit branch"
-              description="Changing the slug also changes this branch's QR code link."
-              defaultValues={{
-                name: row.original.name,
-                slug: row.original.slug,
-                location: row.original.location,
-                isActive: row.original.isActive,
-                latitude: row.original.latitude,
-                longitude: row.original.longitude,
-                geofenceRadiusMeters: row.original.geofenceRadiusMeters,
-                geofenceEnabled: row.original.geofenceEnabled,
-              }}
-              trigger={
-                <Button variant="outline" size="sm">
-                  Edit
-                </Button>
-              }
-            />
-            {row.original.isActive ? (
-              <AlertDialog>
-                <AlertDialogTrigger
-                  render={
-                    <Button size="sm" variant="destructive">
-                      Deactivate
-                    </Button>
-                  }
+    header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
+    cell: ({ row }) => {
+      const branch = row.original;
+      const canWrite = branch.canWrite !== false;
+
+      return (
+        <TableRowActions
+          actions={[
+            {
+              id: "view",
+              label: "View branch",
+              href: `/admin/branches/${branch.id}`,
+              icon: Eye,
+            },
+            canWrite && {
+              id: "edit",
+              label: "Edit branch",
+              icon: Edit2,
+              dialog: (props) => (
+                <BranchDialog
+                  open={props.open}
+                  onOpenChange={props.onOpenChange}
+                  action={updateBranch.bind(null, branch.id)}
+                  submitLabel="Save changes"
+                  title="Edit branch"
+                  description="Changing the slug also changes this branch's QR code link."
+                  defaultValues={{
+                    name: branch.name,
+                    slug: branch.slug,
+                    location: branch.location,
+                    isActive: branch.isActive,
+                    latitude: branch.latitude,
+                    longitude: branch.longitude,
+                    geofenceRadiusMeters: branch.geofenceRadiusMeters,
+                    geofenceEnabled: branch.geofenceEnabled,
+                  }}
                 />
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Deactivate {row.original.name}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This branch will immediately stop accepting new feedback submissions and will be marked inactive.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <form action={toggleBranchActive}>
-                      <input type="hidden" name="id" value={row.original.id} />
-                      <input type="hidden" name="nextIsActive" value="false" />
-                      <AlertDialogAction
-                        type="submit"
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Deactivate branch
-                      </AlertDialogAction>
-                    </form>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            ) : (
-              <form action={toggleBranchActive}>
-                <input type="hidden" name="id" value={row.original.id} />
-                <input type="hidden" name="nextIsActive" value="true" />
-                <Button size="sm" variant="secondary" type="submit">
-                  Activate
-                </Button>
-              </form>
-            )}
-          </>
-        )}
-      </div>
-    ),
+              ),
+            },
+            canWrite && branch.isActive && {
+              id: "deactivate",
+              label: "Deactivate",
+              icon: Ban,
+              variant: "destructive",
+              dialog: (props) => (
+                <AlertDialog open={props.open} onOpenChange={props.onOpenChange}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Deactivate {branch.name}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This branch will immediately stop accepting new feedback submissions and will be marked inactive.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <form action={toggleBranchActive}>
+                        <input type="hidden" name="id" value={branch.id} />
+                        <input type="hidden" name="nextIsActive" value="false" />
+                        <AlertDialogAction
+                          type="submit"
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Deactivate branch
+                        </AlertDialogAction>
+                      </form>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ),
+            },
+            canWrite && !branch.isActive && {
+              id: "activate",
+              label: "Activate",
+              icon: CheckCircle2,
+              onClick: async () => {
+                const formData = new FormData();
+                formData.append("id", branch.id);
+                formData.append("nextIsActive", "true");
+                await toggleBranchActive(formData);
+              },
+            },
+          ]}
+        />
+      );
+    },
   }),
 ]);
 

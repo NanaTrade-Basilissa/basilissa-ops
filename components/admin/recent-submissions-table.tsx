@@ -30,7 +30,7 @@ export function RecentSubmissionsTable({
   return (
     <Table>
       <TableHeader>
-        <TableRow>
+        <TableRow className="bg-muted/40 hover:bg-muted/40">
           <TableHead>Submitted</TableHead>
           {showBranch && <TableHead>Branch</TableHead>}
           {submissions[0].answers.map((a) => (
@@ -43,11 +43,14 @@ export function RecentSubmissionsTable({
       </TableHeader>
       <TableBody>
         {submissions.map((s) => (
-          <TableRow key={s.id} id={`submission-${s.id}`} className="scroll-mt-24">
+          <TableRow key={s.id} id={`submission-${s.id}`} className="scroll-mt-24 hover:bg-muted/30">
             <TableCell className="text-muted-foreground">{formatAccraDateTime(s.submittedAt)}</TableCell>
             {showBranch && (
               <TableCell>
-                <Link href={`/admin/branches/${s.branchId}`} className="font-medium text-foreground hover:underline">
+                <Link
+                  href={`/admin/branches/${s.branchId}`}
+                  className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
+                >
                   {s.branchName}
                 </Link>
               </TableCell>

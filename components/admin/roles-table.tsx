@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Edit2, Shield, Users, ChevronDown, ChevronRight } from "lucide-react";
+import { Edit2, Shield, Users, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import type { FormattedCustomRole } from "@/lib/modules/identity/constants";
 import type { MatrixRow } from "@/lib/modules/identity/authorization";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { TableRowActions } from "@/components/admin/table-row-actions";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RoleDialog } from "@/components/admin/role-dialog";
 import { DeleteRoleDialog } from "@/components/admin/delete-role-dialog";
 import { formatAccraDateTime } from "@/lib/platform/date";
@@ -44,10 +45,10 @@ export function RolesTable({
 
   if (roles.length === 0) {
     return (
-      <Empty className="border border-dashed rounded-xl p-8 text-center">
+      <Empty className="border-0 py-10">
         <EmptyHeader>
-          <EmptyMedia>
-            <Shield className="size-10 text-muted-foreground mx-auto" />
+          <EmptyMedia variant="icon">
+            <Shield className="size-4" />
           </EmptyMedia>
           <EmptyTitle>No custom roles created</EmptyTitle>
           <EmptyDescription>
@@ -64,99 +65,108 @@ export function RolesTable({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              <th className="py-3 px-4 w-8"></th>
-              <th className="py-3 px-4">Role</th>
-              <th className="py-3 px-4">Description</th>
-              <th className="py-3 px-4 text-center">Assigned Users</th>
-              <th className="py-3 px-4 text-center">Permissions</th>
-              <th className="py-3 px-4">Created</th>
-              <th className="py-3 px-4 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {roles.map((role) => {
-              const isExpanded = expandedRoleIds.has(role.id);
+    <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-8 text-center" />
+            <TableHead>Role</TableHead>
+            <TableHead>Description</TableHead>
+            <TableHead className="text-center">Assigned Users</TableHead>
+            <TableHead className="text-center">Permissions</TableHead>
+            <TableHead>Created</TableHead>
+            <TableHead className="text-right sr-only sm:not-sr-only">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {roles.map((role) => {
+            const isExpanded = expandedRoleIds.has(role.id);
 
-              return (
-                <tr key={role.id} className="hover:bg-muted/20 transition-colors group">
-                  <td className="py-3.5 px-4 text-center">
-                    {role.permissions.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => toggleExpand(role.id)}
-                        className="text-muted-foreground hover:text-foreground"
-                        aria-label="Toggle permission details"
-                      >
-                        {isExpanded ? (
-                          <ChevronDown className="size-4" />
-                        ) : (
-                          <ChevronRight className="size-4" />
-                        )}
-                      </button>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4 font-medium text-foreground">
-                    <div className="flex items-center gap-2">
-                      <Shield className="size-4 text-primary shrink-0" />
-                      <span>{role.name}</span>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-muted-foreground max-w-xs truncate">
-                    {role.description || <span className="italic text-muted-foreground/60">—</span>}
-                  </td>
-                  <td className="py-3.5 px-4 text-center">
-                    <Badge variant={role.userCount > 0 ? "secondary" : "outline"} className="gap-1 font-normal">
-                      <Users className="size-3.5" />
-                      {role.userCount} {role.userCount === 1 ? "user" : "users"}
-                    </Badge>
-                  </td>
-                  <td className="py-3.5 px-4 text-center">
-                    <Badge variant="outline" className="font-normal">
-                      {role.permissionCount} {role.permissionCount === 1 ? "permission" : "permissions"}
-                    </Badge>
-                  </td>
-                  <td className="py-3.5 px-4 text-xs text-muted-foreground whitespace-nowrap">
-                    {formatAccraDateTime(role.createdAt)}
-                  </td>
-                  <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1">
-                      {canUpdate && (
-                        <RoleDialog
-                          role={role}
-                          matrix={matrix}
-                          trigger={
-                            <Button variant="ghost" size="sm" className="h-8 gap-1 text-muted-foreground hover:text-foreground">
-                              <Edit2 className="size-3.5" />
-                              Edit
-                            </Button>
-                          }
-                        />
+            return (
+              <TableRow key={role.id} className="transition-colors">
+                <TableCell className="text-center">
+                  {role.permissions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(role.id)}
+                      className="text-muted-foreground hover:text-foreground cursor-pointer"
+                      aria-label="Toggle permission details"
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="size-4" />
+                      ) : (
+                        <ChevronRight className="size-4" />
                       )}
-                      {canDelete && (
-                        <DeleteRoleDialog
-                          role={{ id: role.id, name: role.name, userCount: role.userCount }}
-                        />
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </button>
+                  )}
+                </TableCell>
+                <TableCell className="font-medium text-foreground">
+                  <div className="flex items-center gap-2">
+                    <Shield className="size-4 text-primary shrink-0" />
+                    <span>{role.name}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground max-w-xs truncate">
+                  {role.description || <span className="italic text-muted-foreground/60">—</span>}
+                </TableCell>
+                <TableCell className="text-center">
+                  <Badge variant={role.userCount > 0 ? "secondary" : "outline"} className="gap-1 font-normal">
+                    <Users className="size-3.5" />
+                    {role.userCount} {role.userCount === 1 ? "user" : "users"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-center">
+                  <Badge variant="outline" className="font-normal">
+                    {role.permissionCount} {role.permissionCount === 1 ? "permission" : "permissions"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                  {formatAccraDateTime(role.createdAt)}
+                </TableCell>
+                <TableCell className="text-right whitespace-nowrap">
+                  <TableRowActions
+                    actions={[
+                      canUpdate && {
+                        id: "edit",
+                        label: "Edit role",
+                        icon: Edit2,
+                        dialog: (props) => (
+                          <RoleDialog
+                            open={props.open}
+                            onOpenChange={props.onOpenChange}
+                            role={role}
+                            matrix={matrix}
+                          />
+                        ),
+                      },
+                      canDelete && {
+                        id: "delete",
+                        label: "Delete role",
+                        icon: Trash2,
+                        variant: "destructive",
+                        dialog: (props) => (
+                          <DeleteRoleDialog
+                            open={props.open}
+                            onOpenChange={props.onOpenChange}
+                            role={{ id: role.id, name: role.name, userCount: role.userCount }}
+                          />
+                        ),
+                      },
+                    ]}
+                  />
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
 
       {/* Expandable details showing active permissions by role */}
       {roles.map((role) => {
         if (!expandedRoleIds.has(role.id)) return null;
 
         return (
-          <div key={`exp-${role.id}`} className="bg-muted/10 border-t border-border px-6 py-4">
+          <div key={`exp-${role.id}`} className="bg-muted/30 border-t border-border px-6 py-4">
             <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2">
               Permissions for {role.name} ({role.permissions.length}):
             </h4>

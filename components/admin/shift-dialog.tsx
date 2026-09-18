@@ -22,6 +22,8 @@ export function ShiftDialog({
   description,
   trigger,
   allowGlobal = true,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
   branches: { id: string; name: string }[];
@@ -36,14 +38,18 @@ export function ShiftDialog({
   submitLabel: string;
   title: string;
   description: string;
-  trigger: React.ReactElement;
+  trigger?: React.ReactElement;
   allowGlobal?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger} />
+      {trigger ? <DialogTrigger render={trigger} /> : null}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

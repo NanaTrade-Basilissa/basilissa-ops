@@ -28,7 +28,10 @@ const columns = columnHelper.columns([
     id: "branch",
     header: "Branch",
     cell: ({ row }) => (
-      <Link href={`/admin/branches/${row.original.branch.id}`} className="font-medium text-foreground hover:underline">
+      <Link
+        href={`/admin/branches/${row.original.branch.id}`}
+        className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
+      >
         {row.original.branch.name}
       </Link>
     ),

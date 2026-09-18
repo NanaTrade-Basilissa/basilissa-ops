@@ -22,6 +22,8 @@ export function QuestionDialog({
   title,
   description,
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   action: (prevState: QuestionFormState, formData: FormData) => Promise<QuestionFormState>;
   defaultValues?: { text: string; isActive: boolean; ratingLabels?: string[] };
@@ -30,13 +32,17 @@ export function QuestionDialog({
   activeCap: number;
   title: string;
   description: string;
-  trigger: React.ReactElement;
+  trigger?: React.ReactElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = controlledOnOpenChange ?? setInternalOpen;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger} />
+      {trigger ? <DialogTrigger render={trigger} /> : null}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

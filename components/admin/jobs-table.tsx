@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -205,19 +206,14 @@ export function JobsTable({
           cell: ({ row }) => (
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
-                <span className="font-mono text-xs text-muted-foreground truncate max-w-[140px] sm:max-w-[180px]">
-                  {row.original.id}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                <button
+                  type="button"
                   onClick={() => setSelectedPayloadJob(row.original)}
+                  className="font-mono text-xs text-foreground underline-offset-4 hover:underline cursor-pointer truncate max-w-[140px] sm:max-w-[180px] text-left"
                   title="Inspect job payload"
                 >
-                  <Code2 className="size-3.5 mr-1" />
-                  Payload
-                </Button>
+                  {row.original.id}
+                </button>
               </div>
 
               {row.original.lastError && (
@@ -225,7 +221,7 @@ export function JobsTable({
                   <button
                     type="button"
                     onClick={() => setSelectedErrorJob(row.original)}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-destructive underline-offset-4 hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-destructive underline-offset-4 hover:underline cursor-pointer"
                   >
                     <AlertCircle className="size-3" />
                     Error details
@@ -267,83 +263,76 @@ export function JobsTable({
             </span>
           ),
         }),
-        ...(canManage
-          ? [
-              columnHelper.display({
-                id: "actions",
-                header: () => <span className="sr-only">Actions</span>,
-                cell: ({ row }) => {
-                  const job = row.original;
-                  const isLoading = isPending && pendingJobId === job.id;
+        columnHelper.display({
+          id: "actions",
+          header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
+          cell: ({ row }) => {
+            const job = row.original;
+            const isLoading = isPending && pendingJobId === job.id;
 
-                  return (
-                    <div className="flex items-center justify-end gap-1.5">
-                      {(job.status === "DEAD" || job.status === "RUNNING") && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleRetry(job.id)}
-                          disabled={isLoading}
-                          className="h-8 text-xs gap-1"
-                        >
-                          <RotateCw className={`size-3 ${isLoading ? "animate-spin" : ""}`} />
-                          Retry
-                        </Button>
-                      )}
-
-                      {job.status === "PENDING" && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRetry(job.id)}
-                            disabled={isLoading}
-                            className="h-8 text-xs gap-1"
-                          >
-                            <RotateCw className={`size-3 ${isLoading ? "animate-spin" : ""}`} />
-                            Run Now
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger
-                              render={
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={isLoading}
-                                  className="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive gap-1"
-                                />
-                              }
+            return (
+              <TableRowActions
+                actions={[
+                  {
+                    id: "payload",
+                    label: "Inspect payload",
+                    icon: Code2,
+                    onClick: () => setSelectedPayloadJob(job),
+                  },
+                  Boolean(job.lastError) && {
+                    id: "error",
+                    label: "Error details",
+                    icon: AlertCircle,
+                    onClick: () => setSelectedErrorJob(job),
+                  },
+                  canManage && (job.status === "DEAD" || job.status === "RUNNING") && {
+                    id: "retry",
+                    label: "Retry job",
+                    icon: RotateCw,
+                    disabled: isLoading,
+                    onClick: () => handleRetry(job.id),
+                  },
+                  canManage && job.status === "PENDING" && {
+                    id: "run-now",
+                    label: "Run now",
+                    icon: RotateCw,
+                    disabled: isLoading,
+                    onClick: () => handleRetry(job.id),
+                  },
+                  canManage && job.status === "PENDING" && {
+                    id: "cancel",
+                    label: "Cancel job",
+                    icon: XCircle,
+                    variant: "destructive",
+                    disabled: isLoading,
+                    dialog: (props) => (
+                      <AlertDialog open={props.open} onOpenChange={props.onOpenChange}>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Cancel Background Job?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will cancel job <code className="font-mono text-xs">{job.id}</code> ({job.typeLabel}).
+                              The job will be marked as DEAD and will not be processed by background workers.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Keep Queued</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleCancel(job.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
-                              <XCircle className="size-3" />
-                              Cancel
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Cancel Background Job?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will cancel job <code className="font-mono text-xs">{job.id}</code> ({job.typeLabel}).
-                                  The job will be marked as DEAD and will not be processed by background workers.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Keep Queued</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleCancel(job.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Cancel Job
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </>
-                      )}
-                    </div>
-                  );
-                },
-              }),
-            ]
-          : []),
+                              Cancel Job
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    ),
+                  },
+                ]}
+              />
+            );
+          },
+        }),
       ]),
     [canManage, isPending, pendingJobId],
   );

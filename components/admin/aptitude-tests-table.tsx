@@ -6,7 +6,8 @@ import type { AptitudeTestStatus } from "@prisma/client";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { ExternalLink } from "lucide-react";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import { formatAccraDateTime } from "@/lib/platform/date";
 
 export type AptitudeTestRow = {
@@ -24,7 +25,10 @@ const columns = columnHelper.columns([
   columnHelper.accessor("title", {
     header: "Title",
     cell: (info) => (
-      <Link href={`/admin/aptitude-tests/${info.row.original.id}`} className="font-medium underline-offset-4 hover:underline">
+      <Link
+        href={`/admin/aptitude-tests/${info.row.original.id}`}
+        className="font-medium text-foreground underline-offset-4 hover:underline"
+      >
         {info.getValue()}
       </Link>
     ),
@@ -57,16 +61,18 @@ const columns = columnHelper.columns([
   }),
   columnHelper.display({
     id: "actions",
-    header: () => <span className="sr-only">Actions</span>,
+    header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
     cell: ({ row }) => (
-      <div className="flex justify-end">
-        <Link
-          href={`/admin/aptitude-tests/${row.original.id}`}
-          className={buttonVariants({ variant: "ghost", size: "sm" })}
-        >
-          Open
-        </Link>
-      </div>
+      <TableRowActions
+        actions={[
+          {
+            id: "open",
+            label: "Open test",
+            href: `/admin/aptitude-tests/${row.original.id}`,
+            icon: ExternalLink,
+          },
+        ]}
+      />
     ),
   }),
 ]);

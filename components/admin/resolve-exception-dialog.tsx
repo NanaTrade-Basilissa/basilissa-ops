@@ -30,6 +30,9 @@ export function ResolveExceptionDialog({
   calculatedOvertimeMinutes,
   payableOvertimeMinutes,
   canAuthorizeOvertime,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  trigger,
 }: {
   employeeId: string;
   employeeName: string;
@@ -39,9 +42,14 @@ export function ResolveExceptionDialog({
   calculatedOvertimeMinutes: number;
   payableOvertimeMinutes: number;
   canAuthorizeOvertime: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: React.ReactElement;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [notes, setNotes] = useState("");
   const [overtimeMins, setOvertimeMins] = useState<number>(
     payableOvertimeMinutes > 0 ? payableOvertimeMinutes : calculatedOvertimeMinutes,
@@ -61,27 +69,30 @@ export function ResolveExceptionDialog({
         payableOvertimeMinutes: canAuthorizeOvertime ? overtimeMins : undefined,
       });
 
-      if (!result.success) {
-        toast.error(result.error ?? "Failed to resolve exception.");
-        return;
+      if (result.success) {
+        toast.success(`Attendance day resolved for ${employeeName}`);
+        setOpen(false);
+        router.refresh();
+      } else {
+        toast.error(result.error ?? "Failed to resolve exception");
       }
-
-      toast.success("Attendance day resolved and settled successfully.");
-      setOpen(false);
-      router.refresh();
     });
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button size="sm" className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
-            <CheckCircle className="size-4" />
-            Resolve Exception
-          </Button>
-        }
-      />
+      {trigger ? (
+        <DialogTrigger render={trigger} />
+      ) : controlledOpen === undefined ? (
+        <DialogTrigger
+          render={
+            <Button size="sm" className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
+              <CheckCircle className="size-4" />
+              Resolve Exception
+            </Button>
+          }
+        />
+      ) : null}
 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

@@ -16,7 +16,6 @@ import type { AuditLogSearchResult, AuditLogItem } from "@/lib/modules/identity/
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -34,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatAccraDateTime } from "@/lib/platform/date";
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 
 const ENTITY_TYPES = [
   { value: "all", label: "All Entities" },
@@ -204,7 +204,7 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
       </form>
 
       {/* Audit Log Table */}
-      <div className="rounded-md border border-border bg-card">
+      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
         {data.items.length === 0 ? (
           <Empty className="py-12">
             <Shield className="size-8 text-muted-foreground" />
@@ -216,7 +216,7 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Time (Accra)</TableHead>
                 <TableHead>Actor</TableHead>
                 <TableHead>Action</TableHead>
@@ -226,7 +226,7 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
             </TableHeader>
             <TableBody>
               {data.items.map((item) => (
-                <TableRow key={item.id}>
+                <TableRow key={item.id} className="hover:bg-muted/30">
                   <TableCell className="font-mono text-xs whitespace-nowrap text-muted-foreground">
                     {formatAccraDateTime(new Date(item.occurredAt))}
                   </TableCell>
@@ -243,9 +243,13 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="font-mono text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setInspectingItem(item)}
+                      className="font-medium font-mono text-xs text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
+                    >
                       {item.action}
-                    </Badge>
+                    </button>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-0.5">
@@ -256,15 +260,15 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setInspectingItem(item)}
-                      className="h-8 gap-1 text-xs"
-                    >
-                      <Eye className="size-3.5" />
-                      <span>Inspect</span>
-                    </Button>
+                    <TableRowActions
+                      actions={[
+                        {
+                          label: "Inspect details",
+                          icon: Eye,
+                          onSelect: () => setInspectingItem(item),
+                        },
+                      ]}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

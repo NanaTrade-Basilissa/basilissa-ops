@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Download } from "lucide-react";
+import { ArrowRight, Download, AlertTriangle } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { ResolveExceptionDialog } from "@/components/admin/resolve-exception-dialog";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 
 export type AttendanceRow = {
   id: string;
@@ -36,7 +37,10 @@ const columns = columnHelper.columns([
     header: "Employee",
     cell: ({ row }) => (
       <>
-        <Link href={`/admin/attendance/${row.original.employeeId}/${row.original.date}`} className="font-medium underline">
+        <Link
+          href={`/admin/attendance/${row.original.employeeId}/${row.original.date}`}
+          className="font-medium text-foreground underline-offset-4 hover:underline"
+        >
           {row.original.employeeName ?? row.original.employeeId}
         </Link>
         {row.original.employeeCode && (
@@ -93,29 +97,43 @@ const columns = columnHelper.columns([
   }),
   columnHelper.display({
     id: "actions",
-    header: () => <div className="text-right">Actions</div>,
-    cell: ({ row }) => (
-      <div className="flex items-center justify-end gap-1.5">
-        {row.original.status === "NEEDS_REVIEW" && row.original.branchId && row.original.canWrite !== false && (
-          <ResolveExceptionDialog
-            employeeId={row.original.employeeId}
-            employeeName={row.original.employeeName ?? "Staff Member"}
-            branchId={row.original.branchId}
-            dateKey={row.original.date}
-            flags={row.original.flags}
-            calculatedOvertimeMinutes={row.original.calculatedOvertimeMinutes ?? 0}
-            payableOvertimeMinutes={row.original.payableOvertimeMinutes ?? 0}
-            canAuthorizeOvertime={true}
-          />
-        )}
-        <Link
-          href={`/admin/attendance/${row.original.employeeId}/${row.original.date}`}
-          className={buttonVariants({ variant: "ghost", size: "sm", className: "h-8 px-2 text-xs" })}
-        >
-          View <ArrowRight className="size-3.5 ml-1" />
-        </Link>
-      </div>
-    ),
+    header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
+    cell: ({ row }) => {
+      const item = row.original;
+      const needsReview = item.status === "NEEDS_REVIEW" && Boolean(item.branchId) && item.canWrite !== false;
+
+      return (
+        <TableRowActions
+          actions={[
+            needsReview && {
+              id: "review",
+              label: "Review exception",
+              icon: AlertTriangle,
+              dialog: (props) => (
+                <ResolveExceptionDialog
+                  open={props.open}
+                  onOpenChange={props.onOpenChange}
+                  employeeId={item.employeeId}
+                  employeeName={item.employeeName ?? "Staff Member"}
+                  branchId={item.branchId!}
+                  dateKey={item.date}
+                  flags={item.flags}
+                  calculatedOvertimeMinutes={item.calculatedOvertimeMinutes ?? 0}
+                  payableOvertimeMinutes={item.payableOvertimeMinutes ?? 0}
+                  canAuthorizeOvertime={true}
+                />
+              ),
+            },
+            {
+              id: "view",
+              label: "View details",
+              icon: ArrowRight,
+              href: `/admin/attendance/${item.employeeId}/${item.date}`,
+            },
+          ]}
+        />
+      );
+    },
   }),
 ]);
 

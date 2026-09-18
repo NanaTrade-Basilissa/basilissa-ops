@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LeaveReviewDialog } from "@/components/admin/leave-review-dialog";
+import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import { CalendarCheck, CheckCircle2, Clock, XCircle } from "lucide-react";
 
 export interface SerializedLeaveRequest {
@@ -81,6 +84,8 @@ export function LeaveRequestsTable({
   requests: SerializedLeaveRequest[];
   canReview?: boolean;
 }) {
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+
   if (requests.length === 0) {
     return (
       <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
@@ -96,93 +101,119 @@ export function LeaveRequestsTable({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
-            <TableHead className="w-[200px] text-xs font-semibold">Employee</TableHead>
-            <TableHead className="text-xs font-semibold">Branch</TableHead>
-            <TableHead className="text-xs font-semibold">Type</TableHead>
-            <TableHead className="text-xs font-semibold">Requested Dates</TableHead>
-            <TableHead className="min-w-[200px] text-xs font-semibold">Reason</TableHead>
-            <TableHead className="text-xs font-semibold">Status</TableHead>
-            <TableHead className="text-xs font-semibold">Review Details</TableHead>
-            {canReview && <TableHead className="text-right text-xs font-semibold">Action</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {requests.map((r) => (
-            <TableRow key={r.id} className="hover:bg-muted/30">
-              <TableCell className="font-medium text-xs">
-                <div className="font-semibold text-foreground">{r.employeeName}</div>
-                <div className="text-[11px] text-muted-foreground">{r.employeeCode} {r.jobTitle ? `• ${r.jobTitle}` : ""}</div>
-              </TableCell>
+    <>
+      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="w-[200px] text-xs font-semibold">Employee</TableHead>
+              <TableHead className="text-xs font-semibold">Branch</TableHead>
+              <TableHead className="text-xs font-semibold">Type</TableHead>
+              <TableHead className="text-xs font-semibold">Requested Dates</TableHead>
+              <TableHead className="min-w-[200px] text-xs font-semibold">Reason</TableHead>
+              <TableHead className="text-xs font-semibold">Status</TableHead>
+              <TableHead className="text-xs font-semibold">Review Details</TableHead>
+              {canReview && <TableHead className="text-right text-xs font-semibold">Action</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {requests.map((r) => (
+              <TableRow key={r.id} className="hover:bg-muted/30">
+                <TableCell className="font-medium text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedEmployeeId(r.employeeId)}
+                    className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
+                  >
+                    {r.employeeName}
+                  </button>
+                  <div className="text-[11px] text-muted-foreground">{r.employeeCode} {r.jobTitle ? `• ${r.jobTitle}` : ""}</div>
+                </TableCell>
 
-              <TableCell className="text-xs text-muted-foreground">
-                {r.branchName || "—"}
-              </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {r.branchName || "—"}
+                </TableCell>
 
-              <TableCell className="text-xs">
-                {getLeaveTypeBadge(r.type)}
-              </TableCell>
+                <TableCell className="text-xs">
+                  {getLeaveTypeBadge(r.type)}
+                </TableCell>
 
-              <TableCell className="text-xs">
-                <div className="font-medium text-foreground">
-                  {r.startDate} {r.startDate !== r.endDate ? `to ${r.endDate}` : ""}
-                </div>
-                <div className="text-[11px] text-muted-foreground">
-                  {r.daysCount} {r.daysCount === 1 ? "day" : "days"}
-                </div>
-              </TableCell>
-
-              <TableCell className="text-xs text-foreground max-w-[280px]">
-                <p className="truncate" title={r.reason}>
-                  {r.reason}
-                </p>
-              </TableCell>
-
-              <TableCell className="text-xs">
-                {getStatusBadge(r.status)}
-              </TableCell>
-
-              <TableCell className="text-xs text-muted-foreground">
-                {r.reviewedBy ? (
-                  <div>
-                    <span className="font-medium text-foreground">{r.reviewedBy}</span>
-                    {r.managerNotes && (
-                      <div className="text-[11px] text-muted-foreground truncate max-w-[180px]" title={r.managerNotes}>
-                        &ldquo;{r.managerNotes}&rdquo;
-                      </div>
-                    )}
+                <TableCell className="text-xs">
+                  <div className="font-medium text-foreground">
+                    {r.startDate} {r.startDate !== r.endDate ? `to ${r.endDate}` : ""}
                   </div>
-                ) : (
-                  "—"
-                )}
-              </TableCell>
+                  <div className="text-[11px] text-muted-foreground">
+                    {r.daysCount} {r.daysCount === 1 ? "day" : "days"}
+                  </div>
+                </TableCell>
 
-              {canReview && (
-                <TableCell className="text-right text-xs">
-                  {r.status === "PENDING" ? (
-                    <LeaveReviewDialog
-                      leaveRequestId={r.id}
-                      employeeName={r.employeeName}
-                      employeeCode={r.employeeCode}
-                      leaveType={r.type}
-                      startDate={r.startDate}
-                      endDate={r.endDate}
-                      daysCount={r.daysCount}
-                      reason={r.reason}
-                      branchName={r.branchName}
-                    />
+                <TableCell className="text-xs text-foreground max-w-[280px]">
+                  <p className="truncate" title={r.reason}>
+                    {r.reason}
+                  </p>
+                </TableCell>
+
+                <TableCell className="text-xs">
+                  {getStatusBadge(r.status)}
+                </TableCell>
+
+                <TableCell className="text-xs text-muted-foreground">
+                  {r.reviewedBy ? (
+                    <div>
+                      <span className="font-medium text-foreground">{r.reviewedBy}</span>
+                      {r.managerNotes && (
+                        <div className="text-[11px] text-muted-foreground truncate max-w-[180px]" title={r.managerNotes}>
+                          &ldquo;{r.managerNotes}&rdquo;
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <span className="text-[11px] text-muted-foreground">Settled</span>
+                    "—"
                   )}
                 </TableCell>
-              )}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+
+                {canReview && (
+                  <TableCell className="text-right text-xs">
+                    {r.status === "PENDING" ? (
+                      <TableRowActions
+                        actions={[
+                          {
+                            label: "Review request",
+                            icon: Clock,
+                            dialog: (props) => (
+                              <LeaveReviewDialog
+                                {...props}
+                                leaveRequestId={r.id}
+                                employeeName={r.employeeName}
+                                employeeCode={r.employeeCode}
+                                leaveType={r.type}
+                                startDate={r.startDate}
+                                endDate={r.endDate}
+                                daysCount={r.daysCount}
+                                reason={r.reason}
+                                branchName={r.branchName}
+                              />
+                            ),
+                          },
+                        ]}
+                      />
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">Settled</span>
+                    )}
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <EmployeeDetailSheet
+        employeeId={selectedEmployeeId}
+        open={selectedEmployeeId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEmployeeId(null);
+        }}
+      />
+    </>
   );
 }

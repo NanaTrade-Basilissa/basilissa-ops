@@ -27,6 +27,9 @@ interface LeaveReviewDialogProps {
   daysCount: number;
   reason: string;
   branchName?: string | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: React.ReactElement;
 }
 
 export function LeaveReviewDialog({
@@ -39,8 +42,13 @@ export function LeaveReviewDialog({
   daysCount,
   reason,
   branchName,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  trigger,
 }: LeaveReviewDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = controlledOnOpenChange ?? setInternalOpen;
   const [notes, setNotes] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -62,14 +70,18 @@ export function LeaveReviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs font-medium">
-            <Clock className="size-3.5 text-amber-500" />
-            <span>Review</span>
-          </Button>
-        }
-      />
+      {trigger ? (
+        <DialogTrigger render={trigger} />
+      ) : controlledOpen === undefined ? (
+        <DialogTrigger
+          render={
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs font-medium">
+              <Clock className="size-3.5 text-amber-500" />
+              <span>Review</span>
+            </Button>
+          }
+        />
+      ) : null}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2">

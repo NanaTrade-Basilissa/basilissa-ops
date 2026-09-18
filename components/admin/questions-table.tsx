@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { ArrowDown, ArrowUp, CheckCircle2, Pencil, PowerOff } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
+import { toast } from "sonner";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { moveQuestion, toggleQuestionActive, updateQuestion } from "@/lib/modules/questions/actions";
 import { QuestionDialog } from "@/components/admin/question-dialog";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -17,6 +19,105 @@ export type QuestionRow = {
 };
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, QuestionRow>();
+
+function QuestionTitleCell({
+  row,
+  activeCount,
+  maxActive,
+}: {
+  row: QuestionRow;
+  activeCount: number;
+  maxActive: number;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
+      >
+        {row.text}
+      </button>
+      <QuestionDialog
+        open={open}
+        onOpenChange={setOpen}
+        action={updateQuestion.bind(null, row.id)}
+        submitLabel="Save changes"
+        title="Edit question"
+        description="Editing the text does not affect past feedback answers."
+        defaultValues={{
+          text: row.text,
+          isActive: row.isActive,
+          ratingLabels: row.ratingLabels,
+        }}
+        activeCount={activeCount - (row.isActive ? 1 : 0)}
+        activeCap={maxActive}
+      />
+    </>
+  );
+}
+
+function QuestionActionsCell({
+  row,
+  activeCount,
+  maxActive,
+}: {
+  row: QuestionRow;
+  activeCount: number;
+  maxActive: number;
+}) {
+  const [isPending, startTransition] = useTransition();
+
+  const handleToggleActive = () => {
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", row.id);
+      fd.set("nextIsActive", (!row.isActive).toString());
+      try {
+        await toggleQuestionActive(fd);
+        toast.success(row.isActive ? "Question deactivated" : "Question activated");
+      } catch {
+        toast.error("Failed to update question status");
+      }
+    });
+  };
+
+  return (
+    <TableRowActions
+      actions={[
+        {
+          label: "Edit question",
+          icon: Pencil,
+          dialog: (props) => (
+            <QuestionDialog
+              {...props}
+              action={updateQuestion.bind(null, row.id)}
+              submitLabel="Save changes"
+              title="Edit question"
+              description="Editing the text does not affect past feedback answers."
+              defaultValues={{
+                text: row.text,
+                isActive: row.isActive,
+                ratingLabels: row.ratingLabels,
+              }}
+              activeCount={activeCount - (row.isActive ? 1 : 0)}
+              activeCap={maxActive}
+            />
+          ),
+        },
+        {
+          label: row.isActive ? "Deactivate" : "Activate",
+          icon: row.isActive ? PowerOff : CheckCircle2,
+          variant: row.isActive ? "destructive" : "default",
+          disabled: (!row.isActive && activeCount >= maxActive) || isPending,
+          onSelect: handleToggleActive,
+        },
+      ]}
+    />
+  );
+}
 
 export function QuestionsTable({
   questions,
@@ -62,7 +163,13 @@ export function QuestionsTable({
     }),
     columnHelper.accessor("text", {
       header: "Question",
-      cell: (info) => <span className="font-medium text-foreground">{info.getValue()}</span>,
+      cell: ({ row }) => (
+        <QuestionTitleCell
+          row={row.original}
+          activeCount={activeCount}
+          maxActive={maxActive}
+        />
+      ),
     }),
     columnHelper.accessor("isActive", {
       header: "Status",
@@ -72,38 +179,11 @@ export function QuestionsTable({
       id: "actions",
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => (
-        <div className="flex justify-end gap-1.5">
-          <QuestionDialog
-            action={updateQuestion.bind(null, row.original.id)}
-            submitLabel="Save changes"
-            title="Edit question"
-            description="Editing the text does not affect past feedback answers."
-            defaultValues={{
-              text: row.original.text,
-              isActive: row.original.isActive,
-              ratingLabels: row.original.ratingLabels,
-            }}
-            activeCount={activeCount - (row.original.isActive ? 1 : 0)}
-            activeCap={maxActive}
-            trigger={
-              <Button variant="outline" size="sm">
-                Edit
-              </Button>
-            }
-          />
-          <form action={toggleQuestionActive}>
-            <input type="hidden" name="id" value={row.original.id} />
-            <input type="hidden" name="nextIsActive" value={(!row.original.isActive).toString()} />
-            <Button
-              size="sm"
-              variant={row.original.isActive ? "destructive" : "secondary"}
-              type="submit"
-              disabled={!row.original.isActive && activeCount >= maxActive}
-            >
-              {row.original.isActive ? "Deactivate" : "Activate"}
-            </Button>
-          </form>
-        </div>
+        <QuestionActionsCell
+          row={row.original}
+          activeCount={activeCount}
+          maxActive={maxActive}
+        />
       ),
     }),
   ]), [activeCount, maxActive]);

@@ -3,6 +3,8 @@
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
+import { UserCheck } from "lucide-react";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 
 export type EmployeeRow = {
@@ -31,7 +33,10 @@ const columns = columnHelper.columns([
         <EmployeeDetailSheet
           employeeId={row.original.id}
           trigger={
-            <button type="button" className="font-medium underline underline-offset-2">
+            <button
+              type="button"
+              className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
+            >
               {row.original.firstName} {row.original.lastName}
             </button>
           }
@@ -66,6 +71,28 @@ const columns = columnHelper.columns([
     header: "Status",
     cell: (info) => (
       <Badge variant={info.getValue() === "ACTIVE" ? "default" : "outline"}>{info.getValue().toLowerCase()}</Badge>
+    ),
+  }),
+  columnHelper.display({
+    id: "actions",
+    header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
+    cell: ({ row }) => (
+      <TableRowActions
+        actions={[
+          {
+            id: "profile",
+            label: "View profile",
+            icon: UserCheck,
+            dialog: (props) => (
+              <EmployeeDetailSheet
+                employeeId={row.original.id}
+                open={props.open}
+                onOpenChange={props.onOpenChange}
+              />
+            ),
+          },
+        ]}
+      />
     ),
   }),
 ]);

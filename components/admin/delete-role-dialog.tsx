@@ -22,12 +22,18 @@ export function DeleteRoleDialog({
   role,
   trigger,
   onDeleted,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   role: { id: string; name: string; userCount: number };
   trigger?: React.ReactElement;
   onDeleted?: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [state, formAction, isPending] = useActionState<RoleFormState, FormData>(
     deleteRoleAction,
     undefined,
@@ -48,9 +54,11 @@ export function DeleteRoleDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger
-        render={
-          trigger ?? (
+      {trigger ? (
+        <AlertDialogTrigger render={trigger} />
+      ) : controlledOpen === undefined ? (
+        <AlertDialogTrigger
+          render={
             <Button
               variant="ghost"
               size="sm"
@@ -59,9 +67,9 @@ export function DeleteRoleDialog({
               <Trash2 className="size-4" />
               Delete
             </Button>
-          )
-        }
-      />
+          }
+        />
+      ) : null}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Role: {role.name}</AlertDialogTitle>

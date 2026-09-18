@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { getUserDetailAction } from "@/lib/modules/identity/actions";
 import { UserDetailContent } from "@/components/admin/user-detail-content";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,30 +39,43 @@ function UserDetailSkeleton() {
 export function UserDetailSheet({
   userId,
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
-  userId: string;
-  trigger: React.ReactElement;
+  userId: string | null;
+  trigger?: React.ReactElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [detail, setDetail] = useState<Detail | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const load = useCallback(() => {
+    if (!userId) return;
     startTransition(async () => {
       setDetail(await getUserDetailAction(userId));
     });
   }, [userId]);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setDetail(null);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      load();
+    }
+  }, [open, load]);
+
   return (
-    <Sheet
-      onOpenChange={(open) => {
-        if (open) {
-          load();
-        } else {
-          setDetail(null);
-        }
-      }}
-    >
-      <SheetTrigger render={trigger} />
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      {trigger ? <SheetTrigger render={trigger} /> : null}
       <SheetContent className="w-full data-[side=right]:w-full sm:max-w-full data-[side=right]:sm:max-w-full lg:w-1/3 data-[side=right]:lg:w-1/3 lg:max-w-none data-[side=right]:lg:max-w-none overflow-y-auto">
         <SheetHeader>
 

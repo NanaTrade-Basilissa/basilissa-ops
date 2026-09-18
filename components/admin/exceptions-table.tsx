@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, AlertTriangle } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { ResolveExceptionDialog } from "@/components/admin/resolve-exception-dialog";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import type { AttendanceExceptionItem } from "@/lib/modules/attendance/queries";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 
@@ -90,7 +90,7 @@ export function ExceptionsTable({
         <div className="space-y-0.5">
           <Link
             href={`/admin/attendance/${row.original.employeeId}/${row.original.workDate}`}
-            className="font-medium text-foreground hover:underline"
+            className="font-medium text-foreground underline-offset-4 hover:underline"
           >
             {row.original.employeeName}
           </Link>
@@ -183,29 +183,42 @@ export function ExceptionsTable({
 
     columnHelper.display({
       id: "actions",
-      header: () => <div className="text-right">Actions</div>,
-      cell: ({ row }) => (
-        <div className="flex items-center justify-end gap-1.5">
-          {canWrite && (
-            <ResolveExceptionDialog
-              employeeId={row.original.employeeId}
-              employeeName={row.original.employeeName}
-              branchId={row.original.branchId}
-              dateKey={row.original.workDate}
-              flags={row.original.flags}
-              calculatedOvertimeMinutes={row.original.overtimeMinutes}
-              payableOvertimeMinutes={row.original.payableOvertimeMinutes}
-              canAuthorizeOvertime={true}
-            />
-          )}
-          <Link
-            href={`/admin/attendance/${row.original.employeeId}/${row.original.workDate}`}
-            className={buttonVariants({ variant: "ghost", size: "sm", className: "h-8 px-2 text-xs" })}
-          >
-            Inspect <ArrowRight className="size-3.5 ml-1" />
-          </Link>
-        </div>
-      ),
+      header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
+      cell: ({ row }) => {
+        const item = row.original;
+
+        return (
+          <TableRowActions
+            actions={[
+              canWrite && {
+                id: "resolve",
+                label: "Review exception",
+                icon: AlertTriangle,
+                dialog: (props) => (
+                  <ResolveExceptionDialog
+                    open={props.open}
+                    onOpenChange={props.onOpenChange}
+                    employeeId={item.employeeId}
+                    employeeName={item.employeeName}
+                    branchId={item.branchId}
+                    dateKey={item.workDate}
+                    flags={item.flags}
+                    calculatedOvertimeMinutes={item.overtimeMinutes}
+                    payableOvertimeMinutes={item.payableOvertimeMinutes}
+                    canAuthorizeOvertime={true}
+                  />
+                ),
+              },
+              {
+                id: "inspect",
+                label: "Inspect day",
+                icon: ArrowRight,
+                href: `/admin/attendance/${item.employeeId}/${item.workDate}`,
+              },
+            ]}
+          />
+        );
+      },
     }),
   ]);
 

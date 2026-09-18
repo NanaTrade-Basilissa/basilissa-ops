@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 
 function formatMinutes(minutes: number): string {
@@ -148,9 +149,8 @@ export function EmployeeAttendanceTab({
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
-
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Date</TableHead>
                 <TableHead>Branch</TableHead>
                 <TableHead>Clock In / Out</TableHead>
@@ -165,11 +165,11 @@ export function EmployeeAttendanceTab({
               {days.map((day) => {
                 const isAutoClosed = day.flags.includes("AUTO_CLOSED");
                 return (
-                  <TableRow key={day.id}>
+                  <TableRow key={day.id} className="hover:bg-muted/30">
                     <TableCell className="font-medium whitespace-nowrap">
                       <Link
                         href={`/admin/attendance/${employeeId}/${day.dateKey}`}
-                        className="hover:underline flex items-center gap-1 font-mono text-sm"
+                        className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left font-mono text-sm inline-flex items-center gap-1"
                       >
                         {day.dateKey}
                       </Link>
@@ -246,13 +246,15 @@ export function EmployeeAttendanceTab({
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Link
-                        href={`/admin/attendance/${employeeId}/${day.dateKey}`}
-                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        <span>View</span>
-                        <ExternalLink className="size-3" />
-                      </Link>
+                      <TableRowActions
+                        actions={[
+                          {
+                            label: "View details",
+                            href: `/admin/attendance/${employeeId}/${day.dateKey}`,
+                            icon: ExternalLink,
+                          },
+                        ]}
+                      />
                     </TableCell>
                   </TableRow>
                 );

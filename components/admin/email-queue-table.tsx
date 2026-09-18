@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -203,110 +204,77 @@ export function EmailQueueTable({
             <span className="text-xs text-muted-foreground">{formatAccraDateTime(info.getValue())}</span>
           ),
         }),
-        ...(canManage
-          ? [
-              columnHelper.display({
-                id: "actions",
-                header: () => <span className="sr-only">Actions</span>,
-                cell: ({ row }) => {
-                  const job = row.original;
-                  const isLoading = isPending && pendingJobId === job.id;
+        columnHelper.display({
+          id: "actions",
+          header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
+          cell: ({ row }) => {
+            const job = row.original;
+            const isLoading = isPending && pendingJobId === job.id;
 
-                  return (
-                    <div className="flex items-center justify-end gap-1.5">
-                      {job.status === "DEAD" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isLoading}
-                          onClick={() => handleRetry(job.id)}
-                          className="h-8 gap-1 text-xs"
-                        >
-                          {isLoading ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <RotateCw className="size-3.5" />
-                          )}
-                          Retry
-                        </Button>
-                      )}
-
-                      {job.status === "SUCCEEDED" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={isLoading}
-                          onClick={() => handleResend(job.id)}
-                          className="h-8 gap-1 text-xs"
-                        >
-                          {isLoading ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <Send className="size-3.5" />
-                          )}
-                          Resend
-                        </Button>
-                      )}
-
-                      {job.status === "PENDING" && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={isLoading}
-                            onClick={() => handleRetry(job.id)}
-                            className="h-8 gap-1 text-xs"
-                            title="Bypass delay and send immediately"
-                          >
-                            {isLoading ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                              <RotateCw className="size-3.5" />
-                            )}
-                            Send now
-                          </Button>
-
-                          <AlertDialog>
-                            <AlertDialogTrigger
-                              render={
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={isLoading}
-                                  className="h-8 gap-1 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                />
-                              }
+            return (
+              <TableRowActions
+                actions={[
+                  Boolean(job.lastError) && {
+                    id: "error",
+                    label: "Error details",
+                    icon: AlertCircle,
+                    onClick: () => setSelectedErrorJob(job),
+                  },
+                  canManage && job.status === "DEAD" && {
+                    id: "retry",
+                    label: "Retry email",
+                    icon: RotateCw,
+                    disabled: isLoading,
+                    onClick: () => handleRetry(job.id),
+                  },
+                  canManage && job.status === "SUCCEEDED" && {
+                    id: "resend",
+                    label: "Resend email",
+                    icon: Send,
+                    disabled: isLoading,
+                    onClick: () => handleResend(job.id),
+                  },
+                  canManage && job.status === "PENDING" && {
+                    id: "send-now",
+                    label: "Send now",
+                    icon: RotateCw,
+                    disabled: isLoading,
+                    onClick: () => handleRetry(job.id),
+                  },
+                  canManage && job.status === "PENDING" && {
+                    id: "cancel",
+                    label: "Cancel email",
+                    icon: XCircle,
+                    variant: "destructive",
+                    disabled: isLoading,
+                    dialog: (props) => (
+                      <AlertDialog open={props.open} onOpenChange={props.onOpenChange}>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Cancel pending email?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will cancel the queued email to{" "}
+                              <strong>{job.recipient}</strong> and prevent the worker from sending it.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Keep queued</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleCancel(job.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
-                              <XCircle className="size-3.5" />
-                              Cancel
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Cancel pending email?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will cancel the queued email to{" "}
-                                  <strong>{job.recipient}</strong> and prevent the worker from sending it.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Keep queued</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleCancel(job.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Cancel email
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </>
-                      )}
-                    </div>
-                  );
-                },
-              }),
-            ]
-          : []),
+                              Cancel email
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    ),
+                  },
+                ]}
+              />
+            );
+          },
+        }),
       ]),
     [canManage, isPending, pendingJobId],
   );

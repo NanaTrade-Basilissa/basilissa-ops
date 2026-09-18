@@ -1,12 +1,24 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Download, Users, Clock, AlertTriangle, TriangleAlert, CalendarClock, FileSpreadsheet } from "lucide-react";
+import {
+  Download,
+  Users,
+  Clock,
+  AlertTriangle,
+  TriangleAlert,
+  CalendarClock,
+  FileSpreadsheet,
+  Calendar,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/admin/stat-card";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import type { TimesheetSummaryData } from "@/lib/modules/attendance/queries";
 
 function formatDuration(minutes: number): string {
@@ -21,6 +33,8 @@ function formatHoursDecimal(minutes: number): string {
 }
 
 export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+
   const {
     startDate,
     endDate,
@@ -169,91 +183,100 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
           <EmptyDescription>No attendance recorded for this period.</EmptyDescription>
         </Empty>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Employee</th>
-                  <th className="px-4 py-3">Branch</th>
-                  <th className="px-4 py-3 text-center">Days (Work/Sched)</th>
-                  <th className="px-4 py-3 text-right">Net Worked</th>
-                  <th className="px-4 py-3 text-right">Regular</th>
-                  <th className="px-4 py-3 text-right">Overtime</th>
-                  <th className="px-4 py-3 text-center">Late</th>
-                  <th className="px-4 py-3 text-center">Exceptions</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {rows.map((row) => (
-                  <tr key={row.employeeId} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/admin/employees/${row.employeeId}`}
-                        className="font-medium text-foreground hover:underline"
-                      >
-                        {row.name}
-                      </Link>
-                      {row.employeeCode && (
-                        <div className="font-mono text-xs text-muted-foreground">
-                          {row.employeeCode}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{row.branchName}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="font-medium text-foreground">{row.daysWorked}</span>
-                      <span className="text-muted-foreground"> / {row.daysScheduled}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium text-foreground">
-                      {formatDuration(row.netWorkedMinutes)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-muted-foreground">
-                      {formatDuration(row.regularMinutes)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {row.overtimeMinutes > 0 ? (
-                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                          +{formatDuration(row.overtimeMinutes)}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {row.lateCount > 0 ? (
-                        <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
-                          {row.lateCount}x ({row.lateMinutes}m)
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {row.exceptionsCount > 0 ? (
-                        <Badge variant="destructive" className="text-xs">
-                          {row.exceptionsCount} need review
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/admin/attendance?branchId=${row.branchId}&date=${startDate}`}
-                        className="text-xs font-medium text-primary hover:underline"
-                      >
-                        Daily View &rarr;
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead className="text-xs font-semibold">Employee</TableHead>
+                <TableHead className="text-xs font-semibold">Branch</TableHead>
+                <TableHead className="text-xs font-semibold text-center">Days (Work/Sched)</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Net Worked</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Regular</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Overtime</TableHead>
+                <TableHead className="text-xs font-semibold text-center">Late</TableHead>
+                <TableHead className="text-xs font-semibold text-center">Exceptions</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.employeeId} className="hover:bg-muted/30">
+                  <TableCell className="font-medium text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEmployeeId(row.employeeId)}
+                      className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
+                    >
+                      {row.name}
+                    </button>
+                    {row.employeeCode && (
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        {row.employeeCode}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{row.branchName}</TableCell>
+                  <TableCell className="text-xs text-center">
+                    <span className="font-medium text-foreground">{row.daysWorked}</span>
+                    <span className="text-muted-foreground"> / {row.daysScheduled}</span>
+                  </TableCell>
+                  <TableCell className="text-xs text-right font-medium text-foreground">
+                    {formatDuration(row.netWorkedMinutes)}
+                  </TableCell>
+                  <TableCell className="text-xs text-right text-muted-foreground">
+                    {formatDuration(row.regularMinutes)}
+                  </TableCell>
+                  <TableCell className="text-xs text-right">
+                    {row.overtimeMinutes > 0 ? (
+                      <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                        +{formatDuration(row.overtimeMinutes)}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-center">
+                    {row.lateCount > 0 ? (
+                      <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+                        {row.lateCount}x ({row.lateMinutes}m)
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-center">
+                    {row.exceptionsCount > 0 ? (
+                      <Badge variant="destructive" className="text-xs">
+                        {row.exceptionsCount} need review
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-right">
+                    <TableRowActions
+                      actions={[
+                        {
+                          label: "Daily view",
+                          href: `/admin/attendance?branchId=${row.branchId}&date=${startDate}`,
+                          icon: Calendar,
+                        },
+                      ]}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
+      <EmployeeDetailSheet
+        employeeId={selectedEmployeeId}
+        open={selectedEmployeeId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEmployeeId(null);
+        }}
+      />
     </div>
   );
 }

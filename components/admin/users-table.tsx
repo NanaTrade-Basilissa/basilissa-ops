@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, UserCog } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { TableRowActions } from "@/components/admin/table-row-actions";
 import { UserDetailSheet } from "@/components/admin/user-detail-sheet";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { formatAccraDateTime } from "@/lib/platform/date";
 
 export type UserRow = {
@@ -51,7 +51,7 @@ export function UsersTable({
           <UserDetailSheet
             userId={row.original.id}
             trigger={
-              <button type="button" className="font-medium underline-offset-4 hover:underline">
+              <button type="button" className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer">
                 {row.original.name}
               </button>
             }
@@ -121,15 +121,23 @@ export function UsersTable({
       ? [
           columnHelper.display({
             id: "actions",
-            header: () => <span className="sr-only">Actions</span>,
+            header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
             cell: ({ row }) => (
-              <UserDetailSheet
-                userId={row.original.id}
-                trigger={
-                  <Button variant="ghost" size="sm">
-                    Manage
-                  </Button>
-                }
+              <TableRowActions
+                actions={[
+                  {
+                    id: "manage",
+                    label: "Manage user",
+                    icon: UserCog,
+                    dialog: (props) => (
+                      <UserDetailSheet
+                        userId={row.original.id}
+                        open={props.open}
+                        onOpenChange={props.onOpenChange}
+                      />
+                    ),
+                  },
+                ]}
               />
             ),
           }),
