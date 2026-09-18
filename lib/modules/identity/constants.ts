@@ -81,6 +81,35 @@ export type FormattedEmailJob = {
   payload: Record<string, unknown>;
 };
 
+export type JobCategory = "email" | "system" | "maintenance" | "sync" | "other";
+
+export type FormattedJob = {
+  id: string;
+  type: string;
+  typeLabel: string;
+  category: JobCategory;
+  status: JobStatus;
+  attempts: number;
+  maxAttempts: number;
+  runAt: Date;
+  lastError: string | null;
+  lockedAt: Date | null;
+  lockedBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt: Date | null;
+  payload: Record<string, unknown>;
+};
+
+export type JobQueueStats = {
+  total: number;
+  pending: number;
+  running: number;
+  succeeded: number;
+  dead: number;
+};
+
+
 export type AuditLogFilters = {
   search?: string;
   action?: string;

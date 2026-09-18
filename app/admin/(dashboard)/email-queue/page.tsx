@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertCircle, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Clock, Layers, Loader2 } from "lucide-react";
 import { JobStatus } from "@prisma/client";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import {
@@ -95,6 +95,18 @@ export default async function EmailQueuePage({
             Monitor outgoing transactional emails dispatched by background workers. Inspect delivery
             states, view failure causes, or trigger resends and retries.
           </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Link
+            href="/admin/jobs"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "h-8 text-xs gap-1.5",
+            )}
+          >
+            <Layers className="size-3.5 text-muted-foreground" />
+            All Background Jobs <ArrowRight className="size-3" />
+          </Link>
         </div>
       </div>
 

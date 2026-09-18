@@ -89,7 +89,10 @@ export type SystemPermission =
   | "admin:access"
   // Email Queue & Background Job Administration (Super Admin only)
   | "email_queue:read"
-  | "email_queue:manage";
+  | "email_queue:manage"
+  // Background Jobs Administration
+  | "jobs:read"
+  | "jobs:manage";
 
 export type Permission = SystemPermission | PermissionKey | (string & {});
 
@@ -239,6 +242,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "aptitude:write",
     "email_queue:read",
     "email_queue:manage",
+    "jobs:read",
+    "jobs:manage",
   ],
 };
 
@@ -279,6 +284,8 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "role:assign": ["roles:assign", "users:assign", "roles:create", "roles:update"],
   "email_queue:read": ["email_queue:read"],
   "email_queue:manage": ["email_queue:manage"],
+  "jobs:read": ["jobs:read"],
+  "jobs:manage": ["jobs:manage"],
 };
 
 export const GRANULAR_TO_SYSTEM: Record<string, string> = {
@@ -292,6 +299,8 @@ export const GRANULAR_TO_SYSTEM: Record<string, string> = {
   "aptitude:read": "aptitude:read",
   "users:read": "user:read",
   "roles:read": "user:read",
+  "jobs:read": "jobs:read",
+  "jobs:manage": "jobs:manage",
 };
 
 export type ResourceScope = {

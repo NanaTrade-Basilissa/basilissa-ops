@@ -16,6 +16,7 @@ import { createUser, grantRole, revokeRole, setUserStatus } from "./user-admin";
 import { getEnv, isEmailConfigured } from "@/lib/platform/env";
 import { completePasswordReset, issuePasswordReset } from "./password-reset";
 import { retryEmailJob, resendEmailJob, cancelEmailJob } from "./email-queue";
+import { retryAnyJob, cancelAnyJob } from "./jobs-admin";
 import { PASSWORD_RESET_SEND } from "./jobs";
 import { enqueue } from "@/lib/platform/jobs";
 import { fieldErrorsFrom } from "@/lib/platform/forms";
@@ -785,6 +786,34 @@ export async function cancelEmailJobAction(jobId: string): Promise<{ success: bo
   const actor = await requirePermission("email_queue:manage");
   const result = await cancelEmailJob(jobId, actor);
   if (result.success) {
+    revalidatePath("/admin/email-queue");
+    revalidatePath("/admin");
+  }
+  return result;
+}
+
+/**
+ * Resets a dead or stalled background job to pending for immediate pickup by the worker.
+ */
+export async function retryAnyJobAction(jobId: string): Promise<{ success: boolean; error?: string }> {
+  const actor = await requirePermission("jobs:manage");
+  const result = await retryAnyJob(jobId, actor);
+  if (result.success) {
+    revalidatePath("/admin/jobs");
+    revalidatePath("/admin/email-queue");
+    revalidatePath("/admin");
+  }
+  return result;
+}
+
+/**
+ * Cancels a pending background job so it will not be executed.
+ */
+export async function cancelAnyJobAction(jobId: string): Promise<{ success: boolean; error?: string }> {
+  const actor = await requirePermission("jobs:manage");
+  const result = await cancelAnyJob(jobId, actor);
+  if (result.success) {
+    revalidatePath("/admin/jobs");
     revalidatePath("/admin/email-queue");
     revalidatePath("/admin");
   }

@@ -147,6 +147,14 @@ export const PERMISSION_REGISTRY = {
       manage: { label: "Manage", description: "Retry, resend, or cancel queued email jobs" },
     },
   },
+  jobs: {
+    label: "Background Jobs",
+    description: "System job queue and background task executions",
+    actions: {
+      read: { label: "View", description: "View queued, running, succeeded, and dead jobs" },
+      manage: { label: "Manage", description: "Retry or cancel background jobs" },
+    },
+  },
 } as const;
 
 export type PermissionRegistryType = typeof PERMISSION_REGISTRY;

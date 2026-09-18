@@ -7,14 +7,20 @@ import { toast } from "sonner";
 import {
   AlertCircle,
   ArrowRight,
+  Check,
   CheckCircle2,
   Clock,
+  Code2,
+  Copy,
+  Eye,
   Layers,
   Loader2,
+  Mail,
+  RefreshCw,
   RotateCw,
-  Send,
+  Server,
+  Wrench,
   XCircle,
-  Eye,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,26 +35,69 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { formatAccraDateTime } from "@/lib/platform/date";
-import type { FormattedEmailJob } from "@/lib/modules/identity/constants";
-import type { EmailQueueStats } from "@/lib/modules/identity/email-queue";
 import {
-  cancelEmailJobAction,
-  resendEmailJobAction,
-  retryEmailJobAction,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { formatAccraDateTime } from "@/lib/platform/date";
+import type { FormattedJob, JobCategory, JobQueueStats } from "@/lib/modules/identity/constants";
+import {
+  cancelAnyJobAction,
+  retryAnyJobAction,
 } from "@/lib/modules/identity/actions";
 import { cn } from "@/lib/utils";
+
+function CategoryBadge({ category }: { category: JobCategory }) {
+  switch (category) {
+    case "email":
+      return (
+        <Badge variant="outline" className="border-sky-500/30 bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 text-[10px] py-0 gap-1 font-medium">
+          <Mail className="size-2.5" />
+          Email
+        </Badge>
+      );
+    case "sync":
+      return (
+        <Badge variant="outline" className="border-indigo-500/30 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 text-[10px] py-0 gap-1 font-medium">
+          <RefreshCw className="size-2.5" />
+          Sync
+        </Badge>
+      );
+    case "maintenance":
+      return (
+        <Badge variant="outline" className="border-amber-500/30 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] py-0 gap-1 font-medium">
+          <Wrench className="size-2.5" />
+          Maintenance
+        </Badge>
+      );
+    case "system":
+    default:
+      return (
+        <Badge variant="outline" className="border-slate-500/30 bg-slate-50 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300 text-[10px] py-0 gap-1 font-medium">
+          <Server className="size-2.5" />
+          System
+        </Badge>
+      );
+  }
+}
 
 export function DashboardJobsCard({
   stats,
   jobs,
+  canManage = true,
 }: {
-  stats: EmailQueueStats;
-  jobs: FormattedEmailJob[];
+  stats: JobQueueStats;
+  jobs: FormattedJob[];
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
-  const [selectedErrorJob, setSelectedErrorJob] = useState<FormattedEmailJob | null>(null);
+  const [selectedErrorJob, setSelectedErrorJob] = useState<FormattedJob | null>(null);
+  const [selectedPayloadJob, setSelectedPayloadJob] = useState<FormattedJob | null>(null);
+  const [hasCopied, setHasCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const handleRefresh = () => {
@@ -61,9 +110,9 @@ export function DashboardJobsCard({
     setPendingJobId(jobId);
     startTransition(async () => {
       try {
-        const res = await retryEmailJobAction(jobId);
+        const res = await retryAnyJobAction(jobId);
         if (res.success) {
-          toast.success("Job re-queued for immediate processing");
+          toast.success("Job re-queued for immediate execution");
           router.refresh();
         } else {
           toast.error(res.error ?? "Failed to retry job");
@@ -76,30 +125,11 @@ export function DashboardJobsCard({
     });
   };
 
-  const handleResend = (jobId: string) => {
-    setPendingJobId(jobId);
-    startTransition(async () => {
-      try {
-        const res = await resendEmailJobAction(jobId);
-        if (res.success) {
-          toast.success("New job queued for delivery");
-          router.refresh();
-        } else {
-          toast.error(res.error ?? "Failed to resend email job");
-        }
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Error resending email job");
-      } finally {
-        setPendingJobId(null);
-      }
-    });
-  };
-
   const handleCancel = (jobId: string) => {
     setPendingJobId(jobId);
     startTransition(async () => {
       try {
-        const res = await cancelEmailJobAction(jobId);
+        const res = await cancelAnyJobAction(jobId);
         if (res.success) {
           toast.success("Pending job cancelled");
           router.refresh();
@@ -112,6 +142,17 @@ export function DashboardJobsCard({
         setPendingJobId(null);
       }
     });
+  };
+
+  const handleCopyPayload = (payload: unknown) => {
+    try {
+      navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setHasCopied(true);
+      toast.success("Payload copied to clipboard");
+      setTimeout(() => setHasCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy payload");
+    }
   };
 
   return (
@@ -127,15 +168,22 @@ export function DashboardJobsCard({
                 Background & System Jobs
               </CardTitle>
               <Badge variant="outline" className="border-amber-500/30 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] font-semibold">
-                Super Admin
+                Queue
               </Badge>
             </div>
             <CardDescription className="text-xs mt-1">
-              Monitor background worker queues, inspect failure reasons, and control transactional delivery tasks.
+              Physical Postgres job queue across all workers. Inspect execution payloads, track failures, and control tasks.
             </CardDescription>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/admin/email-queue"
+              className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-8 text-xs gap-1 text-muted-foreground hover:text-foreground")}
+            >
+              <Mail className="size-3.5" />
+              Email Queue
+            </Link>
             <Button
               variant="outline"
               size="sm"
@@ -147,8 +195,8 @@ export function DashboardJobsCard({
               Refresh
             </Button>
             <Link
-              href="/admin/email-queue"
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 text-xs gap-1")}
+              href="/admin/jobs"
+              className={cn(buttonVariants({ variant: "default", size: "sm" }), "h-8 text-xs gap-1")}
             >
               Full Queue <ArrowRight className="size-3" />
             </Link>
@@ -166,7 +214,7 @@ export function DashboardJobsCard({
               <div className="text-xl font-bold text-foreground mt-2">
                 {stats.pending}
               </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Waiting for pickup</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Waiting for worker pickup</p>
             </div>
 
             <div className="rounded-xl bg-slate-50/90 dark:bg-muted/40 p-3 border border-border/40 flex flex-col justify-between">
@@ -182,13 +230,13 @@ export function DashboardJobsCard({
 
             <div className="rounded-xl bg-slate-50/90 dark:bg-muted/40 p-3 border border-border/40 flex flex-col justify-between">
               <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-                <span>Delivered</span>
+                <span>Succeeded</span>
                 <CheckCircle2 className="size-3.5 text-emerald-600" />
               </div>
               <div className="text-xl font-bold text-foreground mt-2">
                 {stats.succeeded}
               </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Successfully sent</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Completed successfully</p>
             </div>
 
             <div className={cn(
@@ -199,7 +247,7 @@ export function DashboardJobsCard({
             )}>
               <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
                 <span className={cn(stats.dead > 0 && "text-rose-700 dark:text-rose-400 font-semibold")}>
-                  Failed
+                  Dead / Failed
                 </span>
                 <AlertCircle className={cn("size-3.5", stats.dead > 0 ? "text-rose-600" : "text-muted-foreground")} />
               </div>
@@ -218,11 +266,11 @@ export function DashboardJobsCard({
               <div className="flex items-center gap-2">
                 <AlertCircle className="size-4 shrink-0 text-rose-600" />
                 <span>
-                  <strong>{stats.dead}</strong> failed job{stats.dead > 1 ? "s" : ""} require attention. Inspect failure errors and trigger retries below.
+                  <strong>{stats.dead}</strong> failed background job{stats.dead > 1 ? "s" : ""} require attention. Inspect failure errors and trigger retries.
                 </span>
               </div>
               <Link
-                href="/admin/email-queue?status=DEAD"
+                href="/admin/jobs?status=DEAD"
                 className="font-semibold underline underline-offset-2 shrink-0 ml-2 hover:text-rose-950 dark:hover:text-rose-100"
               >
                 Filter failed
@@ -256,6 +304,7 @@ export function DashboardJobsCard({
                           <span className="font-semibold text-foreground">
                             {job.typeLabel}
                           </span>
+                          <CategoryBadge category={job.category} />
 
                           {job.status === "PENDING" && (
                             <Badge variant="outline" className="border-amber-500/30 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 gap-1 text-[10px] py-0">
@@ -269,7 +318,7 @@ export function DashboardJobsCard({
                           )}
                           {job.status === "SUCCEEDED" && (
                             <Badge variant="outline" className="border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 gap-1 text-[10px] py-0">
-                              <CheckCircle2 className="size-2.5" /> Sent
+                              <CheckCircle2 className="size-2.5" /> Succeeded
                             </Badge>
                           )}
                           {job.status === "DEAD" && (
@@ -278,17 +327,17 @@ export function DashboardJobsCard({
                             </Badge>
                           )}
 
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-[11px] text-muted-foreground font-mono">
                             Attempt {job.attempts}/{job.maxAttempts}
                           </span>
                         </div>
 
                         <div className="flex items-center gap-2 text-muted-foreground text-[11px] truncate">
-                          <span className="text-foreground font-medium truncate">
-                            {job.recipient}
+                          <span className="font-mono text-muted-foreground truncate max-w-[140px] sm:max-w-[180px]">
+                            {job.id}
                           </span>
                           <span>&middot;</span>
-                          <span className="truncate">{job.subject}</span>
+                          <span className="font-mono text-foreground truncate">{job.type}</span>
                           <span>&middot;</span>
                           <span className="shrink-0">{formatAccraDateTime(job.createdAt)}</span>
                         </div>
@@ -303,15 +352,26 @@ export function DashboardJobsCard({
                               onClick={() => setSelectedErrorJob(job)}
                               className="h-5 px-1.5 text-[10px] text-rose-700 hover:text-rose-800 hover:bg-rose-100 dark:text-rose-300"
                             >
-                              <Eye className="size-3 mr-1" /> View
+                              <Eye className="size-3 mr-1" /> View Error
                             </Button>
                           </div>
                         )}
                       </div>
 
-                      {/* Action Controls for Super Admin */}
+                      {/* Action Controls */}
                       <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                        {job.status === "DEAD" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedPayloadJob(job)}
+                          className="h-7 text-xs gap-1 px-2 text-muted-foreground hover:text-foreground"
+                          title="Inspect Payload"
+                        >
+                          <Code2 className="size-3" />
+                          Payload
+                        </Button>
+
+                        {canManage && (job.status === "DEAD" || job.status === "RUNNING") && (
                           <Button
                             size="sm"
                             onClick={() => handleRetry(job.id)}
@@ -327,38 +387,33 @@ export function DashboardJobsCard({
                           </Button>
                         )}
 
-                        {job.status === "SUCCEEDED" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleResend(job.id)}
-                            disabled={isJobPending || isPending}
-                            className="h-7 text-xs gap-1 px-2.5"
-                          >
-                            {isJobPending ? (
-                              <Loader2 className="size-3 animate-spin" />
-                            ) : (
-                              <Send className="size-3" />
-                            )}
-                            Resend
-                          </Button>
-                        )}
-
-                        {job.status === "PENDING" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCancel(job.id)}
-                            disabled={isJobPending || isPending}
-                            className="h-7 text-xs gap-1 text-destructive hover:bg-destructive/10 px-2.5"
-                          >
-                            {isJobPending ? (
-                              <Loader2 className="size-3 animate-spin" />
-                            ) : (
+                        {canManage && job.status === "PENDING" && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRetry(job.id)}
+                              disabled={isJobPending || isPending}
+                              className="h-7 text-xs gap-1 px-2.5"
+                            >
+                              {isJobPending ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <RotateCw className="size-3" />
+                              )}
+                              Run Now
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCancel(job.id)}
+                              disabled={isJobPending || isPending}
+                              className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive gap-1 px-2"
+                            >
                               <XCircle className="size-3" />
-                            )}
-                            Cancel
-                          </Button>
+                              Cancel
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -370,57 +425,120 @@ export function DashboardJobsCard({
         </CardContent>
       </Card>
 
-      {/* Error Inspection Dialog */}
+      {/* Payload Inspector Dialog */}
+      <Dialog
+        open={selectedPayloadJob !== null}
+        onOpenChange={(open) => !open && setSelectedPayloadJob(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Code2 className="size-5 text-primary" />
+              <span>Job Payload Inspector</span>
+            </DialogTitle>
+            <DialogDescription>
+              Inspecting job parameters and data payload for <code className="font-mono text-xs text-foreground font-semibold">{selectedPayloadJob?.id}</code>
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedPayloadJob && (
+            <div className="space-y-4 overflow-hidden flex flex-col flex-1">
+              <div className="grid grid-cols-2 gap-3 text-xs bg-muted/40 p-3 rounded-lg border">
+                <div>
+                  <span className="text-muted-foreground block">Type:</span>
+                  <span className="font-mono font-medium">{selectedPayloadJob.type}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Category:</span>
+                  <span className="capitalize font-medium">{selectedPayloadJob.category}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Created At:</span>
+                  <span>{formatAccraDateTime(selectedPayloadJob.createdAt)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Run At:</span>
+                  <span>{formatAccraDateTime(selectedPayloadJob.runAt)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground">Payload Data (JSON):</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => handleCopyPayload(selectedPayloadJob.payload)}
+                >
+                  {hasCopied ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                  {hasCopied ? "Copied" : "Copy JSON"}
+                </Button>
+              </div>
+
+              <pre className="flex-1 overflow-auto rounded-lg bg-slate-950 p-4 text-xs font-mono text-emerald-400 border border-border/50 max-h-[350px]">
+                {JSON.stringify(selectedPayloadJob.payload, null, 2)}
+              </pre>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Error Details Dialog */}
       <AlertDialog
-        open={selectedErrorJob != null}
+        open={selectedErrorJob !== null}
         onOpenChange={(open) => !open && setSelectedErrorJob(null)}
       >
         <AlertDialogContent className="max-w-xl">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
-              <AlertCircle className="size-5" />
-              Job Execution Error
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Inspection details for failed job <span className="font-mono text-foreground font-semibold">{selectedErrorJob?.id}</span> ({selectedErrorJob?.typeLabel}).
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="size-5 shrink-0" />
+              <AlertDialogTitle>Background Job Failure Log</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-xs">
+              Error recorded during worker execution for job{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground font-semibold">
+                {selectedErrorJob?.id}
+              </code>
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <div className="space-y-3 py-2 text-xs">
-            <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2.5">
-              <div>
-                <span className="text-muted-foreground">Recipient:</span>{" "}
-                <strong className="text-foreground">{selectedErrorJob?.recipient}</strong>
+          {selectedErrorJob && (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-muted/60 p-3 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Type:</span>
+                  <span className="font-mono">{selectedErrorJob.type}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Attempts made:</span>
+                  <span className="font-medium">
+                    {selectedErrorJob.attempts} / {selectedErrorJob.maxAttempts}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Created:</span>
+                  <span>{formatAccraDateTime(selectedErrorJob.createdAt)}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">Attempts:</span>{" "}
-                <strong className="text-foreground">
-                  {selectedErrorJob?.attempts} of {selectedErrorJob?.maxAttempts}
-                </strong>
+
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-foreground">Stack Trace / Failure Message:</p>
+                <pre className="max-h-56 overflow-auto rounded-lg bg-slate-950 p-3 text-xs font-mono text-rose-400 border border-border/50 whitespace-pre-wrap break-all">
+                  {selectedErrorJob.lastError ?? "No error details available."}
+                </pre>
               </div>
             </div>
+          )}
 
-            <div>
-              <span className="font-semibold text-foreground mb-1 block">Failure Details:</span>
-              <pre className="rounded-lg bg-muted p-3 font-mono text-[11px] text-foreground overflow-x-auto whitespace-pre-wrap max-h-56 leading-relaxed border border-border/60">
-                {selectedErrorJob?.lastError || "No detailed error message captured."}
-              </pre>
-            </div>
-          </div>
-
-          <AlertDialogFooter className="flex items-center justify-between sm:justify-between w-full">
+          <AlertDialogFooter>
             <AlertDialogCancel>Close</AlertDialogCancel>
-            {selectedErrorJob && (
+            {canManage && selectedErrorJob && (
               <AlertDialogAction
-                onClick={() => {
-                  const id = selectedErrorJob.id;
-                  setSelectedErrorJob(null);
-                  handleRetry(id);
-                }}
-                className="bg-amber-500 hover:bg-amber-600 text-black font-semibold gap-1.5"
+                onClick={() => handleRetry(selectedErrorJob.id)}
+                className="gap-1.5"
               >
                 <RotateCw className="size-3.5" />
-                Retry Job Now
+                Retry This Job
               </AlertDialogAction>
             )}
           </AlertDialogFooter>

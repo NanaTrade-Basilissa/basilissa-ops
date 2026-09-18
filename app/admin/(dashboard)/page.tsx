@@ -10,7 +10,13 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
-import { requirePermission, branchScope, isSuperAdmin, getEmailQueueStats, listEmailJobs } from "@/lib/modules/identity/server";
+import {
+  requirePermission,
+  branchScope,
+  can,
+  getJobQueueStats,
+  listAllJobs,
+} from "@/lib/modules/identity/server";
 import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from "@/components/ui/card";
@@ -27,7 +33,8 @@ export const dynamic = "force-dynamic";
 
 export default async function OperationsDashboardPage() {
   const actor = await requirePermission("admin:access");
-  const isSuperAdminUser = isSuperAdmin(actor);
+  const canViewJobs = can(actor, "jobs:read");
+  const canManageJobs = can(actor, "jobs:manage");
   const attScope = branchScope(actor, "attendance:read");
 
   const now = new Date();
@@ -100,8 +107,8 @@ export default async function OperationsDashboardPage() {
       },
       orderBy: { scheduledStart: "asc" },
     }),
-    isSuperAdminUser ? getEmailQueueStats() : Promise.resolve(null),
-    isSuperAdminUser ? listEmailJobs({ pageSize: 6 }) : Promise.resolve(null),
+    canViewJobs ? getJobQueueStats() : Promise.resolve(null),
+    canViewJobs ? listAllJobs({ pageSize: 6 }) : Promise.resolve(null),
   ]);
 
   // Load employee details for today active roster
@@ -151,7 +158,7 @@ export default async function OperationsDashboardPage() {
               <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {todayKey} (Accra)
             </span>
-            {isSuperAdminUser && jobStats && jobStats.dead > 0 && (
+            {canViewJobs && jobStats && jobStats.dead > 0 && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
                 <span className="size-1.5 rounded-full bg-rose-500 animate-ping" />
                 {jobStats.dead} Failed Job{jobStats.dead > 1 ? "s" : ""}
@@ -392,9 +399,13 @@ export default async function OperationsDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Super Admin Section: Background and System Jobs */}
-      {isSuperAdminUser && jobStats && recentJobs && (
-        <DashboardJobsCard stats={jobStats} jobs={recentJobs.jobs} />
+      {/* Background and System Jobs Section */}
+      {canViewJobs && jobStats && recentJobs && (
+        <DashboardJobsCard
+          stats={jobStats}
+          jobs={recentJobs.jobs}
+          canManage={canManageJobs}
+        />
       )}
     </div>
   );
