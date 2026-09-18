@@ -26,14 +26,20 @@ export function AssessmentInviteDialog({
   inviteAction,
   inviteManyAction,
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   employees: { id: string; label: string }[];
   invitations: { employeeId: string | null; revokedAt: Date | null; response: { submittedAt: Date | null } | null }[];
   inviteAction: (prev: InviteState, formData: FormData) => Promise<InviteState>;
   inviteManyAction: (prev: BulkInviteState, formData: FormData) => Promise<BulkInviteState>;
-  trigger?: React.ReactElement;
+  trigger?: React.ReactElement | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [who, setWho] = useState<"employee" | "many" | "other">("employee");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
@@ -105,16 +111,18 @@ export function AssessmentInviteDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          trigger ?? (
-            <Button size="sm" className="gap-1.5 h-9">
-              <UserPlus className="size-4" />
-              Invite someone
-            </Button>
-          )
-        }
-      />
+      {trigger !== null && (
+        <DialogTrigger
+          render={
+            trigger ?? (
+              <Button size="sm" className="gap-1.5 h-9">
+                <UserPlus className="size-4" />
+                Invite someone
+              </Button>
+            )
+          }
+        />
+      )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

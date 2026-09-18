@@ -1,11 +1,13 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowRight, Download, AlertTriangle } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Download, AlertTriangle, Search, RotateCcw } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ResolveExceptionDialog } from "@/components/admin/resolve-exception-dialog";
 import { TableRowActions } from "@/components/admin/table-row-actions";
 
@@ -36,17 +38,14 @@ const columns = columnHelper.columns([
     id: "employee",
     header: "Employee",
     cell: ({ row }) => (
-      <>
-        <Link
-          href={`/admin/attendance/${row.original.employeeId}/${row.original.date}`}
-          className="font-medium text-foreground underline-offset-4 hover:underline"
-        >
+      <div>
+        <span className="font-medium text-foreground underline-offset-4 hover:underline">
           {row.original.employeeName ?? row.original.employeeId}
-        </Link>
+        </span>
         {row.original.employeeCode && (
           <span className="block font-mono text-xs text-muted-foreground">{row.original.employeeCode}</span>
         )}
-      </>
+      </div>
     ),
   }),
   columnHelper.accessor("branchName", {
@@ -102,10 +101,12 @@ const columns = columnHelper.columns([
       const item = row.original;
       const needsReview = item.status === "NEEDS_REVIEW" && Boolean(item.branchId) && item.canWrite !== false;
 
+      if (!needsReview) return null;
+
       return (
         <TableRowActions
           actions={[
-            needsReview && {
+            {
               id: "review",
               label: "Review exception",
               icon: AlertTriangle,
@@ -124,12 +125,6 @@ const columns = columnHelper.columns([
                 />
               ),
             },
-            {
-              id: "view",
-              label: "View details",
-              icon: ArrowRight,
-              href: `/admin/attendance/${item.employeeId}/${item.date}`,
-            },
           ]}
         />
       );
@@ -138,7 +133,27 @@ const columns = columnHelper.columns([
 ]);
 
 export function AttendanceTable({ days, date }: { days: AttendanceRow[]; date?: string }) {
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const exportDate = date || (days[0]?.date ?? new Date().toISOString().slice(0, 10));
+
+  const filteredDays = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return days;
+    return days.filter((d) => {
+      const name = (d.employeeName ?? "").toLowerCase();
+      const code = (d.employeeCode ?? "").toLowerCase();
+      const branch = d.branchName.toLowerCase();
+      return name.includes(q) || code.includes(q) || branch.includes(q);
+    });
+  }, [days, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredDays.length / pageSize));
+  const paginatedDays = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredDays.slice(start, start + pageSize);
+  }, [filteredDays, page, pageSize]);
 
   function handleExportCsv() {
     const headers = [
@@ -182,21 +197,73 @@ export function AttendanceTable({ days, date }: { days: AttendanceRow[]; date?: 
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 px-1">
-        <span className="text-sm text-muted-foreground">
-          {days.length} {days.length === 1 ? "day on record" : "days on record"}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+          <div className="relative w-full sm:w-64 md:w-72 shrink-0">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="attendance-search"
+              placeholder="Search employee or branch..."
+              className="pl-8 h-9 text-xs"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+
+          {search && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setPage(1);
+              }}
+              className="h-9 gap-1.5 text-xs"
+              title="Reset search"
+            >
+              <RotateCcw className="size-3.5" />
+              Reset
+            </Button>
+          )}
+
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            {filteredDays.length} {filteredDays.length === 1 ? "record" : "records"}
+          </span>
+        </div>
+
         <Button
           variant="outline"
           size="sm"
           onClick={handleExportCsv}
-          className="gap-1.5"
+          className="h-9 gap-1.5 text-xs shrink-0"
         >
-          <Download className="size-4" />
-          Export CSV
+          <Download className="size-3.5" />
+          <span className="hidden sm:inline">Export CSV</span>
+          <span className="sm:hidden">Export</span>
         </Button>
       </div>
-      <DataTable columns={columns} data={days} />
+
+      <DataTable
+        columns={columns}
+        data={paginatedDays}
+        getRowHref={(row) => `/admin/attendance/${row.employeeId}/${row.date}`}
+      />
+
+      <DataTablePagination
+        page={page}
+        totalPages={totalPages}
+        total={filteredDays.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
+      />
     </div>
   );
 }

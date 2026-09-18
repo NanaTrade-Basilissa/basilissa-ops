@@ -81,15 +81,7 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Feedback Overview</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {scope.kind === "branches" && branches.length === 1
-              ? `Customer feedback for ${branches[0]?.name}.`
-              : "Customer feedback across branches."}
-          </p>
-        </div>
+      <div className="flex justify-end">
         <GeneralQrButton feedbackUrl={`${getEnv().NEXT_PUBLIC_APP_URL}/feedback`} />
       </div>
 

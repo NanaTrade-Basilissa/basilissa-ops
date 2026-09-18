@@ -24,12 +24,9 @@ export default async function FeedbackQuestionsPage({ searchParams }: { searchPa
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Feedback Questions</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Customer survey questions ({FEEDBACK_QUESTION_COUNT} active required).
-          </p>
-        </div>
+        <p className="text-sm font-medium text-foreground">
+          {activeCount} / {FEEDBACK_QUESTION_COUNT} active
+        </p>
         <QuestionDialog
           action={createQuestion}
           submitLabel="Create question"
@@ -39,7 +36,8 @@ export default async function FeedbackQuestionsPage({ searchParams }: { searchPa
           activeCap={FEEDBACK_QUESTION_COUNT}
           trigger={
             <Button>
-              <Plus className="size-4" /> New question
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">New question</span>
             </Button>
           }
         />
@@ -50,10 +48,6 @@ export default async function FeedbackQuestionsPage({ searchParams }: { searchPa
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
-      <p className="text-sm font-medium text-foreground">
-        {activeCount} / {FEEDBACK_QUESTION_COUNT} active
-      </p>
 
       <QuestionsTable questions={questions} activeCount={activeCount} maxActive={FEEDBACK_QUESTION_COUNT} />
     </div>

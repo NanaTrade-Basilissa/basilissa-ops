@@ -123,6 +123,7 @@ export async function getEmailQueueStats(): Promise<EmailQueueStats> {
 export type ListEmailJobsOptions = {
   status?: JobStatus | "ALL";
   type?: string;
+  search?: string;
   page?: number;
   pageSize?: number;
 };
@@ -145,6 +146,14 @@ export async function listEmailJobs(options: ListEmailJobsOptions = {}): Promise
   const where: Prisma.JobWhereInput = {
     type: options.type && options.type !== "ALL" ? options.type : { in: [...EMAIL_JOB_TYPES] },
     ...(options.status && options.status !== "ALL" ? { status: options.status } : {}),
+    ...(options.search
+      ? {
+          OR: [
+            { id: { contains: options.search } },
+            { lastError: { contains: options.search, mode: "insensitive" } },
+          ],
+        }
+      : {}),
   };
 
   const [total, rawJobs] = await Promise.all([

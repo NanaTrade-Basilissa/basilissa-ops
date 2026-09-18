@@ -6,7 +6,6 @@ import {
   getPermissionMatrix,
 } from "@/lib/modules/identity/server";
 import { RolesTable } from "@/components/admin/roles-table";
-import { RoleDialog } from "@/components/admin/role-dialog";
 
 export const metadata: Metadata = { title: "Roles & Permissions" };
 export const dynamic = "force-dynamic";
@@ -24,22 +23,7 @@ export default async function RolesPage() {
   ]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-heading text-2xl font-bold text-foreground">
-              Roles &amp; Permissions
-            </h1>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Manage custom roles and access permissions.
-          </p>
-        </div>
-
-        {canCreate && <RoleDialog matrix={matrix} />}
-      </div>
-
+    <div className="space-y-4">
       <RolesTable
         roles={roles}
         matrix={matrix}

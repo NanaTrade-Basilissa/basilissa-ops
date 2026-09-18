@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Building2, Globe, History } from "lucide-react";
+import { Building2, History } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { policyHistory, resolvePolicy } from "@/lib/modules/attendance/server";
 import { updateAttendancePolicy } from "@/lib/modules/attendance/actions";
 import { AttendancePolicyForm } from "@/components/admin/attendance-policy-form";
+import { PolicyBranchSelect } from "@/components/admin/policy-branch-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -79,34 +79,11 @@ export default async function AttendancePolicyPage({
           )}
         </div>
 
-        {/* Branch Switcher */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-b border-border pb-4">
-          <Link
-            href="/admin/attendance/policy"
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              !selectedBranchId
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Globe className="size-3.5" />
-            Global (All branches)
-          </Link>
-          {branches.map((branch) => (
-            <Link
-              key={branch.id}
-              href={`/admin/attendance/policy?branchId=${branch.id}`}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                selectedBranchId === branch.id
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Building2 className="size-3.5" />
-              {branch.name}
-            </Link>
-          ))}
-        </div>
+        {/* Branch Switcher Dropdown */}
+        <PolicyBranchSelect
+          branches={branches}
+          selectedBranchId={selectedBranchId}
+        />
       </div>
 
       {selectedBranch && !hasBranchSpecificOverride && (

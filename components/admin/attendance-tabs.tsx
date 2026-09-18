@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, CalendarCheck, CalendarDays, Clock, FileSpreadsheet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export type AttendanceView = "daily" | "live" | "timesheets" | "exceptions" | "leave";
 
@@ -14,12 +15,14 @@ export function AttendanceTabs({
   date,
   exceptionsCount = 0,
   leaveRequestsCount = 0,
+  className,
 }: {
   activeView: AttendanceView;
   branchId?: string;
   date?: string;
   exceptionsCount?: number;
   leaveRequestsCount?: number;
+  className?: string;
 }) {
   const searchParams = useSearchParams();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -77,12 +80,12 @@ export function AttendanceTabs({
   ];
 
   return (
-    <div className="w-full max-w-full min-w-0 border-b border-border pb-3">
+    <div className={cn("w-full max-w-full min-w-0", className)}>
       <div
         ref={scrollContainerRef}
-        className="no-scrollbar flex w-full max-w-full overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]"
+        className="no-scrollbar flex w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]"
       >
-        <div className="inline-flex min-w-max items-center gap-1 rounded-lg bg-muted p-1 text-muted-foreground">
+        <div className="inline-flex min-w-max items-center gap-1">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeView === tab.id;
@@ -91,10 +94,10 @@ export function AttendanceTabs({
                 key={tab.id}
                 ref={isActive ? activeTabRef : null}
                 href={buildHref(tab.id)}
-                className={`inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 sm:gap-2 rounded-md px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-all ${
+                className={`relative inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 sm:gap-2 px-3 py-2.5 text-xs sm:text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-background text-foreground shadow-sm font-semibold"
-                    : "hover:bg-muted/80 hover:text-foreground"
+                    ? "text-foreground font-semibold after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Icon className="size-3.5 sm:size-4 shrink-0" />

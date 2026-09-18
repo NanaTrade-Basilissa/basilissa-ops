@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma, AptitudeTestStatus } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 
 /** HR-side reading. Behind `aptitude:read`, so selecting correctness is safe
@@ -22,10 +23,19 @@ export async function listAptitudeTests() {
   });
 }
 
-export async function listAptitudeTestsPaginated(params?: { page?: number; pageSize?: number }) {
+export async function listAptitudeTestsPaginated(params?: {
+  search?: string;
+  status?: AptitudeTestStatus;
+  page?: number;
+  pageSize?: number;
+}) {
   const page = Math.max(1, params?.page ?? 1);
   const pageSize = params?.pageSize ?? 10;
-  const where = { deletedAt: null };
+  const where: Prisma.AptitudeTestWhereInput = {
+    deletedAt: null,
+    ...(params?.status ? { status: params.status } : {}),
+    ...(params?.search ? { title: { contains: params.search, mode: "insensitive" } } : {}),
+  };
 
   const [tests, total] = await Promise.all([
     prisma.aptitudeTest.findMany({

@@ -1,13 +1,18 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { toggleBranchActive, updateBranch } from "@/lib/modules/branches/actions";
 import { BranchDialog } from "@/components/admin/branch-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Edit2, Ban, CheckCircle2 } from "lucide-react";
+import { Edit2, Ban, CheckCircle2, Search, RotateCcw } from "lucide-react";
 import { TableRowActions } from "@/components/admin/table-row-actions";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,12 +100,6 @@ const columns = columnHelper.columns([
       return (
         <TableRowActions
           actions={[
-            {
-              id: "view",
-              label: "View branch",
-              href: `/admin/branches/${branch.id}`,
-              icon: Eye,
-            },
             canWrite && {
               id: "edit",
               label: "Edit branch",
@@ -175,6 +174,112 @@ const columns = columnHelper.columns([
   }),
 ]);
 
-export function BranchesTable({ branches }: { branches: BranchRow[] }) {
-  return <DataTable columns={columns} data={branches} />;
+export function BranchesTable({
+  branches,
+  actionSlot,
+}: {
+  branches: BranchRow[];
+  actionSlot?: React.ReactNode;
+}) {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<string>("ALL");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const filteredBranches = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return branches.filter((b) => {
+      if (status === "ACTIVE" && !b.isActive) return false;
+      if (status === "INACTIVE" && b.isActive) return false;
+      if (q) {
+        const matchesName = b.name.toLowerCase().includes(q);
+        const matchesLocation = b.location.toLowerCase().includes(q);
+        const matchesSlug = b.slug.toLowerCase().includes(q);
+        if (!matchesName && !matchesLocation && !matchesSlug) return false;
+      }
+      return true;
+    });
+  }, [branches, search, status]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBranches.length / pageSize));
+  const paginatedBranches = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredBranches.slice(start, start + pageSize);
+  }, [filteredBranches, page, pageSize]);
+
+  const hasFilters = search.trim() !== "" || status !== "ALL";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+          <div className="relative w-full sm:w-64 md:w-72 shrink-0">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="branch-search"
+              placeholder="Search branch name, location..."
+              className="pl-8 h-9 text-xs"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+
+          <NativeSelect
+            id="branch-status"
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 w-auto min-w-[130px] text-xs"
+          >
+            <option value="ALL">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </NativeSelect>
+
+          {hasFilters && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setStatus("ALL");
+                setPage(1);
+              }}
+              className="h-9 gap-1.5 text-xs"
+              title="Reset filters"
+            >
+              <RotateCcw className="size-3.5" />
+              Reset
+            </Button>
+          )}
+        </div>
+
+        {actionSlot && <div className="shrink-0">{actionSlot}</div>}
+      </div>
+
+      <DataTable
+        columns={columns}
+        data={paginatedBranches}
+        getRowHref={(row) => `/admin/branches/${row.id}`}
+      />
+
+      <DataTablePagination
+        page={page}
+        totalPages={totalPages}
+        total={filteredBranches.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setPage(1);
+        }}
+      />
+    </div>
+  );
 }

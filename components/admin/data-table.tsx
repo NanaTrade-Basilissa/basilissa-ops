@@ -2,9 +2,11 @@
 
 import * as React from "react";
 import { SearchX } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { tableFeatures, useTable, FlexRender, type ColumnDef, type RowData } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, EmptyContent } from "@/components/ui/empty";
+import { cn } from "@/lib/utils";
 
 /**
  * No client-side sorting/filtering/pagination features registered —
@@ -23,13 +25,33 @@ export function DataTable<TData extends RowData>({
   data,
   emptyMessage = "No results found.",
   emptyAction,
+  onRowClick,
+  getRowHref,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[];
   data: TData[];
   emptyMessage?: string;
   emptyAction?: React.ReactNode;
+  onRowClick?: (row: TData) => void;
+  getRowHref?: (row: TData) => string;
 }) {
+  const router = useRouter();
   const table = useTable({ features: dataTableFeatures, columns, data });
+  const isClickable = Boolean(onRowClick || getRowHref);
+
+  const handleRowClick = (e: React.MouseEvent, rowData: TData) => {
+    // If click originated inside an interactive element, do not trigger row navigation
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("button, a, input, select, textarea, [role='menuitem'], [data-prevent-row-click]")) {
+      return;
+    }
+
+    if (onRowClick) {
+      onRowClick(rowData);
+    } else if (getRowHref) {
+      router.push(getRowHref(rowData));
+    }
+  };
 
   return (
     // Same container treatment as `Card` (rounded-xl, bg-card, a 1px ring
@@ -39,7 +61,7 @@ export function DataTable<TData extends RowData>({
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
+            <TableRow key={headerGroup.id} className="bg-muted/40 hover:bg-muted/40">
               {headerGroup.headers.map((header) => (
                 <TableHead key={header.id} colSpan={header.colSpan}>
                   {header.isPlaceholder ? null : <FlexRender header={header} />}
@@ -51,7 +73,13 @@ export function DataTable<TData extends RowData>({
         <TableBody>
           {table.getRowModel().rows.length ? (
             table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
+              <TableRow
+                key={row.id}
+                onClick={isClickable ? (e) => handleRowClick(e, row.original) : undefined}
+                className={cn(
+                  isClickable && "cursor-pointer hover:bg-muted/30 transition-colors",
+                )}
+              >
                 {row.getAllCells().map((cell) => (
                   <TableCell key={cell.id}>
                     <FlexRender cell={cell} />

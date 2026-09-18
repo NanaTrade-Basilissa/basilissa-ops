@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { NativeSelect } from "@/components/ui/native-select";
-import { Label } from "@/components/ui/label";
 
 export function ScheduleBranchSelect({
   branches,
@@ -17,7 +16,6 @@ export function ScheduleBranchSelect({
 
   return (
     <div className="space-y-1.5 min-w-48">
-      <Label htmlFor="branchSelect">Branch</Label>
       <NativeSelect
         id="branchSelect"
         value={selectedBranchId}

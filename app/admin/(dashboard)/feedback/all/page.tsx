@@ -25,6 +25,7 @@ export default async function AllFeedbackSubmissionsPage({ searchParams }: { sea
 
   const raw = await searchParams;
   const parsed = feedbackListFilterSchema.safeParse({
+    search: first(raw.search),
     branchId: first(raw.branchId),
     from: first(raw.from),
     to: first(raw.to),
@@ -40,6 +41,7 @@ export default async function AllFeedbackSubmissionsPage({ searchParams }: { sea
   // Intersects the reader's scope with their filters. See feedbackListWhere:
   // merging the two lets `?branchId=` widen the query instead of narrowing it.
   const where = feedbackListWhere(scope, {
+    search: filters.search,
     branchId: filters.branchId,
     rating: filters.rating,
     from: fromDate,
@@ -57,6 +59,14 @@ export default async function AllFeedbackSubmissionsPage({ searchParams }: { sea
         submittedAt: true,
         overallScore: true,
         branch: { select: { id: true, name: true } },
+        answers: {
+          select: {
+            id: true,
+            score: true,
+            question: { select: { text: true, order: true } },
+          },
+          orderBy: { question: { order: "asc" } },
+        },
       },
     }),
     prisma.feedbackSubmission.count({ where }),
@@ -71,6 +81,7 @@ export default async function AllFeedbackSubmissionsPage({ searchParams }: { sea
 
   function pageHref(targetPage: number) {
     const search = new URLSearchParams();
+    if (filters.search) search.set("search", filters.search);
     if (filters.branchId) search.set("branchId", filters.branchId);
     if (filters.rating) search.set("rating", String(filters.rating));
     if (filters.from) search.set("from", filters.from);
@@ -82,18 +93,19 @@ export default async function AllFeedbackSubmissionsPage({ searchParams }: { sea
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-foreground">All Submissions</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">All customer feedback submissions.</p>
-      </div>
-
       <Suspense fallback={<div className="h-[74px]" />}>
         <FeedbackFilters branches={branches.map((b) => ({ id: b.id, label: b.name }))} />
       </Suspense>
 
       <FeedbackTable submissions={submissions} />
 
-      <DataTablePagination page={page} totalPages={totalPages} total={total} buildHref={pageHref} />
+      <DataTablePagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageSize={PAGE_SIZE}
+        buildHref={pageHref}
+      />
     </div>
   );
 }

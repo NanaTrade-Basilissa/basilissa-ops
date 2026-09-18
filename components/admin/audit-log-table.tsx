@@ -3,9 +3,6 @@
 import { useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
-  ChevronLeft,
-  ChevronRight,
-  Eye,
   FileCode2,
   Filter,
   RotateCcw,
@@ -16,6 +13,7 @@ import type { AuditLogSearchResult, AuditLogItem } from "@/lib/modules/identity/
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -33,7 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatAccraDateTime } from "@/lib/platform/date";
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
-import { TableRowActions } from "@/components/admin/table-row-actions";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
 
 const ENTITY_TYPES = [
   { value: "all", label: "All Entities" },
@@ -131,48 +129,48 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
       {/* Search & Filters */}
       <form
         onSubmit={handleSearchSubmit}
-        className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-sm"
+        className="flex flex-wrap items-center gap-2.5"
       >
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+        <div className="relative w-full sm:w-64 md:w-72 shrink-0">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search action, email, entity..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="pl-8 h-9"
+            className="pl-8 h-9 text-xs"
           />
         </div>
 
-        <select
+        <NativeSelect
           value={entityInput}
           onChange={(e) => setEntityInput(e.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="h-9 w-auto min-w-[150px] text-xs"
         >
           {ENTITY_TYPES.map((t) => (
             <option key={t.value} value={t.value}>
               {t.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
 
-        <select
+        <NativeSelect
           value={actionInput}
           onChange={(e) => setActionInput(e.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="h-9 w-auto min-w-[150px] text-xs"
         >
           {ACTION_CATEGORIES.map((c) => (
             <option key={c.value} value={c.value}>
               {c.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <Input
             type="date"
             value={startDateInput}
             onChange={(e) => setStartDateInput(e.target.value)}
-            className="h-9 w-[130px]"
+            className="h-9 w-[150px] px-2.5 text-xs"
             title="Start date"
           />
           <span className="text-muted-foreground text-xs">to</span>
@@ -180,13 +178,13 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
             type="date"
             value={endDateInput}
             onChange={(e) => setEndDateInput(e.target.value)}
-            className="h-9 w-[130px]"
+            className="h-9 w-[150px] px-2.5 text-xs"
             title="End date"
           />
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <Button type="submit" size="sm" disabled={isPending}>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button type="submit" size="sm" disabled={isPending} className="h-9 text-xs">
             <Filter className="size-3.5 mr-1" />
             Filter
           </Button>
@@ -196,9 +194,11 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
             size="sm"
             onClick={handleReset}
             disabled={isPending}
+            className="h-9 gap-1 text-xs"
             title="Reset filters"
           >
-            <RotateCcw className="size-3.5" />
+            <RotateCcw className="size-3.5 mr-1" />
+            Reset
           </Button>
         </div>
       </form>
@@ -221,12 +221,15 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
                 <TableHead>Actor</TableHead>
                 <TableHead>Action</TableHead>
                 <TableHead>Entity</TableHead>
-                <TableHead className="text-right">Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.items.map((item) => (
-                <TableRow key={item.id} className="hover:bg-muted/30">
+                <TableRow
+                  key={item.id}
+                  onClick={() => setInspectingItem(item)}
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                >
                   <TableCell className="font-mono text-xs whitespace-nowrap text-muted-foreground">
                     {formatAccraDateTime(new Date(item.occurredAt))}
                   </TableCell>
@@ -243,13 +246,9 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => setInspectingItem(item)}
-                      className="font-medium font-mono text-xs text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
-                    >
+                    <span className="font-medium font-mono text-xs text-foreground">
                       {item.action}
-                    </button>
+                    </span>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-0.5">
@@ -259,17 +258,6 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <TableRowActions
-                      actions={[
-                        {
-                          label: "Inspect details",
-                          icon: Eye,
-                          onSelect: () => setInspectingItem(item),
-                        },
-                      ]}
-                    />
-                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -277,38 +265,14 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
         )}
       </div>
 
-      {/* Pagination Footer */}
-      {data.total > 0 && (
-        <div className="flex items-center justify-between px-2 text-xs text-muted-foreground">
-          <div>
-            Showing {(data.page - 1) * data.pageSize + 1} to{" "}
-            {Math.min(data.page * data.pageSize, data.total)} of {data.total} entries
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => goToPage(data.page - 1)}
-              disabled={data.page <= 1 || isPending}
-              className="h-7 w-7 p-0"
-            >
-              <ChevronLeft className="size-3.5" />
-            </Button>
-            <span>
-              Page {data.page} of {data.totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => goToPage(data.page + 1)}
-              disabled={data.page >= data.totalPages || isPending}
-              className="h-7 w-7 p-0"
-            >
-              <ChevronRight className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Standardized Pagination Footer */}
+      <DataTablePagination
+        page={data.page}
+        totalPages={data.totalPages}
+        total={data.total}
+        pageSize={data.pageSize}
+        onPageChange={goToPage}
+      />
 
       {/* Payload Inspection Dialog */}
       {inspectingItem && (

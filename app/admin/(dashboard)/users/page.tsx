@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ShieldAlert, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { Role, type Prisma } from "@prisma/client";
 import {
@@ -12,7 +12,6 @@ import {
 import { createUserAccount } from "@/lib/modules/identity/actions";
 import { isEmailConfigured } from "@/lib/platform/env";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { UserDialog } from "@/components/admin/user-dialog";
 import { UsersTable } from "@/components/admin/users-table";
 
@@ -67,47 +66,8 @@ export default async function UsersPage() {
   });
   const branchName = new Map(branches.map((b) => [b.id, b.name]));
 
-  const missingMfa = users.filter(
-    (user) =>
-      user.mfaEnabledAt === null &&
-      user.roleAssignments.some((a) => MFA_REQUIRED_ROLES.includes(a.role)),
-  );
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Users</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            System accounts with admin portal access.
-          </p>
-        </div>
-        {canWrite && (
-          <UserDialog
-            action={createUserAccount}
-            emailConfigured={isEmailConfigured()}
-            trigger={
-              <Button size="sm">
-                <UserPlus className="size-4" /> New user
-              </Button>
-            }
-          />
-        )}
-      </div>
-
-      {missingMfa.length > 0 && (
-        <Alert variant="destructive">
-          <ShieldAlert className="size-4" />
-          <AlertTitle>
-            {missingMfa.length} {missingMfa.length === 1 ? "account needs" : "accounts need"}{" "}
-            two-step verification
-          </AlertTitle>
-          <AlertDescription>
-            MFA setup required before accessing privileged actions.
-          </AlertDescription>
-        </Alert>
-      )}
-
+    <div className="space-y-4">
       <UsersTable
         canWrite={canWrite}
         isSuperAdminViewer={isSuperAdminViewer}
@@ -129,6 +89,20 @@ export default async function UsersPage() {
           })),
           customRoleName: user.customRole?.name ?? null,
         }))}
+        actionSlot={
+          canWrite ? (
+            <UserDialog
+              action={createUserAccount}
+              emailConfigured={isEmailConfigured()}
+              trigger={
+                <Button size="sm" className="h-9 gap-1.5 text-xs">
+                  <UserPlus className="size-4" />
+                  <span className="hidden sm:inline">New user</span>
+                </Button>
+              }
+            />
+          ) : undefined
+        }
       />
     </div>
   );

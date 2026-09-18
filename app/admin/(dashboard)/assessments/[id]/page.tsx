@@ -1,29 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, ChevronLeft, Pencil, Timer, Trophy, Users } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Timer, Trophy, Users } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { assessmentSummary, getAssessmentForEditing, listInvitationsPaginated } from "@/lib/modules/assessments/server";
 import { STATUS_LABEL } from "@/lib/modules/assessments/constants";
 import {
-  closeAssessmentAction,
-  deleteAssessmentAction,
-  inviteManyToAssessmentAction,
-  inviteToAssessmentAction,
-  publishAssessmentAction,
   resendInvitationAction,
   revokeInvitationAction,
-  updatePublicLinkAction,
 } from "@/lib/modules/assessments/actions";
-import { AssessmentLifecycle } from "@/components/admin/assessment-lifecycle";
-import { AssessmentInviteDialog } from "@/components/admin/assessment-invite-dialog";
-import { AssessmentPublicLinkDialog } from "@/components/admin/assessment-public-link-dialog";
+import { AssessmentActions } from "@/components/admin/assessment-actions";
 import { AssessmentResponsesTable } from "@/components/admin/assessment-responses-table";
-import { CopyPublicLinkButton } from "@/components/admin/copy-public-link-button";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { StatCard } from "@/components/admin/stat-card";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/platform/prisma";
 import { getEnv } from "@/lib/platform/env";
@@ -112,46 +102,15 @@ export default async function AssessmentPage({
         </div>
 
         {canWrite && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/admin/assessments/${assessment.id}/edit`}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              <Pencil className="size-3.5" />
-              Edit assessment
-            </Link>
-
-            {assessment.publicLinkEnabled && publicLinkUrl && (
-              <CopyPublicLinkButton url={publicLinkUrl} />
-            )}
-
-            <AssessmentPublicLinkDialog
-              action={updatePublicLinkAction.bind(null, assessment.id)}
-              linkUrl={publicLinkUrl}
-              values={{
-                enabled: assessment.publicLinkEnabled,
-                nameMode: assessment.publicLinkNameMode,
-                emailMode: assessment.publicLinkEmailMode,
-              }}
-            />
-
-            <AssessmentInviteDialog
-              employees={employees.map((e) => ({
-                id: e.id,
-                label: `${e.firstName} ${e.lastName} (${e.employeeCode})`,
-              }))}
-              invitations={allInvitations}
-              inviteAction={inviteToAssessmentAction.bind(null, assessment.id)}
-              inviteManyAction={inviteManyToAssessmentAction.bind(null, assessment.id)}
-            />
-
-            <AssessmentLifecycle
-              status={assessment.status}
-              publishAction={publishAssessmentAction.bind(null, assessment.id)}
-              closeAction={closeAssessmentAction.bind(null, assessment.id)}
-              deleteAction={deleteAssessmentAction.bind(null, assessment.id)}
-            />
-          </div>
+          <AssessmentActions
+            assessment={assessment}
+            employees={employees.map((e) => ({
+              id: e.id,
+              label: `${e.firstName} ${e.lastName} (${e.employeeCode})`,
+            }))}
+            invitations={allInvitations}
+            publicLinkUrl={publicLinkUrl}
+          />
         )}
       </div>
 

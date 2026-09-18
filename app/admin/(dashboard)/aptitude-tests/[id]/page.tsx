@@ -1,29 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckCircle2, ChevronLeft, Pencil, Timer, Trophy, Users } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Timer, Trophy, Users } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { aptitudeTestSummary, getAptitudeTestForEditing, listInvitationsPaginated } from "@/lib/modules/aptitude/server";
 import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
 import {
-  closeAptitudeTestAction,
-  deleteAptitudeTestAction,
-  inviteManyByEmailAction,
-  inviteToAptitudeTestAction,
-  publishAptitudeTestAction,
   resendInvitationAction,
   revokeInvitationAction,
-  updatePublicLinkAction,
 } from "@/lib/modules/aptitude/actions";
-import { AptitudeTestLifecycle } from "@/components/admin/aptitude-test-lifecycle";
-import { AptitudeInviteDialog } from "@/components/admin/aptitude-invite-dialog";
-import { AptitudePublicLinkDialog } from "@/components/admin/aptitude-public-link-dialog";
+import { AptitudeTestActions } from "@/components/admin/aptitude-test-actions";
 import { AptitudeResponsesTable } from "@/components/admin/aptitude-responses-table";
-import { CopyPublicLinkButton } from "@/components/admin/copy-public-link-button";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { StatCard } from "@/components/admin/stat-card";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getEnv } from "@/lib/platform/env";
 
@@ -99,41 +89,10 @@ export default async function AptitudeTestPage({
         </div>
 
         {canWrite && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/admin/aptitude-tests/${test.id}/edit`}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              <Pencil className="size-3.5" />
-              Edit test
-            </Link>
-
-            {test.publicLinkEnabled && publicLinkUrl && (
-              <CopyPublicLinkButton url={publicLinkUrl} />
-            )}
-
-            <AptitudePublicLinkDialog
-              action={updatePublicLinkAction.bind(null, test.id)}
-              linkUrl={publicLinkUrl}
-              values={{
-                enabled: test.publicLinkEnabled,
-                nameMode: test.publicLinkNameMode,
-                emailMode: test.publicLinkEmailMode,
-              }}
-            />
-
-            <AptitudeInviteDialog
-              inviteAction={inviteToAptitudeTestAction.bind(null, test.id)}
-              inviteManyAction={inviteManyByEmailAction.bind(null, test.id)}
-            />
-
-            <AptitudeTestLifecycle
-              status={test.status}
-              publishAction={publishAptitudeTestAction.bind(null, test.id)}
-              closeAction={closeAptitudeTestAction.bind(null, test.id)}
-              deleteAction={deleteAptitudeTestAction.bind(null, test.id)}
-            />
-          </div>
+          <AptitudeTestActions
+            test={test}
+            publicLinkUrl={publicLinkUrl}
+          />
         )}
       </div>
 

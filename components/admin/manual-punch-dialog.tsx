@@ -44,14 +44,23 @@ export function ManualPunchDialog({
   branches,
   defaultDate,
   defaultBranchId,
+  trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   employees: EmployeeOption[];
   branches: { id: string; name: string }[];
   defaultDate: string;
   defaultBranchId?: string;
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
+
   const [employeeId, setEmployeeId] = useState("");
   const [branchId, setBranchId] = useState(defaultBranchId ?? "");
   const [reason, setReason] = useState<string>("DEVICE_OFFLINE");
@@ -91,7 +100,7 @@ export function ManualPunchDialog({
     } else if (state?.error) {
       toast.error(state.error);
     }
-  }, [state, router]);
+  }, [state, router, setOpen]);
 
   // Reset on open
   function handleOpenChange(nextOpen: boolean) {
@@ -106,14 +115,18 @@ export function ManualPunchDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        render={
-          <Button size="sm" className="gap-1.5">
-            <Plus className="size-4" />
-            Record punch
-          </Button>
-        }
-      />
+      {trigger !== null && (
+        <DialogTrigger
+          render={
+            (trigger as React.ReactElement) || (
+              <Button size="sm" className="gap-1.5">
+                <Plus className="size-4" />
+                Record punch
+              </Button>
+            )
+          }
+        />
+      )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

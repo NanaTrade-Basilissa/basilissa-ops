@@ -1,55 +1,68 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { RotateCcw, Search } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-type FilterOption = { id: string; label: string };
+export interface FilterOption {
+  value: string;
+  label: string;
+}
 
-const FILTER_KEYS = ["branchId", "status", "search"];
-const STATUS_OPTIONS = [
-  { value: "ACTIVE", label: "Active" },
-  { value: "SUSPENDED", label: "Suspended" },
-  { value: "TERMINATED", label: "Terminated" },
-];
-
-export function EmployeeFilters({
-  branches,
+export function JobsFilters({
+  basePath = "/admin/jobs",
+  statusOptions,
+  typeOptions,
   actionSlot,
 }: {
-  branches: FilterOption[];
+  basePath?: string;
+  statusOptions: FilterOption[];
+  typeOptions: FilterOption[];
   actionSlot?: React.ReactNode;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
 
+  const activeStatus = searchParams.get("status") ?? "ALL";
+  const activeType = searchParams.get("type") ?? "ALL";
+
   function setParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (value) {
+    if (value && value !== "ALL") {
       params.set(key, value);
     } else {
       params.delete(key);
     }
     params.delete("page");
-    router.push(`${pathname}?${params.toString()}`);
+    const qs = params.toString();
+    router.push(qs ? `${basePath}?${qs}` : basePath);
   }
 
-  // Debounced: a search box that navigates on every keystroke lags and
-  // spams history, unlike the selects below which act instantly.
   useEffect(() => {
     const current = searchParams.get("search") ?? "";
     if (search === current) return;
-    const timeout = setTimeout(() => setParam("search", search), 400);
+    const timeout = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (search.trim()) {
+        params.set("search", search.trim());
+      } else {
+        params.delete("search");
+      }
+      params.delete("page");
+      const qs = params.toString();
+      router.push(qs ? `${basePath}?${qs}` : basePath);
+    }, 400);
     return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, searchParams, basePath, router]);
 
-  const hasFilters = FILTER_KEYS.some((key) => searchParams.get(key));
+  const hasFilters =
+    Boolean(searchParams.get("search")) ||
+    (activeStatus !== "ALL" && Boolean(searchParams.get("status"))) ||
+    (activeType !== "ALL" && Boolean(searchParams.get("type")));
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -57,8 +70,8 @@ export function EmployeeFilters({
         <div className="relative w-full sm:w-64 md:w-72 shrink-0">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
-            id="filter-search"
-            placeholder="Search name, code, email..."
+            id="job-search"
+            placeholder="Search by ID, type, or error..."
             className="pl-8 h-9 text-xs"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -66,29 +79,27 @@ export function EmployeeFilters({
         </div>
 
         <NativeSelect
-          id="filter-branch"
-          value={searchParams.get("branchId") ?? ""}
-          onChange={(e) => setParam("branchId", e.target.value)}
-          className="h-9 w-auto min-w-[140px] text-xs"
+          id="job-status"
+          value={activeStatus}
+          onChange={(e) => setParam("status", e.target.value)}
+          className="h-9 w-auto min-w-[130px] text-xs"
         >
-          <option value="">All branches</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.label}
+          {statusOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
             </option>
           ))}
         </NativeSelect>
 
         <NativeSelect
-          id="filter-status"
-          value={searchParams.get("status") ?? ""}
-          onChange={(e) => setParam("status", e.target.value)}
-          className="h-9 w-auto min-w-[130px] text-xs"
+          id="job-type"
+          value={activeType}
+          onChange={(e) => setParam("type", e.target.value)}
+          className="h-9 w-auto min-w-[140px] text-xs"
         >
-          <option value="">All statuses</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
+          {typeOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
             </option>
           ))}
         </NativeSelect>
@@ -100,7 +111,7 @@ export function EmployeeFilters({
             size="sm"
             onClick={() => {
               setSearch("");
-              router.push(pathname);
+              router.push(basePath);
             }}
             className="h-9 gap-1.5 text-xs"
             title="Reset filters"

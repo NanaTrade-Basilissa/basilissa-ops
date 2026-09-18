@@ -106,7 +106,7 @@ export function AttendancePolicyForm({
   }, [state, branchName]);
 
   return (
-    <form action={formAction} className="max-w-2xl space-y-8" noValidate>
+    <form action={formAction} className="w-full space-y-8" noValidate>
       <input type="hidden" name="branchId" value={branchId ?? ""} />
       {/*
         The most important thing on this page. A placeholder nobody revisits

@@ -7,13 +7,28 @@ import { cn } from "@/lib/utils";
  * accessible out of the box, work great on mobile (the OS picker), and
  * need no extra dependency.
  */
+export type NativeSelectProps = React.ComponentProps<"select"> & {
+  containerClassName?: string;
+};
+
 function NativeSelect({
   className,
+  containerClassName,
   children,
   ...props
-}: React.ComponentProps<"select">) {
+}: NativeSelectProps) {
+  // If caller specified custom width (e.g. w-auto, w-fit, w-*, min-w-*), size wrapper to match
+  const isExplicitWidth =
+    className && (/\bw-(?!full\b)/.test(className) || /\bmin-w-/.test(className));
+
   return (
-    <div className="relative w-full min-w-0">
+    <div
+      className={cn(
+        "relative min-w-0",
+        isExplicitWidth ? "w-fit inline-block shrink-0" : "w-full",
+        containerClassName,
+      )}
+    >
       <select
         data-slot="native-select"
         className={cn(
@@ -26,7 +41,7 @@ function NativeSelect({
       </select>
       <ChevronDown
         aria-hidden
-        className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2"
+        className="text-muted-foreground pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2"
       />
     </div>
   );

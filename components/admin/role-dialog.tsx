@@ -129,9 +129,9 @@ export function RoleDialog({
       ) : controlledOpen === undefined ? (
         <DialogTrigger
           render={
-            <Button size="sm">
-              <Plus className="size-4 mr-1.5" />
-              Create role
+            <Button size="sm" className="gap-1.5">
+              <Plus className="size-4 shrink-0" />
+              <span className="hidden sm:inline">Create role</span>
             </Button>
           }
         />

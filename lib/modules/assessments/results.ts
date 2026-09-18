@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma, AssessmentStatus } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 
 /**
@@ -23,10 +24,19 @@ export async function listAssessments() {
   });
 }
 
-export async function listAssessmentsPaginated(params?: { page?: number; pageSize?: number }) {
+export async function listAssessmentsPaginated(params?: {
+  search?: string;
+  status?: AssessmentStatus;
+  page?: number;
+  pageSize?: number;
+}) {
   const page = Math.max(1, params?.page ?? 1);
   const pageSize = params?.pageSize ?? 10;
-  const where = { deletedAt: null };
+  const where: Prisma.AssessmentWhereInput = {
+    deletedAt: null,
+    ...(params?.status ? { status: params.status } : {}),
+    ...(params?.search ? { title: { contains: params.search, mode: "insensitive" } } : {}),
+  };
 
   const [assessments, total] = await Promise.all([
     prisma.assessment.findMany({

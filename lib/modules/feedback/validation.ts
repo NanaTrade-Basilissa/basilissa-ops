@@ -51,6 +51,7 @@ export type DashboardFilterInput = z.infer<typeof dashboardFilterSchema>;
 // ---------------------------------------------------------------------------
 
 export const feedbackListFilterSchema = z.object({
+  search: z.string().optional(),
   branchId: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),

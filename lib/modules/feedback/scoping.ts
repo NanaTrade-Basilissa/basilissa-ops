@@ -10,6 +10,7 @@ export type FeedbackListFilters = {
   rating?: number;
   from?: Date;
   to?: Date;
+  search?: string;
 };
 
 /**
@@ -46,6 +47,14 @@ export function feedbackListWhere(
       break;
   }
 
+  if (filters.search) {
+    clauses.push({
+      OR: [
+        { id: { contains: filters.search, mode: "insensitive" } },
+        { branch: { name: { contains: filters.search, mode: "insensitive" } } },
+      ],
+    });
+  }
   if (filters.branchId) clauses.push({ branchId: filters.branchId });
   if (filters.rating !== undefined) {
     clauses.push({

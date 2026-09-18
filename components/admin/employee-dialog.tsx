@@ -16,15 +16,21 @@ import {
 export function EmployeeDialog({
   action,
   trigger,
+  open: controlledOpen,
+  onOpenChange: setControlledOpen,
 }: {
   action: (prevState: FormState, formData: FormData) => Promise<FormState>;
-  trigger: React.ReactElement;
+  trigger?: React.ReactElement | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = setControlledOpen ?? setInternalOpen;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger} />
+      {trigger && <DialogTrigger render={trigger} />}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add employee</DialogTitle>

@@ -1,10 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
-import { UserCheck } from "lucide-react";
-import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 
 export type EmployeeRow = {
@@ -29,22 +28,14 @@ const columns = columnHelper.columns([
     id: "name",
     header: "Name",
     cell: ({ row }) => (
-      <>
-        <EmployeeDetailSheet
-          employeeId={row.original.id}
-          trigger={
-            <button
-              type="button"
-              className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
-            >
-              {row.original.firstName} {row.original.lastName}
-            </button>
-          }
-        />
+      <div>
+        <span className="font-medium text-foreground underline-offset-4 hover:underline">
+          {row.original.firstName} {row.original.lastName}
+        </span>
         {row.original.jobTitle && (
           <span className="block text-xs text-muted-foreground">{row.original.jobTitle}</span>
         )}
-      </>
+      </div>
     ),
   }),
   columnHelper.accessor("email", {
@@ -73,30 +64,26 @@ const columns = columnHelper.columns([
       <Badge variant={info.getValue() === "ACTIVE" ? "default" : "outline"}>{info.getValue().toLowerCase()}</Badge>
     ),
   }),
-  columnHelper.display({
-    id: "actions",
-    header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
-    cell: ({ row }) => (
-      <TableRowActions
-        actions={[
-          {
-            id: "profile",
-            label: "View profile",
-            icon: UserCheck,
-            dialog: (props) => (
-              <EmployeeDetailSheet
-                employeeId={row.original.id}
-                open={props.open}
-                onOpenChange={props.onOpenChange}
-              />
-            ),
-          },
-        ]}
-      />
-    ),
-  }),
 ]);
 
 export function EmployeesTable({ employees }: { employees: EmployeeRow[] }) {
-  return <DataTable columns={columns} data={employees} emptyMessage="No employees match the selected filters." />;
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+
+  return (
+    <>
+      <DataTable
+        columns={columns}
+        data={employees}
+        onRowClick={(row) => setSelectedEmployeeId(row.id)}
+        emptyMessage="No employees match the selected filters."
+      />
+      <EmployeeDetailSheet
+        employeeId={selectedEmployeeId}
+        open={selectedEmployeeId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedEmployeeId(null);
+        }}
+      />
+    </>
+  );
 }

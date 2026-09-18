@@ -51,26 +51,6 @@ export default async function BranchesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Branches</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Physical locations and QR codes.</p>
-        </div>
-        {canCreate && (
-          <BranchDialog
-            action={createBranch}
-            submitLabel="Create branch"
-            title="Create a branch"
-            description="New branches start out active and accept feedback immediately."
-            trigger={
-              <Button>
-                <Plus className="size-4" /> New branch
-              </Button>
-            }
-          />
-        )}
-      </div>
-
       <BranchesTable
         branches={branches.map((branch) => ({
           id: branch.id,
@@ -86,6 +66,22 @@ export default async function BranchesPage() {
           _count: branch._count,
           avgScore: avgByBranch.get(branch.id) ?? null,
         }))}
+        actionSlot={
+          canCreate ? (
+            <BranchDialog
+              action={createBranch}
+              submitLabel="Create branch"
+              title="Create a branch"
+              description="New branches start out active and accept feedback immediately."
+              trigger={
+                <Button size="sm" className="h-9 gap-1.5 text-xs">
+                  <Plus className="size-4" />
+                  <span className="hidden sm:inline">New branch</span>
+                </Button>
+              }
+            />
+          ) : undefined
+        }
       />
     </div>
   );

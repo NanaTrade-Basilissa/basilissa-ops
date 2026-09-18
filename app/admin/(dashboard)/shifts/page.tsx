@@ -7,7 +7,7 @@ import { getWeeklyBranchSchedule, listShifts } from "@/lib/modules/employees/ser
 import { minutesToTime } from "@/lib/modules/employees/validation";
 import { prisma } from "@/lib/platform/prisma";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { ShiftDialog } from "@/components/admin/shift-dialog";
 import { ShiftsTable } from "@/components/admin/shifts-table";
 import { WeeklyScheduleGrid } from "@/components/admin/weekly-schedule-grid";
@@ -79,35 +79,6 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">
-            {activeTab === "schedule" ? "Weekly Schedule" : "Shift Templates"}
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {activeTab === "schedule"
-              ? "Weekly rotas, shift coverage, and staff assignments."
-              : "Reusable shift patterns and templates."}
-          </p>
-        </div>
-        {activeTab === "templates" && canCreate && (
-          <ShiftDialog
-            action={createShift}
-            branches={assignableBranches}
-            allowGlobal={allowGlobal}
-            submitLabel="Create shift"
-            title="New shift"
-            description="Reusable templates, resolved against each branch's timezone."
-            trigger={
-              <Button>
-                <Plus className="size-4" />
-                New shift
-              </Button>
-            }
-          />
-        )}
-      </div>
-
       {/* Tab switcher */}
       <div className="flex border-b border-border">
         <Link
@@ -239,11 +210,47 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
               Without a shift template, attendance is recorded but flagged unscheduled with nothing to measure lateness or overtime against.
             </EmptyDescription>
           </EmptyHeader>
+          {canCreate && (
+            <EmptyContent>
+              <ShiftDialog
+                action={createShift}
+                branches={assignableBranches}
+                allowGlobal={allowGlobal}
+                submitLabel="Create shift"
+                title="New shift"
+                description="Reusable templates, resolved against each branch's timezone."
+                trigger={
+                  <Button size="sm" className="h-9 gap-1.5 text-xs">
+                    <Plus className="size-4" />
+                    New shift
+                  </Button>
+                }
+              />
+            </EmptyContent>
+          )}
         </Empty>
       ) : (
         <ShiftsTable
           branches={assignableBranches}
           allowGlobal={allowGlobal}
+          actionSlot={
+            canCreate ? (
+              <ShiftDialog
+                action={createShift}
+                branches={assignableBranches}
+                allowGlobal={allowGlobal}
+                submitLabel="Create shift"
+                title="New shift"
+                description="Reusable templates, resolved against each branch's timezone."
+                trigger={
+                  <Button size="sm" className="h-9 gap-1.5 text-xs">
+                    <Plus className="size-4" />
+                    <span className="hidden sm:inline">New shift</span>
+                  </Button>
+                }
+              />
+            ) : undefined
+          }
           shifts={shifts.map((shift) => ({
             id: shift.id,
             name: shift.name,

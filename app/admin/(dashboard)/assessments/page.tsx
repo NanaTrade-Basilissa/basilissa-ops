@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ClipboardCheck, Plus } from "lucide-react";
+import type { AssessmentStatus } from "@prisma/client";
 import { can, requirePermission } from "@/lib/modules/identity/server";
 import { listAssessmentsPaginated } from "@/lib/modules/assessments/server";
 import { createAssessmentAction } from "@/lib/modules/assessments/actions";
 import { AssessmentCreateDialog } from "@/components/admin/assessment-create-dialog";
 import { AssessmentsTable } from "@/components/admin/assessments-table";
+import { TestFilters } from "@/components/admin/test-filters";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -24,14 +27,26 @@ export default async function AssessmentsPage({ searchParams }: { searchParams: 
 
   const rawParams = await searchParams;
   const page = Number(first(rawParams.page)) || 1;
+  const search = first(rawParams.search) || undefined;
+  const status = (first(rawParams.status) as AssessmentStatus) || undefined;
 
-  const { assessments, total, totalPages, pageSize } = await listAssessmentsPaginated({ page, pageSize: 10 });
+  const { assessments, total, totalPages, pageSize } = await listAssessmentsPaginated({
+    search,
+    status,
+    page,
+    pageSize: 10,
+  });
 
   function pageHref(targetPage: number) {
-    return targetPage === 1
-      ? "/admin/assessments"
-      : `/admin/assessments?page=${targetPage}`;
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (status) params.set("status", status);
+    if (targetPage !== 1) params.set("page", String(targetPage));
+    const qs = params.toString();
+    return qs ? `/admin/assessments?${qs}` : "/admin/assessments";
   }
+
+  const hasFilters = Boolean(search || status);
 
   return (
     <div className="space-y-6">
@@ -48,7 +63,8 @@ export default async function AssessmentsPage({ searchParams }: { searchParams: 
               action={createAssessmentAction}
               trigger={
                 <Button size="sm">
-                  <Plus className="size-4" /> New assessment
+                  <Plus className="size-4" />
+                  <span className="hidden sm:inline">New assessment</span>
                 </Button>
               }
             />
@@ -56,14 +72,22 @@ export default async function AssessmentsPage({ searchParams }: { searchParams: 
         </div>
       </div>
 
+      <Suspense fallback={<div className="h-9" />}>
+        <TestFilters searchPlaceholder="Search assessment title..." />
+      </Suspense>
+
       {assessments.length === 0 ? (
         <Empty className="border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <ClipboardCheck />
             </EmptyMedia>
-            <EmptyTitle>Nothing here yet</EmptyTitle>
-            <EmptyDescription className="text-xs">Create an assessment to get started.</EmptyDescription>
+            <EmptyTitle>{hasFilters ? "No assessments found" : "Nothing here yet"}</EmptyTitle>
+            <EmptyDescription className="text-xs">
+              {hasFilters
+                ? "Try adjusting your search or filter criteria."
+                : "Create an assessment to get started."}
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (

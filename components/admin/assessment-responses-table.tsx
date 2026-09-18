@@ -2,10 +2,11 @@
 
 import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, Copy, ExternalLink, Loader2, RotateCw, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import type { AssessmentFormState, InviteState } from "@/lib/modules/assessments/actions";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -20,7 +21,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { formatAccraDateTime } from "@/lib/platform/date";
 
@@ -67,6 +67,7 @@ export function AssessmentResponsesTable({
   resendAction: (prev: InviteState, formData: FormData) => Promise<InviteState>;
   revokeAction: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
 }) {
+  const router = useRouter();
   const [resendState, resend, resending] = useActionState<InviteState, FormData>(resendAction, undefined);
   const [revokeState, revoke, revoking] = useActionState<AssessmentFormState, FormData>(revokeAction, undefined);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -169,7 +170,18 @@ export function AssessmentResponsesTable({
                 const canModify = canWrite && !isFinished && !isRevoked;
 
                 return (
-                  <TableRow key={invitation.id}>
+                  <TableRow
+                    key={invitation.id}
+                    className={isFinished ? "cursor-pointer hover:bg-muted/40 transition-colors" : undefined}
+                    onClick={(e) => {
+                      if (!isFinished) return;
+                      const target = e.target as HTMLElement | null;
+                      if (target?.closest("button, a, input, select, textarea, [role='menuitem'], [role='button']")) {
+                        return;
+                      }
+                      router.push(`/admin/assessments/${assessmentId}/responses/${response.id}`);
+                    }}
+                  >
                     <TableCell className="font-medium">
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5">

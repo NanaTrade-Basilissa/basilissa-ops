@@ -11,6 +11,7 @@ import {
 import { StatCard } from "@/components/admin/stat-card";
 import { buttonVariants } from "@/components/ui/button";
 import { EmailQueueTable } from "@/components/admin/email-queue-table";
+import { JobsFilters } from "@/components/admin/jobs-filters";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +37,7 @@ const TYPE_FILTERS = [
 export default async function EmailQueuePage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; type?: string; page?: string; pageSize?: string }>;
+  searchParams: Promise<{ status?: string; type?: string; search?: string; page?: string; pageSize?: string }>;
 }) {
   // Super Admin only: non-super-admins redirect to /admin?denied=1
   const actor = await requirePermission("email_queue:read");
@@ -56,6 +57,7 @@ export default async function EmailQueuePage({
     ? params.type
     : "ALL";
 
+  const activeSearch = params.search || "";
   const rawPageSize = parseInt(params.pageSize ?? "10", 10);
   const pageSize = [10, 20, 50].includes(rawPageSize) ? rawPageSize : 10;
   const currentPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
@@ -65,20 +67,23 @@ export default async function EmailQueuePage({
     listEmailJobs({
       status: activeStatus,
       type: activeType,
+      search: activeSearch,
       page: currentPage,
       pageSize,
     }),
   ]);
 
-  const makeFilterUrl = (newParams: { status?: string; type?: string; page?: number; pageSize?: number }) => {
+  const makeFilterUrl = (newParams: { status?: string; type?: string; search?: string; page?: number; pageSize?: number }) => {
     const sp = new URLSearchParams();
     const s = newParams.status !== undefined ? newParams.status : activeStatus;
     const t = newParams.type !== undefined ? newParams.type : activeType;
+    const q = newParams.search !== undefined ? newParams.search : activeSearch;
     const p = newParams.page !== undefined ? newParams.page : currentPage;
     const ps = newParams.pageSize !== undefined ? newParams.pageSize : pageSize;
 
     if (s && s !== "ALL") sp.set("status", s);
     if (t && t !== "ALL") sp.set("type", t);
+    if (q) sp.set("search", q);
     if (ps && ps !== 10) sp.set("pageSize", String(ps));
     if (p > 1) sp.set("page", String(p));
 
@@ -139,54 +144,11 @@ export default async function EmailQueuePage({
       </div>
 
       {/* Filter Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
-        {/* Status Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {STATUS_FILTERS.map((f) => {
-            const isActive = activeStatus === f.id;
-            return (
-              <Link
-                key={f.id}
-                href={makeFilterUrl({ status: f.id, page: 1 })}
-                className={cn(
-                  buttonVariants({
-                    variant: isActive ? "default" : "ghost",
-                    size: "sm",
-                  }),
-                  "h-8 text-xs font-medium",
-                )}
-              >
-                {f.label}
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Type Filter Select */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Type:</span>
-          <div className="flex flex-wrap gap-1">
-            {TYPE_FILTERS.map((t) => {
-              const isActive = activeType === t.id;
-              return (
-                <Link
-                  key={t.id}
-                  href={makeFilterUrl({ type: t.id, page: 1 })}
-                  className={cn(
-                    buttonVariants({
-                      variant: isActive ? "secondary" : "outline",
-                      size: "sm",
-                    }),
-                    "h-7 px-2.5 text-xs",
-                  )}
-                >
-                  {t.label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      <JobsFilters
+        basePath="/admin/email-queue"
+        statusOptions={STATUS_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
+        typeOptions={TYPE_FILTERS.map((t) => ({ value: t.id, label: t.label }))}
+      />
 
       {/* Table */}
       <EmailQueueTable jobs={result.jobs} canManage={canManage} />

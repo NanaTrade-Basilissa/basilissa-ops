@@ -131,7 +131,7 @@ export async function requireMfaIfNeeded(actor: Actor): Promise<void> {
   if (!needsMfa) return;
 
   if (!(await hasMfaEnabled(actor.userId))) {
-    redirect("/admin/security?enrol=required");
+    redirect("/admin/settings?enrol=required");
   }
 }
 

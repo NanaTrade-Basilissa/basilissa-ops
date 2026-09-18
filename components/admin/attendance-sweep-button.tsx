@@ -17,8 +17,18 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export function AttendanceSweepButton() {
-  const [open, setOpen] = useState(false);
+export function AttendanceSweepButton({
+  trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: {
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [isPending, startTransition] = useTransition();
 
   const handleSweep = () => {
@@ -37,14 +47,18 @@ export function AttendanceSweepButton() {
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger
-        render={
-          <Button size="sm" variant="outline" className="gap-1.5 text-xs">
-            <ClockAlert className="size-3.5 text-purple-600 dark:text-purple-400" />
-            Auto-close sweep
-          </Button>
-        }
-      />
+      {trigger !== null && (
+        <AlertDialogTrigger
+          render={
+            (trigger as React.ReactElement) || (
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+                <ClockAlert className="size-3.5 text-purple-600 dark:text-purple-400" />
+                Auto-close sweep
+              </Button>
+            )
+          }
+        />
+      )}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Run shift auto-close sweep?</AlertDialogTitle>

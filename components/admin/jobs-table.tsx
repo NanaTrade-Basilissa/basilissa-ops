@@ -31,7 +31,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
@@ -273,12 +272,6 @@ export function JobsTable({
             return (
               <TableRowActions
                 actions={[
-                  {
-                    id: "payload",
-                    label: "Inspect payload",
-                    icon: Code2,
-                    onClick: () => setSelectedPayloadJob(job),
-                  },
                   Boolean(job.lastError) && {
                     id: "error",
                     label: "Error details",
@@ -342,6 +335,7 @@ export function JobsTable({
       <DataTable
         columns={columns}
         data={jobs}
+        onRowClick={(row) => setSelectedPayloadJob(row)}
         emptyMessage="No background jobs found matching the active filters."
       />
 

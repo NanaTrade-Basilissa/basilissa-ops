@@ -22,12 +22,18 @@ export function AptitudeInviteDialog({
   inviteAction,
   inviteManyAction,
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   inviteAction: (prev: InviteState, formData: FormData) => Promise<InviteState>;
   inviteManyAction: (prev: BulkInviteState, formData: FormData) => Promise<BulkInviteState>;
-  trigger?: React.ReactElement;
+  trigger?: React.ReactElement | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [mode, setMode] = useState<"one" | "many">("one");
   const [copied, setCopied] = useState(false);
 
@@ -74,16 +80,18 @@ export function AptitudeInviteDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          trigger ?? (
-            <Button size="sm" className="gap-1.5 h-9">
-              <UserPlus className="size-4" />
-              Invite candidates
-            </Button>
-          )
-        }
-      />
+      {trigger !== null && (
+        <DialogTrigger
+          render={
+            trigger ?? (
+              <Button size="sm" className="gap-1.5 h-9">
+                <UserPlus className="size-4" />
+                Invite candidates
+              </Button>
+            )
+          }
+        />
+      )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

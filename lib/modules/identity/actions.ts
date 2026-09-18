@@ -157,10 +157,10 @@ export async function login(
   const roles = user.roleAssignments.map((ra) => ra.role);
   if (!userHasMfa) {
     if (requiresMfa(roles)) {
-      redirect("/admin/security?enrol=required");
+      redirect("/admin/settings?enrol=required");
     }
     if (recommendsMfa(roles)) {
-      redirect("/admin/security?enrol=suggested");
+      redirect("/admin/settings?enrol=suggested");
     }
   }
 
@@ -317,6 +317,7 @@ export async function confirmMfa(
     };
   }
 
+  revalidatePath("/admin/settings");
   revalidatePath("/admin/security");
   return { step: "confirmed", recoveryCodes: result.recoveryCodes };
 }

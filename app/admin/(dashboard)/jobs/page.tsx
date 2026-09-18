@@ -18,8 +18,8 @@ import {
 import { StatCard } from "@/components/admin/stat-card";
 import { buttonVariants } from "@/components/ui/button";
 import { JobsTable } from "@/components/admin/jobs-table";
+import { JobsFilters } from "@/components/admin/jobs-filters";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Background Jobs" };
@@ -161,98 +161,14 @@ export default async function BackgroundJobsPage({
       </div>
 
       {/* Filter Toolbar */}
-      <div className="flex flex-col gap-4 border-b border-border pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Status Filter Tabs */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {STATUS_FILTERS.map((f) => {
-              const isActive = activeStatus === f.id;
-              return (
-                <Link
-                  key={f.id}
-                  href={makeFilterUrl({ status: f.id, page: 1 })}
-                  className={cn(
-                    buttonVariants({
-                      variant: isActive ? "default" : "ghost",
-                      size: "sm",
-                    }),
-                    "h-8 text-xs font-medium",
-                  )}
-                >
-                  {f.label}
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Search Input */}
-          <form
-            action="/admin/jobs"
-            method="GET"
-            className="flex items-center gap-2 max-w-sm w-full sm:w-auto"
-          >
-            {activeStatus !== "ALL" && (
-              <input type="hidden" name="status" value={activeStatus} />
-            )}
-            {activeType !== "ALL" && (
-              <input type="hidden" name="type" value={activeType} />
-            )}
-            <Input
-              name="search"
-              placeholder="Search by ID, type, or error..."
-              defaultValue={activeSearch}
-              className="h-8 text-xs w-full sm:w-64"
-            />
-            {activeSearch && (
-              <Link
-                href={makeFilterUrl({ search: "", page: 1 })}
-                className="text-xs text-muted-foreground hover:text-foreground underline"
-              >
-                Clear
-              </Link>
-            )}
-          </form>
-        </div>
-
-        {/* Distinct Type Filters */}
-        {result.availableTypes.length > 0 && (
-          <div className="flex items-center gap-2 pt-1 overflow-x-auto pb-1 text-xs">
-            <span className="font-medium text-muted-foreground shrink-0">Job Type:</span>
-            <div className="flex flex-wrap gap-1">
-              <Link
-                href={makeFilterUrl({ type: "ALL", page: 1 })}
-                className={cn(
-                  buttonVariants({
-                    variant: activeType === "ALL" ? "secondary" : "outline",
-                    size: "sm",
-                  }),
-                  "h-7 px-2.5 text-xs",
-                )}
-              >
-                All ({result.total})
-              </Link>
-              {result.availableTypes.map((t) => {
-                const isActive = activeType === t;
-                return (
-                  <Link
-                    key={t}
-                    href={makeFilterUrl({ type: t, page: 1 })}
-                    className={cn(
-                      buttonVariants({
-                        variant: isActive ? "secondary" : "outline",
-                        size: "sm",
-                      }),
-                      "h-7 px-2.5 text-xs font-mono",
-                    )}
-                  >
-                    {t}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
+      <JobsFilters
+        basePath="/admin/jobs"
+        statusOptions={STATUS_FILTERS.map((f) => ({ value: f.id, label: f.label }))}
+        typeOptions={[
+          { value: "ALL", label: `All types (${result.total})` },
+          ...result.availableTypes.map((t) => ({ value: t, label: t })),
+        ]}
+      />
 
       {/* Physical Jobs Table */}
       <JobsTable jobs={result.jobs} canManage={canManage} />

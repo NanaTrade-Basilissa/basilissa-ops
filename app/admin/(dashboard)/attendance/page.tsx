@@ -16,6 +16,8 @@ import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { StatCard } from "@/components/admin/stat-card";
 import { AttendanceTabs, type AttendanceView } from "@/components/admin/attendance-tabs";
+import { AttendanceTopActions } from "@/components/admin/attendance-top-actions";
+import type { EmployeeOption } from "@/components/admin/manual-punch-dialog";
 import { AttendanceFilters } from "@/components/admin/attendance-filters";
 import { AttendanceTable } from "@/components/admin/attendance-table";
 import { LiveFloorBoard } from "@/components/admin/live-floor-board";
@@ -24,9 +26,6 @@ import { TimesheetsTable } from "@/components/admin/timesheets-table";
 import { ExceptionsFilters } from "@/components/admin/exceptions-filters";
 import { ExceptionsTable } from "@/components/admin/exceptions-table";
 import { LeaveRequestsTable, type SerializedLeaveRequest } from "@/components/admin/leave-requests-table";
-import { ManualPunchDialog, type EmployeeOption } from "@/components/admin/manual-punch-dialog";
-import { MobileClockInDialog } from "@/components/admin/mobile-clock-in-dialog";
-import { AttendanceSweepButton } from "@/components/admin/attendance-sweep-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 
@@ -136,47 +135,28 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
 
   return (
     <div className="space-y-6 min-w-0 max-w-full">
-      {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="font-heading text-2xl font-bold text-foreground">Attendance Hub</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Daily logs, live roster, and timesheets.
-          </p>
+      {/* Tabs & Top Actions Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 border-b border-border">
+        <div className="min-w-0 flex-1">
+          <AttendanceTabs
+            activeView={view}
+            branchId={branchId}
+            date={date}
+            exceptionsCount={exceptionsCount}
+            leaveRequestsCount={pendingLeaveCount}
+          />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canWrite && <AttendanceSweepButton />}
-          {canManualEntry && (
-            <>
-              <MobileClockInDialog
-                employees={employeeOptions.map((e) => ({
-                  id: e.id,
-                  name: e.name,
-                  employeeCode: e.employeeCode,
-                  branchIds: e.branchAssignments.map((ba) => ba.branchId),
-                }))}
-                branches={branches}
-                defaultBranchId={defaultBranchId}
-              />
-              <ManualPunchDialog
-                employees={employeeOptions}
-                branches={branches}
-                defaultDate={date}
-                defaultBranchId={defaultBranchId}
-              />
-            </>
-          )}
+        <div className="shrink-0 pb-2">
+          <AttendanceTopActions
+            canManualEntry={canManualEntry}
+            canWrite={canWrite}
+            employees={employeeOptions}
+            branches={branches}
+            defaultBranchId={defaultBranchId}
+            date={date}
+          />
         </div>
       </div>
-
-      {/* Tabs */}
-      <AttendanceTabs
-        activeView={view}
-        branchId={branchId}
-        date={date}
-        exceptionsCount={exceptionsCount}
-        leaveRequestsCount={pendingLeaveCount}
-      />
 
       {/* View 1: Daily Roster */}
       {view === "daily" && (

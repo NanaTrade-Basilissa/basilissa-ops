@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
-import { UserPlus, Upload, SearchX, RotateCcw } from "lucide-react";
+import { SearchX, RotateCcw } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { countEmployees, listEmployees } from "@/lib/modules/employees/server";
-import { createEmployee } from "@/lib/modules/employees/actions";
 import { employeeListFilterSchema } from "@/lib/modules/employees/validation";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Empty,
   EmptyContent,
@@ -17,7 +16,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { EmployeeFilters } from "@/components/admin/employee-filters";
-import { EmployeeDialog } from "@/components/admin/employee-dialog";
+import { EmployeeTopActions } from "@/components/admin/employee-top-actions";
 import { EmployeesTable } from "@/components/admin/employees-table";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 
@@ -67,36 +66,15 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
     return qs ? `/admin/employees?${qs}` : "/admin/employees";
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Employees</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Staff records and branch assignments.
-          </p>
-        </div>
-        {can(actor, "employees:create") && (
-          <div className="flex gap-2">
-            <Link href="/admin/employees/import" className={buttonVariants({ variant: "outline" })}>
-              <Upload className="size-4" />
-              Import
-            </Link>
-            <EmployeeDialog
-              action={createEmployee}
-              trigger={
-                <Button>
-                  <UserPlus className="size-4" />
-                  Add employee
-                </Button>
-              }
-            />
-          </div>
-        )}
-      </div>
+  const actionSlot = <EmployeeTopActions canCreate={can(actor, "employees:create")} />;
 
-      <Suspense fallback={<div className="h-[74px]" />}>
-        <EmployeeFilters branches={branches.map((b) => ({ id: b.id, label: b.name }))} />
+  return (
+    <div className="space-y-4">
+      <Suspense fallback={<div className="h-[46px]" />}>
+        <EmployeeFilters
+          branches={branches.map((b) => ({ id: b.id, label: b.name }))}
+          actionSlot={actionSlot}
+        />
       </Suspense>
 
       {total === 0 ? (
@@ -127,7 +105,13 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
         <EmployeesTable employees={employees} />
       )}
 
-      <DataTablePagination page={page} totalPages={totalPages} total={total} buildHref={pageHref} />
+      <DataTablePagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageSize={PAGE_SIZE}
+        buildHref={pageHref}
+      />
     </div>
   );
 }

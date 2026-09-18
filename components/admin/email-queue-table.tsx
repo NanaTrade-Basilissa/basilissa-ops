@@ -16,7 +16,6 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,8 +25,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { formatAccraDateTime } from "@/lib/platform/date";
 import type { FormattedEmailJob } from "@/lib/modules/identity/constants";
 import {
@@ -47,6 +52,7 @@ export function EmailQueueTable({
 }) {
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
   const [selectedErrorJob, setSelectedErrorJob] = useState<FormattedEmailJob | null>(null);
+  const [selectedEmailJob, setSelectedEmailJob] = useState<FormattedEmailJob | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleRetry = (jobId: string) => {
@@ -281,7 +287,75 @@ export function EmailQueueTable({
 
   return (
     <>
-      <DataTable columns={columns} data={jobs} emptyMessage="No email jobs match this filter." />
+      <DataTable
+        columns={columns}
+        data={jobs}
+        onRowClick={(row) => setSelectedEmailJob(row)}
+        emptyMessage="No email jobs match this filter."
+      />
+
+      {/* Email Details Inspection Dialog */}
+      <Dialog
+        open={selectedEmailJob !== null}
+        onOpenChange={(open) => !open && setSelectedEmailJob(null)}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="size-5 text-primary" />
+              <span>Email Delivery Details</span>
+            </DialogTitle>
+            <DialogDescription>
+              Inspecting delivery metadata for job{" "}
+              <code className="font-mono text-xs text-foreground font-semibold">{selectedEmailJob?.id}</code>
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedEmailJob && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-xs bg-muted/40 p-3 rounded-lg border">
+                <div>
+                  <span className="text-muted-foreground block">Recipient:</span>
+                  <span className="font-medium text-foreground">{selectedEmailJob.recipient}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Type:</span>
+                  <span className="font-medium">{selectedEmailJob.typeLabel}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground block">Subject:</span>
+                  <span className="font-medium text-foreground">{selectedEmailJob.subject}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Status:</span>
+                  <span className="font-medium">{selectedEmailJob.status}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Attempts:</span>
+                  <span>{selectedEmailJob.attempts} / {selectedEmailJob.maxAttempts}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Created:</span>
+                  <span>{formatAccraDateTime(selectedEmailJob.createdAt)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Scheduled:</span>
+                  <span>{formatAccraDateTime(selectedEmailJob.runAt)}</span>
+                </div>
+              </div>
+
+              {selectedEmailJob.lastError && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-destructive">Error Log:</p>
+                  <pre className="max-h-40 overflow-auto rounded-lg bg-slate-950 p-3 text-xs font-mono text-rose-400 border border-border/50 whitespace-pre-wrap break-all">
+                    {selectedEmailJob.lastError}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Error Details Inspection Dialog */}
       <AlertDialog

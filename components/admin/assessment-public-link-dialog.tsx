@@ -30,13 +30,19 @@ export function AssessmentPublicLinkDialog({
   linkUrl,
   values,
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   action: (prev: AssessmentFormState, formData: FormData) => Promise<AssessmentFormState>;
   linkUrl: string | null;
   values: { enabled: boolean; nameMode: IdentityFieldMode; emailMode: IdentityFieldMode };
-  trigger?: React.ReactElement;
+  trigger?: React.ReactElement | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const [state, formAction, isPending] = useActionState<AssessmentFormState, FormData>(action, undefined);
   const [enabled, setEnabled] = useState(values.enabled);
   const [nameMode, setNameMode] = useState(values.nameMode);
@@ -60,7 +66,7 @@ export function AssessmentPublicLinkDialog({
     } else if (state?.error) {
       toast.error(state.error);
     }
-  }, [state]);
+  }, [state, setOpen]);
 
   async function handleCopy() {
     if (!linkUrl) return;
@@ -76,16 +82,18 @@ export function AssessmentPublicLinkDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        render={
-          trigger ?? (
-            <Button variant="outline" size="sm" className="gap-1.5 h-9">
-              <Link2 className="size-4" />
-              {values.enabled ? "Public link settings" : "Configure public link"}
-            </Button>
-          )
-        }
-      />
+      {trigger !== null && (
+        <DialogTrigger
+          render={
+            trigger ?? (
+              <Button variant="outline" size="sm" className="gap-1.5 h-9">
+                <Link2 className="size-4" />
+                {values.enabled ? "Public link settings" : "Configure public link"}
+              </Button>
+            )
+          }
+        />
+      )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
