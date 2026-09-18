@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Breadcrumb,
+  BreadcrumbEllipsis,
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
@@ -63,30 +64,43 @@ export function SiteHeader() {
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b border-border/50 bg-card/90 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
       <div className="flex w-full items-center justify-between px-4 lg:px-6">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4 data-vertical:self-auto" />
-          <Breadcrumb>
+          <Breadcrumb className="min-w-0">
             <BreadcrumbList>
               {crumbs.length <= 1 ? (
                 <BreadcrumbItem>
                   <BreadcrumbPage>Dashboard</BreadcrumbPage>
                 </BreadcrumbItem>
               ) : (
-                crumbs.map((crumb, idx) => (
-                  <React.Fragment key={crumb.href}>
-                    {idx > 0 && <BreadcrumbSeparator />}
-                    <BreadcrumbItem>
-                      {crumb.isLast ? (
-                        <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-                      ) : (
+                <>
+                  {/* Full trail from `sm` up. Below that, everything but the
+                      current page collapses into a single ellipsis so the
+                      current page never wraps onto its own row. */}
+                  {crumbs.slice(0, -1).map((crumb, idx) => (
+                    <React.Fragment key={crumb.href}>
+                      {idx > 0 && <BreadcrumbSeparator className="hidden sm:flex" />}
+                      <BreadcrumbItem className="hidden sm:inline-flex">
                         <BreadcrumbLink render={<Link href={crumb.href} />}>
                           {crumb.label}
                         </BreadcrumbLink>
-                      )}
-                    </BreadcrumbItem>
-                  </React.Fragment>
-                ))
+                      </BreadcrumbItem>
+                    </React.Fragment>
+                  ))}
+
+                  <BreadcrumbItem className="sm:hidden">
+                    <BreadcrumbEllipsis />
+                  </BreadcrumbItem>
+
+                  <BreadcrumbSeparator />
+
+                  <BreadcrumbItem className="min-w-0">
+                    <BreadcrumbPage className="block min-w-0 truncate">
+                      {crumbs[crumbs.length - 1].label}
+                    </BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
               )}
             </BreadcrumbList>
           </Breadcrumb>

@@ -251,19 +251,19 @@ export default async function OperationsDashboardPage() {
         <CardContent className="flex-1 flex flex-col justify-between pt-1 pb-4">
           {/* Floor Status Category Pods */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-1 mb-4">
-            <div className="rounded-xl bg-slate-50/90 p-3 border-b-2 border-emerald-600">
+            <div className="rounded-xl bg-slate-50/90 p-3">
               <div className="text-[11px] text-muted-foreground font-medium">On Duty</div>
               <div className="text-xl font-bold text-foreground mt-0.5">{onDutyCount}</div>
             </div>
-            <div className="rounded-xl bg-slate-50/90 p-3 border-b-2 border-blue-600">
+            <div className="rounded-xl bg-slate-50/90 p-3">
               <div className="text-[11px] text-muted-foreground font-medium">Completed</div>
               <div className="text-xl font-bold text-foreground mt-0.5">{completedCount}</div>
             </div>
-            <div className="rounded-xl bg-slate-50/90 p-3 border-b-2 border-amber-600">
+            <div className="rounded-xl bg-slate-50/90 p-3">
               <div className="text-[11px] text-muted-foreground font-medium">Exceptions</div>
               <div className="text-xl font-bold text-foreground mt-0.5">{exceptionCount}</div>
             </div>
-            <div className="rounded-xl bg-slate-50/90 p-3 border-b-2 border-slate-600">
+            <div className="rounded-xl bg-slate-50/90 p-3">
               <div className="text-[11px] text-muted-foreground font-medium">Scheduled</div>
               <div className="text-xl font-bold text-foreground mt-0.5">{scheduledCount}</div>
             </div>

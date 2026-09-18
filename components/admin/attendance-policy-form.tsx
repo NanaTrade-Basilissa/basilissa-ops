@@ -11,7 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SettingsRow } from "@/components/admin/settings-row";
+import { Separator } from "@/components/ui/separator";
 
 export type PolicyValues = {
   graceInMinutes: number;
@@ -119,10 +121,8 @@ export function AttendancePolicyForm({
           <TriangleAlert className="size-4" />
           <AlertTitle>These values have not been confirmed</AlertTitle>
           <AlertDescription>
-            They are placeholders chosen so the attendance engine could be built, not
-            decisions anyone has made. Attendance is being calculated with them right now.
-            Check each against your actual employment terms, then tick the box at the
-            bottom.
+            Placeholders, not real decisions...attendance is being calculated with them
+            now. Check each, then confirm below.
           </AlertDescription>
         </Alert>
       )}
@@ -132,8 +132,7 @@ export function AttendancePolicyForm({
           <CheckCircle2 className="size-4" />
           <AlertTitle>Saved</AlertTitle>
           <AlertDescription>
-            A new policy version is in effect from now. Attendance already settled keeps
-            the rules it was calculated under.
+            In effect from now. Already-settled attendance keeps its old rules.
           </AlertDescription>
         </Alert>
       )}
@@ -144,255 +143,261 @@ export function AttendancePolicyForm({
         </Alert>
       )}
 
-      <fieldset disabled={!canEdit || isPending} className="space-y-8">
-        <section className="space-y-4">
-          <div>
-            <h2 className="font-heading text-lg font-bold">Arrival and departure</h2>
-            <p className="text-sm text-muted-foreground">
-              How much slack there is before a shift counts as started late or ended early.
-            </p>
-          </div>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field
-              name="graceInMinutes"
-              label="Late grace"
-              hint="Arriving within this of the scheduled start is not recorded as late."
-              defaultValue={values.graceInMinutes}
-              min={0}
-              max={120}
-              error={errors.graceInMinutes}
-            />
-            <Field
-              name="graceOutMinutes"
-              label="Early departure grace"
-              hint="Leaving within this of the scheduled end is not recorded as early."
-              defaultValue={values.graceOutMinutes}
-              min={0}
-              max={120}
-              error={errors.graceOutMinutes}
-            />
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div>
-            <h2 className="font-heading text-lg font-bold">Overtime</h2>
-            <p className="text-sm text-muted-foreground">
-              The threshold gates overtime rather than being subtracted from it. Work less
-              than this past a shift and none of it counts; work more and all of it does.
-            </p>
-          </div>
-          <Field
-            name="overtimeThresholdMinutes"
-            label="Overtime threshold"
-            hint="Restaurant closes are never punctual. Set to 0 to count every minute past the shift."
-            defaultValue={values.overtimeThresholdMinutes}
-            min={0}
-            max={240}
-            error={errors.overtimeThresholdMinutes}
-          />
-        </section>
-
-        <section className="space-y-4">
-          <div>
-            <h2 className="font-heading text-lg font-bold">Breaks</h2>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="breakPolicy">How breaks are handled</Label>
-            <NativeSelect
-              id="breakPolicy"
-              name="breakPolicy"
-              value={breakPolicy}
-              onChange={(e) => setBreakPolicy(e.target.value as PolicyValues["breakPolicy"])}
-              className="max-w-xs"
-            >
-              <option value="EXPLICIT_PUNCH">Staff punch in and out of breaks</option>
-              <option value="AUTO_DEDUCT">Deduct a fixed break automatically</option>
-            </NativeSelect>
-          </div>
-
-          {breakPolicy === "AUTO_DEDUCT" && (
+      <fieldset disabled={!canEdit || isPending} className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Arrival and departure</CardTitle>
+            <CardDescription>Slack allowed before a shift counts as late or early.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="grid gap-5 sm:grid-cols-2">
               <Field
-                name="autoDeductMinutes"
-                label="Break length"
-                hint="Unpaid minutes removed from a qualifying shift."
-                defaultValue={values.autoDeductMinutes}
+                name="graceInMinutes"
+                label="Late grace"
+                hint="Within this of the scheduled start isn't late."
+                defaultValue={values.graceInMinutes}
                 min={0}
-                max={240}
-                error={errors.autoDeductMinutes}
+                max={120}
+                error={errors.graceInMinutes}
               />
               <Field
-                name="autoDeductAfterMinutes"
-                label="Only on shifts longer than"
-                hint="Shorter shifts have nothing deducted."
-                defaultValue={values.autoDeductAfterMinutes}
+                name="graceOutMinutes"
+                label="Early departure grace"
+                hint="Within this of the scheduled end isn't early."
+                defaultValue={values.graceOutMinutes}
                 min={0}
-                max={1440}
-                error={errors.autoDeductAfterMinutes}
+                max={120}
+                error={errors.graceOutMinutes}
               />
             </div>
-          )}
+          </CardContent>
+        </Card>
 
-          {/* Kept in the DOM when hidden so switching policy does not silently
-              reset values the form never submitted. */}
-          {breakPolicy !== "AUTO_DEDUCT" && (
-            <>
-              <input type="hidden" name="autoDeductMinutes" value={values.autoDeductMinutes} />
-              <input
-                type="hidden"
-                name="autoDeductAfterMinutes"
-                value={values.autoDeductAfterMinutes}
-              />
-            </>
-          )}
-        </section>
-
-        <section className="space-y-4">
-          <div>
-            <h2 className="font-heading text-lg font-bold">Rounding</h2>
-            <p className="text-sm text-muted-foreground">
-              Off by default, and deliberately so. Rounding is a payroll decision, and
-              rounding consistently downward takes a few minutes off every shift forever.
-              When on, worked time is rounded to the nearest step, never down.
-            </p>
-          </div>
-          <Field
-            name="roundingMinutes"
-            label="Round worked time to"
-            hint="0 disables rounding entirely."
-            defaultValue={values.roundingMinutes}
-            min={0}
-            max={30}
-            error={errors.roundingMinutes}
-          />
-        </section>
-
-        <section className="space-y-4">
-          <div>
-            <h2 className="font-heading text-lg font-bold">Shift Auto-Closing & Exceptions</h2>
-          </div>
-
-          <div className="rounded-xl border border-border p-4 space-y-4">
-            <SettingsRow
-              htmlFor="autoCloseEnabled"
-              label="Auto-close missing clock-outs"
-              description="When enabled, shifts left open past their scheduled end time are automatically closed with a SYSTEM_AUTO_CLOSE event, flagged with AUTO_CLOSED, and credited 0 overtime."
-              control={
-                <Switch
-                  id="autoCloseEnabled"
-                  checked={autoCloseEnabled}
-                  onChange={(e) => setAutoCloseEnabled(e.target.checked)}
-                />
-              }
-              className="py-0"
+        <Card>
+          <CardHeader>
+            <CardTitle>Overtime</CardTitle>
+            <CardDescription>
+              Gates overtime rather than subtracting from it. Under counts as none, over
+              counts as all.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Field
+              name="overtimeThresholdMinutes"
+              label="Overtime threshold"
+              hint="0 counts every minute past the shift."
+              defaultValue={values.overtimeThresholdMinutes}
+              min={0}
+              max={240}
+              error={errors.overtimeThresholdMinutes}
             />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Breaks</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="breakPolicy">How breaks are handled</Label>
+              <NativeSelect
+                id="breakPolicy"
+                name="breakPolicy"
+                value={breakPolicy}
+                onChange={(e) => setBreakPolicy(e.target.value as PolicyValues["breakPolicy"])}
+                className="max-w-xs"
+              >
+                <option value="EXPLICIT_PUNCH">Staff punch in and out of breaks</option>
+                <option value="AUTO_DEDUCT">Deduct a fixed break automatically</option>
+              </NativeSelect>
+            </div>
+
+            {breakPolicy === "AUTO_DEDUCT" && (
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field
+                  name="autoDeductMinutes"
+                  label="Break length"
+                  hint="Unpaid minutes removed from a qualifying shift."
+                  defaultValue={values.autoDeductMinutes}
+                  min={0}
+                  max={240}
+                  error={errors.autoDeductMinutes}
+                />
+                <Field
+                  name="autoDeductAfterMinutes"
+                  label="Only on shifts longer than"
+                  hint="Shorter shifts have nothing deducted."
+                  defaultValue={values.autoDeductAfterMinutes}
+                  min={0}
+                  max={1440}
+                  error={errors.autoDeductAfterMinutes}
+                />
+              </div>
+            )}
+
+            {/* Kept in the DOM when hidden so switching policy does not silently
+                reset values the form never submitted. */}
+            {breakPolicy !== "AUTO_DEDUCT" && (
+              <>
+                <input type="hidden" name="autoDeductMinutes" value={values.autoDeductMinutes} />
+                <input
+                  type="hidden"
+                  name="autoDeductAfterMinutes"
+                  value={values.autoDeductAfterMinutes}
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Rounding</CardTitle>
+            <CardDescription>
+              Off by default, rounding down quietly shaves minutes off every shift. When
+              on, it only rounds up.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Field
+              name="roundingMinutes"
+              label="Round worked time to"
+              hint="0 disables rounding entirely."
+              defaultValue={values.roundingMinutes}
+              min={0}
+              max={30}
+              error={errors.roundingMinutes}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Auto-closing & exceptions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="divide-y divide-border">
+              <SettingsRow
+                htmlFor="autoCloseEnabled"
+                label="Auto-close missing clock-outs"
+                description="Closes shifts left open past their scheduled end, flags them AUTO_CLOSED, and credits 0 overtime."
+                control={
+                  <Switch
+                    id="autoCloseEnabled"
+                    checked={autoCloseEnabled}
+                    onChange={(e) => setAutoCloseEnabled(e.target.checked)}
+                  />
+                }
+              />
+            </div>
 
             {autoCloseEnabled ? (
-              <Field
-                name="autoCloseGraceMinutes"
-                label="Auto-close grace period"
-                hint="How long after scheduled end before the shift is closed automatically."
-                defaultValue={Math.max(0, values.autoCloseGraceMinutes)}
-                min={0}
-                max={720}
-                error={errors.autoCloseGraceMinutes}
-              />
+              <div className="">
+                <Field
+                  name="autoCloseGraceMinutes"
+                  label="Auto-close grace period"
+                  hint=""
+                  defaultValue={Math.max(0, values.autoCloseGraceMinutes)}
+                  min={0}
+                  max={720}
+                  error={errors.autoCloseGraceMinutes}
+                />
+              </div>
             ) : (
               <input type="hidden" name="autoCloseGraceMinutes" value="-1" />
             )}
-          </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field
-              name="dedupWindowMinutes"
-              label="Duplicate window"
-              hint="Punches this close together from different sources are treated as the same action."
-              defaultValue={values.dedupWindowMinutes}
-              min={1}
-              max={60}
-              error={errors.dedupWindowMinutes}
-            />
-            <Field
-              name="maxManualEntryDays"
-              label="Manual entry limit"
-              hint="How far back a manager may record attendance by hand. This is the least-verified path in the system, so shorter is safer."
-              defaultValue={values.maxManualEntryDays}
-              min={0}
-              max={90}
-              suffix="days"
-              error={errors.maxManualEntryDays}
-            />
-          </div>
-        </section>
+            <Separator />
 
-        <section className="space-y-4">
-          <div>
-            <h2 className="font-heading text-lg font-bold">Overtime Authorization Authority</h2>
-            <p className="text-sm text-muted-foreground">
-              By default, only Area Managers and Administrators have authority to approve payable overtime.
-              You can grant this authority to Branch Managers as well.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border p-4">
-            <SettingsRow
-              htmlFor="branchManagerCanAuthorizeOvertime"
-              label="Allow Branch Managers to authorize payable overtime"
-              description="When enabled, branch managers can sign off on payable overtime minutes for employees assigned to their branch."
-              control={
-                <Switch
-                  id="branchManagerCanAuthorizeOvertime"
-                  name="branchManagerCanAuthorizeOvertime"
-                  defaultChecked={values.branchManagerCanAuthorizeOvertime}
-                />
-              }
-              className="py-0"
-            />
-          </div>
-        </section>
-
-        <section className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="changeReason">Why are you changing this?</Label>
-            {/*
-              Keyed on the saved version so a successful save remounts an empty
-              box. Leaving the previous reason behind invites the next change to
-              inherit an explanation written about a different one — and a wrong
-              reason in the history is worse than none.
-            */}
-            <Textarea
-              key={state?.versionId ?? "unsaved"}
-              id="changeReason"
-              name="changeReason"
-              rows={3}
-              maxLength={500}
-              defaultValue=""
-              placeholder="e.g. Overtime threshold raised to 30 minutes following the March review of closing times."
-              aria-describedby="changeReason-hint"
-              aria-invalid={errors.changeReason ? true : undefined}
-            />
-            <p id="changeReason-hint" className="text-xs text-muted-foreground">
-              Recorded against this version permanently. These are employment terms, so
-              knowing who changed them is rarely enough: someone will ask why.
-            </p>
-            {errors.changeReason && (
-              <p className="text-xs text-destructive">{errors.changeReason}</p>
-            )}
-          </div>
-
-          <div className="flex items-start gap-3 border-t border-border pt-3">
-            <Switch id="confirmed" name="confirmed" defaultChecked={!values.isProvisional} />
-            <div className="space-y-1">
-              <Label htmlFor="confirmed" className="font-medium">
-                These values match our employment terms
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Ticking this removes the &ldquo;not confirmed&rdquo; warning. Leave it clear
-                if you are still checking. The values still apply either way.
-              </p>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field
+                name="dedupWindowMinutes"
+                label="Duplicate window"
+                hint="Punches this close together count as one."
+                defaultValue={values.dedupWindowMinutes}
+                min={1}
+                max={60}
+                error={errors.dedupWindowMinutes}
+              />
+              <Field
+                name="maxManualEntryDays"
+                label="Manual entry limit"
+                hint="How far back a manager can record attendance by hand."
+                defaultValue={values.maxManualEntryDays}
+                min={0}
+                max={90}
+                suffix="days"
+                error={errors.maxManualEntryDays}
+              />
             </div>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Overtime authorization</CardTitle>
+            <CardDescription>
+              Only Area Managers and Administrators can approve overtime by default.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-border">
+              <SettingsRow
+                htmlFor="branchManagerCanAuthorizeOvertime"
+                label="Allow Branch Managers to authorize payable overtime"
+                description="Lets branch managers approve overtime for their own branch."
+                control={
+                  <Switch
+                    id="branchManagerCanAuthorizeOvertime"
+                    name="branchManagerCanAuthorizeOvertime"
+                    defaultChecked={values.branchManagerCanAuthorizeOvertime}
+                  />
+                }
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="changeReason">Why are you changing this?</Label>
+              {/*
+                Keyed on the saved version so a successful save remounts an empty
+                box. Leaving the previous reason behind invites the next change to
+                inherit an explanation written about a different one and a wrong
+                reason in the history is worse than none.
+              */}
+              <Textarea
+                key={state?.versionId ?? "unsaved"}
+                id="changeReason"
+                name="changeReason"
+                rows={3}
+                maxLength={500}
+                defaultValue=""
+                placeholder="e.g. Overtime threshold raised to 30 minutes following the March review of closing times."
+                aria-describedby="changeReason-hint"
+                aria-invalid={errors.changeReason ? true : undefined}
+              />
+              {errors.changeReason && (
+                <p className="text-xs text-destructive">{errors.changeReason}</p>
+              )}
+            </div>
+
+            <div className="flex items-start gap-3 border-t border-border pt-4">
+              <Switch id="confirmed" name="confirmed" defaultChecked={!values.isProvisional} />
+              <div className="space-y-1">
+                <Label htmlFor="confirmed" className="font-medium">
+                  These values match our employment terms
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Removes the &ldquo;not confirmed&rdquo; warning. Values apply either way.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {canEdit && (
           <Button type="submit" disabled={isPending}>
@@ -405,8 +410,7 @@ export function AttendancePolicyForm({
       {!canEdit && (
         <Alert>
           <AlertDescription>
-            You can view this policy but not change it. Grace periods and overtime
-            thresholds are employment terms, so only HR can alter them.
+            View only — grace periods and overtime are employment terms only HR can change.
           </AlertDescription>
         </Alert>
       )}

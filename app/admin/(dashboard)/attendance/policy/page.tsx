@@ -53,32 +53,7 @@ export default async function AttendancePolicyPage({
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="font-heading text-2xl font-bold text-foreground">Attendance policy</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {selectedBranch
-                ? `Rules and thresholds for ${selectedBranch.name}.`
-                : "Global attendance rules and thresholds."}
-            </p>
-          </div>
-          {selectedBranch ? (
-            hasBranchSpecificOverride ? (
-              <Badge className="bg-amber-600 hover:bg-amber-600 text-white">
-                Branch Override Active
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="border-border text-muted-foreground">
-                Using Global Default
-              </Badge>
-            )
-          ) : (
-            <Badge variant="outline" className="border-primary/30 text-primary">
-              Global Default
-            </Badge>
-          )}
-        </div>
-
+      
         {/* Branch Switcher Dropdown */}
         <PolicyBranchSelect
           branches={branches}

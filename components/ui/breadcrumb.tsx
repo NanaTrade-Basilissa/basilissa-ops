@@ -20,7 +20,9 @@ function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
     <ol
       data-slot="breadcrumb-list"
       className={cn(
-        "flex flex-wrap items-center gap-1.5 text-sm wrap-break-word text-muted-foreground",
+        // `flex-nowrap` + `min-w-0`: a breadcrumb trail shrinks and its last
+        // item truncates rather than wrapping the tail onto a second row.
+        "flex min-w-0 flex-nowrap items-center gap-1.5 text-sm wrap-break-word text-muted-foreground",
         className
       )}
       {...props}
