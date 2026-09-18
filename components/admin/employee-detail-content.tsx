@@ -270,11 +270,13 @@ export function EmployeeDetailContent({
   return (
     <Tabs defaultValue="profile" className="space-y-6">
       <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="profile">Profile & Schedule</TabsTrigger>
-        <TabsTrigger value="attendance" className="flex items-center gap-1.5">
-          <span>Attendance & History</span>
+        <TabsTrigger value="profile">
+          <span className="min-w-0 truncate">Profile & Schedule</span>
+        </TabsTrigger>
+        <TabsTrigger value="attendance">
+          <span className="min-w-0 truncate">Attendance & History</span>
           {attendanceHistory && attendanceHistory.summary.exceptionDaysCount > 0 && (
-            <Badge variant="destructive" className="h-4 px-1.5 text-[10px] leading-none">
+            <Badge variant="destructive" className="h-4 shrink-0 px-1.5 text-[10px] leading-none">
               {attendanceHistory.summary.exceptionDaysCount}
             </Badge>
           )}

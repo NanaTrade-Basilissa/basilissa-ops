@@ -6,6 +6,7 @@ import { RotateCcw, Search } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { FilterBar } from "@/components/admin/filter-bar";
 
 type FilterOption = { id: string; label: string };
 
@@ -52,8 +53,9 @@ export function EmployeeFilters({
   const hasFilters = FILTER_KEYS.some((key) => searchParams.get(key));
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+    <FilterBar
+      hasActiveFilters={hasFilters}
+      search={
         <div className="relative w-full sm:w-64 md:w-72 shrink-0">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -64,54 +66,58 @@ export function EmployeeFilters({
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-
-        <NativeSelect
-          id="filter-branch"
-          value={searchParams.get("branchId") ?? ""}
-          onChange={(e) => setParam("branchId", e.target.value)}
-          className="h-9 w-auto min-w-[140px] text-xs"
-        >
-          <option value="">All branches</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.label}
-            </option>
-          ))}
-        </NativeSelect>
-
-        <NativeSelect
-          id="filter-status"
-          value={searchParams.get("status") ?? ""}
-          onChange={(e) => setParam("status", e.target.value)}
-          className="h-9 w-auto min-w-[130px] text-xs"
-        >
-          <option value="">All statuses</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </NativeSelect>
-
-        {hasFilters && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setSearch("");
-              router.push(pathname);
-            }}
-            className="h-9 gap-1.5 text-xs"
-            title="Reset filters"
+      }
+      filters={
+        <>
+          <NativeSelect
+            id="filter-branch"
+            value={searchParams.get("branchId") ?? ""}
+            onChange={(e) => setParam("branchId", e.target.value)}
+            className="h-9 text-xs"
+            containerClassName="w-full sm:w-fit sm:min-w-[140px] sm:shrink-0"
           >
-            <RotateCcw className="size-3.5" />
-            Reset
-          </Button>
-        )}
-      </div>
+            <option value="">All branches</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}
+              </option>
+            ))}
+          </NativeSelect>
 
-      {actionSlot && <div className="shrink-0">{actionSlot}</div>}
-    </div>
+          <NativeSelect
+            id="filter-status"
+            value={searchParams.get("status") ?? ""}
+            onChange={(e) => setParam("status", e.target.value)}
+            className="h-9 text-xs"
+            containerClassName="w-full sm:w-fit sm:min-w-[130px] sm:shrink-0"
+          >
+            <option value="">All statuses</option>
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </NativeSelect>
+
+          {hasFilters && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                router.push(pathname);
+              }}
+              className="h-9 gap-1.5 text-xs"
+              title="Reset filters"
+            >
+              <RotateCcw className="size-3.5" />
+              Reset
+            </Button>
+          )}
+        </>
+      }
+      actions={actionSlot}
+    />
   );
 }

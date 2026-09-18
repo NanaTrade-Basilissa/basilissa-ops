@@ -6,6 +6,7 @@ import { RotateCcw, Search } from "lucide-react";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { FilterBar } from "@/components/admin/filter-bar";
 
 export function TestFilters({
   searchPlaceholder = "Search title...",
@@ -42,45 +43,50 @@ export function TestFilters({
   const hasFilters = Boolean(currentSearch || currentStatus);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64 md:w-72 shrink-0">
-        <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-        <Input
-          placeholder={searchPlaceholder}
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className="pl-8 h-9"
-        />
-      </form>
+    <FilterBar
+      hasActiveFilters={hasFilters}
+      search={
+        <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64 md:w-72 shrink-0">
+          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+          <Input
+            placeholder={searchPlaceholder}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="pl-8 h-9"
+          />
+        </form>
+      }
+      filters={
+        <>
+          <NativeSelect
+            value={currentStatus}
+            onChange={(e) => setParam("status", e.target.value)}
+            containerClassName="w-full sm:w-fit sm:min-w-[140px] sm:shrink-0"
+          >
+            <option value="">All statuses</option>
+            <option value="DRAFT">Draft</option>
+            <option value="PUBLISHED">Published</option>
+            <option value="CLOSED">Closed</option>
+          </NativeSelect>
 
-      <div className="w-auto min-w-[140px]">
-        <NativeSelect
-          value={currentStatus}
-          onChange={(e) => setParam("status", e.target.value)}
-        >
-          <option value="">All statuses</option>
-          <option value="DRAFT">Draft</option>
-          <option value="PUBLISHED">Published</option>
-          <option value="CLOSED">Closed</option>
-        </NativeSelect>
-      </div>
-
-      {hasFilters && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={isPending}
-          onClick={() => {
-            setSearchInput("");
-            router.push(pathname);
-          }}
-          title="Reset filters"
-        >
-          <RotateCcw className="size-3.5 mr-1" />
-          Reset
-        </Button>
-      )}
-    </div>
+          {hasFilters && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={() => {
+                setSearchInput("");
+                router.push(pathname);
+              }}
+              title="Reset filters"
+            >
+              <RotateCcw className="size-3.5 mr-1" />
+              Reset
+            </Button>
+          )}
+        </>
+      }
+    />
   );
 }

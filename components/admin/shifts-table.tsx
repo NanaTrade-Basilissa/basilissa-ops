@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
+import { FilterBar } from "@/components/admin/filter-bar";
 
 export type ShiftRow = {
   id: string;
@@ -116,8 +117,9 @@ export function ShiftsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+      <FilterBar
+        hasActiveFilters={hasFilters}
+        search={
           <div className="relative w-full sm:w-64 md:w-72 shrink-0">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -131,62 +133,66 @@ export function ShiftsTable({
               }}
             />
           </div>
+        }
+        filters={
+          <>
+            {branches.length > 1 && (
+              <NativeSelect
+                id="shift-branch-filter"
+                value={branchFilter}
+                onChange={(e) => {
+                  setBranchFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="h-9 text-xs"
+                containerClassName="w-full sm:w-fit sm:min-w-[140px] sm:shrink-0"
+              >
+                <option value="ALL">All branches</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
 
-          {branches.length > 1 && (
             <NativeSelect
-              id="shift-branch-filter"
-              value={branchFilter}
+              id="shift-status-filter"
+              value={statusFilter}
               onChange={(e) => {
-                setBranchFilter(e.target.value);
+                setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="h-9 w-auto min-w-[140px] text-xs"
+              className="h-9 text-xs"
+              containerClassName="w-full sm:w-fit sm:min-w-[120px] sm:shrink-0"
             >
-              <option value="ALL">All branches</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
+              <option value="ALL">All statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
             </NativeSelect>
-          )}
 
-          <NativeSelect
-            id="shift-status-filter"
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="h-9 w-auto min-w-[120px] text-xs"
-          >
-            <option value="ALL">All statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </NativeSelect>
-
-          {hasFilters && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearch("");
-                setBranchFilter("ALL");
-                setStatusFilter("ALL");
-                setPage(1);
-              }}
-              className="h-9 gap-1.5 text-xs"
-              title="Reset filters"
-            >
-              <RotateCcw className="size-3.5" />
-              Reset
-            </Button>
-          )}
-        </div>
-
-        {actionSlot && <div className="shrink-0">{actionSlot}</div>}
-      </div>
+            {hasFilters && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setBranchFilter("ALL");
+                  setStatusFilter("ALL");
+                  setPage(1);
+                }}
+                className="h-9 gap-1.5 text-xs"
+                title="Reset filters"
+              >
+                <RotateCcw className="size-3.5" />
+                Reset
+              </Button>
+            )}
+          </>
+        }
+        actions={actionSlot}
+      />
 
       <DataTable
         columns={columns}

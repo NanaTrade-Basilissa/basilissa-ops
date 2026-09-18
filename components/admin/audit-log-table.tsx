@@ -32,6 +32,7 @@ import {
 import { formatAccraDateTime } from "@/lib/platform/date";
 import { Empty, EmptyDescription, EmptyTitle } from "@/components/ui/empty";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
+import { FilterBar } from "@/components/admin/filter-bar";
 
 const ENTITY_TYPES = [
   { value: "all", label: "All Entities" },
@@ -96,8 +97,7 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
     });
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearchSubmit = () => {
     applyFilters({
       search: searchInput.trim() || null,
       entityType: entityInput,
@@ -124,84 +124,105 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
     applyFilters({ page: String(newPage) });
   };
 
+  const hasActiveFilters = Boolean(
+    currentSearch || currentEntity !== "all" || currentAction !== "all" || currentStart || currentEnd,
+  );
+
   return (
     <div className="space-y-4">
       {/* Search & Filters */}
-      <form
-        onSubmit={handleSearchSubmit}
-        className="flex flex-wrap items-center gap-2.5"
-      >
-        <div className="relative w-full sm:w-64 md:w-72 shrink-0">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search action, email, entity..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="pl-8 h-9 text-xs"
-          />
-        </div>
+      <FilterBar
+        hasActiveFilters={hasActiveFilters}
+        search={
+          <div className="relative w-full sm:w-64 md:w-72 shrink-0">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search action, email, entity..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSearchSubmit();
+                }
+              }}
+              className="pl-8 h-9 text-xs"
+            />
+          </div>
+        }
+        filters={
+          <>
+            <NativeSelect
+              value={entityInput}
+              onChange={(e) => setEntityInput(e.target.value)}
+              className="h-9 text-xs"
+              containerClassName="w-full sm:w-fit sm:min-w-[150px] sm:shrink-0"
+            >
+              {ENTITY_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </NativeSelect>
 
-        <NativeSelect
-          value={entityInput}
-          onChange={(e) => setEntityInput(e.target.value)}
-          className="h-9 w-auto min-w-[150px] text-xs"
-        >
-          {ENTITY_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </NativeSelect>
+            <NativeSelect
+              value={actionInput}
+              onChange={(e) => setActionInput(e.target.value)}
+              className="h-9 text-xs"
+              containerClassName="w-full sm:w-fit sm:min-w-[150px] sm:shrink-0"
+            >
+              {ACTION_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </NativeSelect>
 
-        <NativeSelect
-          value={actionInput}
-          onChange={(e) => setActionInput(e.target.value)}
-          className="h-9 w-auto min-w-[150px] text-xs"
-        >
-          {ACTION_CATEGORIES.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </NativeSelect>
+            <div className="flex items-center gap-1.5 sm:shrink-0">
+              <Input
+                type="date"
+                value={startDateInput}
+                onChange={(e) => setStartDateInput(e.target.value)}
+                className="h-9 flex-1 min-w-0 px-2.5 text-xs sm:w-[150px] sm:flex-none"
+                title="Start date"
+              />
+              <span className="text-muted-foreground text-xs shrink-0">to</span>
+              <Input
+                type="date"
+                value={endDateInput}
+                onChange={(e) => setEndDateInput(e.target.value)}
+                className="h-9 flex-1 min-w-0 px-2.5 text-xs sm:w-[150px] sm:flex-none"
+                title="End date"
+              />
+            </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Input
-            type="date"
-            value={startDateInput}
-            onChange={(e) => setStartDateInput(e.target.value)}
-            className="h-9 w-[150px] px-2.5 text-xs"
-            title="Start date"
-          />
-          <span className="text-muted-foreground text-xs">to</span>
-          <Input
-            type="date"
-            value={endDateInput}
-            onChange={(e) => setEndDateInput(e.target.value)}
-            className="h-9 w-[150px] px-2.5 text-xs"
-            title="End date"
-          />
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Button type="submit" size="sm" disabled={isPending} className="h-9 text-xs">
-            <Filter className="size-3.5 mr-1" />
-            Filter
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleReset}
-            disabled={isPending}
-            className="h-9 gap-1 text-xs"
-            title="Reset filters"
-          >
-            <RotateCcw className="size-3.5 mr-1" />
-            Reset
-          </Button>
-        </div>
-      </form>
+            <div className="flex items-center gap-1.5 sm:shrink-0">
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleSearchSubmit}
+                disabled={isPending}
+                className="h-9 flex-1 text-xs sm:flex-none"
+              >
+                <Filter className="size-3.5 mr-1" />
+                Filter
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleReset}
+                disabled={isPending}
+                className="h-9 flex-1 gap-1 text-xs sm:flex-none"
+                title="Reset filters"
+              >
+                <RotateCcw className="size-3.5 mr-1" />
+                Reset
+              </Button>
+            </div>
+          </>
+        }
+      />
 
       {/* Audit Log Table */}
       <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">

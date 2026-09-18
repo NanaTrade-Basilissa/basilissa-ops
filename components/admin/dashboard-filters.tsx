@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { RATING_SCALE } from "@/lib/modules/feedback/constants";
+import { FilterBar } from "@/components/admin/filter-bar";
 
 type FilterOption = { id: string; label: string };
 
@@ -38,7 +39,10 @@ export function DashboardFilters({
   );
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <FilterBar
+      hasActiveFilters={hasFilters}
+      filters={
+        <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {branches.length === 1 ? (
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Branch</Label>
@@ -138,6 +142,9 @@ export function DashboardFilters({
           Reset
         </Button>
       </div>
-    </div>
+        </div>
+      }
+    />
   );
 }
+

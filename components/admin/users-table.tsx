@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { formatAccraDateTime } from "@/lib/platform/date";
+import { FilterBar } from "@/components/admin/filter-bar";
 
 export type UserRow = {
   id: string;
@@ -162,8 +163,9 @@ export function UsersTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+      <FilterBar
+        hasActiveFilters={hasFilters}
+        search={
           <div className="relative w-full sm:w-64 md:w-72 shrink-0">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -177,43 +179,46 @@ export function UsersTable({
               }}
             />
           </div>
-
-          <NativeSelect
-            id="user-status"
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPage(1);
-            }}
-            className="h-9 w-auto min-w-[130px] text-xs"
-          >
-            <option value="ALL">All statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="SUSPENDED">Suspended</option>
-            <option value="TERMINATED">Terminated</option>
-          </NativeSelect>
-
-          {hasFilters && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearch("");
-                setStatus("ALL");
+        }
+        filters={
+          <>
+            <NativeSelect
+              id="user-status"
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
                 setPage(1);
               }}
-              className="h-9 gap-1.5 text-xs"
-              title="Reset filters"
+              className="h-9 text-xs"
+              containerClassName="w-full sm:w-fit sm:min-w-[130px] sm:shrink-0"
             >
-              <RotateCcw className="size-3.5" />
-              Reset
-            </Button>
-          )}
-        </div>
+              <option value="ALL">All statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="TERMINATED">Terminated</option>
+            </NativeSelect>
 
-        {actionSlot && <div className="shrink-0">{actionSlot}</div>}
-      </div>
+            {hasFilters && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setStatus("ALL");
+                  setPage(1);
+                }}
+                className="h-9 gap-1.5 text-xs"
+                title="Reset filters"
+              >
+                <RotateCcw className="size-3.5" />
+                Reset
+              </Button>
+            )}
+          </>
+        }
+        actions={actionSlot}
+      />
 
       <DataTable
         columns={columns}

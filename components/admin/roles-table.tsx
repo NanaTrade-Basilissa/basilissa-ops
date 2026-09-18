@@ -14,6 +14,7 @@ import { DeleteRoleDialog } from "@/components/admin/delete-role-dialog";
 import { RoleDetailSheet } from "@/components/admin/role-detail-sheet";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { formatAccraDateTime } from "@/lib/platform/date";
+import { FilterBar } from "@/components/admin/filter-bar";
 import {
   Empty,
   EmptyContent,
@@ -86,44 +87,41 @@ export function RolesTable({
   return (
     <div className="space-y-4">
       {/* Search & Filter Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
-          <div className="relative w-full sm:w-64 md:w-72 shrink-0">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search roles..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-8 h-9 text-xs"
-            />
-          </div>
+      <FilterBar
+        search={
+          <>
+            <div className="relative w-full sm:w-64 md:w-72 shrink-0">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search roles..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-8 h-9 text-xs"
+              />
+            </div>
 
-          {search && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearch("");
-                setPage(1);
-              }}
-              className="h-9 gap-1.5 text-xs"
-            >
-              <RotateCcw className="size-3.5" />
-              Reset
-            </Button>
-          )}
-        </div>
-
-        {canCreate && (
-          <div className="shrink-0">
-            <RoleDialog matrix={matrix} />
-          </div>
-        )}
-      </div>
+            {search && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setPage(1);
+                }}
+                className="h-9 gap-1.5 text-xs"
+              >
+                <RotateCcw className="size-3.5" />
+                Reset
+              </Button>
+            )}
+          </>
+        }
+        actions={canCreate && <RoleDialog matrix={matrix} />}
+      />
 
       {/* Table */}
       <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">

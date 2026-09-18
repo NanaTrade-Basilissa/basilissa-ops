@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ResolveExceptionDialog } from "@/components/admin/resolve-exception-dialog";
 import { TableRowActions } from "@/components/admin/table-row-actions";
+import { FilterBar } from "@/components/admin/filter-bar";
 
 export type AttendanceRow = {
   id: string;
@@ -197,55 +198,58 @@ export function AttendanceTable({ days, date }: { days: AttendanceRow[]; date?: 
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-          <div className="relative w-full sm:w-64 md:w-72 shrink-0">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="attendance-search"
-              placeholder="Search employee or branch..."
-              className="pl-8 h-9 text-xs"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-            />
-          </div>
+      <FilterBar
+        search={
+          <>
+            <div className="relative w-full sm:w-64 md:w-72 shrink-0">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="attendance-search"
+                placeholder="Search employee or branch..."
+                className="pl-8 h-9 text-xs"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
 
-          {search && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearch("");
-                setPage(1);
-              }}
-              className="h-9 gap-1.5 text-xs"
-              title="Reset search"
-            >
-              <RotateCcw className="size-3.5" />
-              Reset
-            </Button>
-          )}
+            {search && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setPage(1);
+                }}
+                className="h-9 gap-1.5 text-xs"
+                title="Reset search"
+              >
+                <RotateCcw className="size-3.5" />
+                Reset
+              </Button>
+            )}
 
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            {filteredDays.length} {filteredDays.length === 1 ? "record" : "records"}
-          </span>
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExportCsv}
-          className="h-9 gap-1.5 text-xs shrink-0"
-        >
-          <Download className="size-3.5" />
-          <span className="hidden sm:inline">Export CSV</span>
-          <span className="sm:hidden">Export</span>
-        </Button>
-      </div>
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              {filteredDays.length} {filteredDays.length === 1 ? "record" : "records"}
+            </span>
+          </>
+        }
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCsv}
+            className="h-9 gap-1.5 text-xs shrink-0"
+          >
+            <Download className="size-3.5" />
+            <span className="hidden sm:inline">Export CSV</span>
+            <span className="sm:hidden">Export</span>
+          </Button>
+        }
+      />
 
       <DataTable
         columns={columns}
