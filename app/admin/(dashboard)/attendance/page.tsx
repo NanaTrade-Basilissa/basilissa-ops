@@ -288,17 +288,6 @@ async function DailyRosterView({
         exceptionsOnly={exceptionsOnly}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="On record" value={String(summary.total)} icon={Users} />
-        <StatCard label="Still clocked in" value={String(summary.stillIn)} icon={Clock} />
-        <StatCard label="Late" value={String(summary.late)} icon={AlertTriangle} />
-        <StatCard
-          label="Needs review"
-          value={String(summary.needingReview)}
-          icon={TriangleAlert}
-        />
-      </div>
-
       {days.length === 0 ? (
         <Empty className="border">
           <EmptyDescription>

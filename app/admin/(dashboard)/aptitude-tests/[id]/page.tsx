@@ -1,119 +1,192 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Pencil, Timer, Trophy, Users } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
-import { aptitudeTestSummary, getAptitudeTestForEditing, listInvitations } from "@/lib/modules/aptitude/server";
+import { aptitudeTestSummary, getAptitudeTestForEditing, listInvitationsPaginated } from "@/lib/modules/aptitude/server";
 import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
 import {
-  addQuestionAction,
-  addSectionAction,
   closeAptitudeTestAction,
   deleteAptitudeTestAction,
-  deleteQuestionAction,
   inviteManyByEmailAction,
   inviteToAptitudeTestAction,
   publishAptitudeTestAction,
   resendInvitationAction,
   revokeInvitationAction,
-  updateAptitudeTestAction,
   updatePublicLinkAction,
-  updateSectionAction,
 } from "@/lib/modules/aptitude/actions";
 import { AptitudeTestLifecycle } from "@/components/admin/aptitude-test-lifecycle";
-import { AptitudeTestWorkspace } from "@/components/admin/aptitude-test-workspace";
+import { AptitudeInviteDialog } from "@/components/admin/aptitude-invite-dialog";
+import { AptitudePublicLinkDialog } from "@/components/admin/aptitude-public-link-dialog";
+import { AptitudeResponsesTable } from "@/components/admin/aptitude-responses-table";
+import { CopyPublicLinkButton } from "@/components/admin/copy-public-link-button";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
+import { StatCard } from "@/components/admin/stat-card";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getEnv } from "@/lib/platform/env";
 
-export const metadata: Metadata = { title: "Aptitude test" };
+export const metadata: Metadata = { title: "Aptitude Test Dashboard" };
 export const dynamic = "force-dynamic";
 
-export default async function AptitudeTestPage({ params }: { params: Promise<{ id: string }> }) {
+type Params = Promise<{ id: string }>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+function first(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function AptitudeTestPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: SearchParams;
+}) {
   const actor = await requirePermission("aptitude:read");
   const { id } = await params;
   const canWrite = can(actor, "aptitude:write");
 
-  const [test, invitations, summary] = await Promise.all([
+  const rawParams = await searchParams;
+  const page = Number(first(rawParams.page)) || 1;
+
+  const [test, paginatedResult, summary] = await Promise.all([
     getAptitudeTestForEditing(id),
-    listInvitations(id),
+    listInvitationsPaginated(id, { page, pageSize: 10 }),
     aptitudeTestSummary(id),
   ]);
 
   if (!test) notFound();
 
   const questionCount = test.sections.reduce((n, s) => n + s.questions.length, 0);
-  const isDraft = test.status === "DRAFT";
+  const publicLinkUrl = test.publicLinkToken
+    ? `${getEnv().NEXT_PUBLIC_APP_URL}/aptitude/public/${test.publicLinkToken}`
+    : null;
+
+  const completionRate =
+    summary.invited > 0 ? `${Math.round((summary.submitted / summary.invited) * 100)}%` : "-";
+
+  function pageHref(targetPage: number) {
+    return targetPage === 1
+      ? `/admin/aptitude-tests/${id}`
+      : `/admin/aptitude-tests/${id}?page=${targetPage}`;
+  }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="space-y-6">
       <Link
-        href="/admin/aptitude-tests/all"
+        href="/admin/aptitude-tests"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="size-4" /> Back to aptitude tests
       </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">{test.title}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-            <Badge variant={test.status === "PUBLISHED" ? "default" : "outline"}>{STATUS_LABEL[test.status]}</Badge>
-            <span className="text-muted-foreground">
-              {test.sections.length} sections · {questionCount} questions
-            </span>
-            <span className="text-muted-foreground">
-              · {test.timeLimitMinutes ? `${test.timeLimitMinutes} min timer` : "untimed"}
-            </span>
-            {!test.showScoreToCandidate && <span className="text-muted-foreground">· score hidden from the candidate</span>}
+          <div className="flex items-center gap-2">
+            <h1 className="font-heading text-2xl font-bold text-foreground">{test.title}</h1>
+            <Badge variant={test.status === "PUBLISHED" ? "default" : "outline"}>
+              {STATUS_LABEL[test.status]}
+            </Badge>
           </div>
+          <p className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
+            <span>{test.sections.length} sections · {questionCount} questions</span>
+            <span>· {test.timeLimitMinutes ? `${test.timeLimitMinutes} min timer` : "untimed"}</span>
+            {test.passMarkPercent !== null && <span>· {test.passMarkPercent}% pass mark</span>}
+            {!test.showScoreToCandidate && <span>· score hidden from candidate</span>}
+          </p>
         </div>
+
         {canWrite && (
-          <AptitudeTestLifecycle
-            status={test.status}
-            publishAction={publishAptitudeTestAction.bind(null, test.id)}
-            closeAction={closeAptitudeTestAction.bind(null, test.id)}
-            deleteAction={deleteAptitudeTestAction.bind(null, test.id)}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/admin/aptitude-tests/${test.id}/edit`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Pencil className="size-3.5" />
+              Edit test
+            </Link>
+
+            {test.publicLinkEnabled && publicLinkUrl && (
+              <CopyPublicLinkButton url={publicLinkUrl} />
+            )}
+
+            <AptitudePublicLinkDialog
+              action={updatePublicLinkAction.bind(null, test.id)}
+              linkUrl={publicLinkUrl}
+              values={{
+                enabled: test.publicLinkEnabled,
+                nameMode: test.publicLinkNameMode,
+                emailMode: test.publicLinkEmailMode,
+              }}
+            />
+
+            <AptitudeInviteDialog
+              inviteAction={inviteToAptitudeTestAction.bind(null, test.id)}
+              inviteManyAction={inviteManyByEmailAction.bind(null, test.id)}
+            />
+
+            <AptitudeTestLifecycle
+              status={test.status}
+              publishAction={publishAptitudeTestAction.bind(null, test.id)}
+              closeAction={closeAptitudeTestAction.bind(null, test.id)}
+              deleteAction={deleteAptitudeTestAction.bind(null, test.id)}
+            />
+          </div>
         )}
       </div>
 
-      <AptitudeTestWorkspace
-        isDraft={isDraft}
-        isClosed={test.status === "CLOSED"}
-        isPublished={test.status === "PUBLISHED"}
-        canWrite={canWrite}
-        testId={test.id}
-        sections={test.sections}
-        addSectionAction={addSectionAction.bind(null, test.id)}
-        updateSectionAction={updateSectionAction.bind(null, test.id)}
-        addQuestionAction={addQuestionAction.bind(null, test.id)}
-        deleteQuestionAction={deleteQuestionAction.bind(null, test.id)}
-        summary={summary}
-        invitations={invitations}
-        inviteAction={inviteToAptitudeTestAction.bind(null, test.id)}
-        inviteManyAction={inviteManyByEmailAction.bind(null, test.id)}
-        resendAction={resendInvitationAction.bind(null, test.id)}
-        revokeAction={revokeInvitationAction.bind(null, test.id)}
-        publicLinkAction={updatePublicLinkAction.bind(null, test.id)}
-        publicLinkUrl={
-          test.publicLinkToken ? `${getEnv().NEXT_PUBLIC_APP_URL}/aptitude/public/${test.publicLinkToken}` : null
-        }
-        publicLinkValues={{
-          enabled: test.publicLinkEnabled,
-          nameMode: test.publicLinkNameMode,
-          emailMode: test.publicLinkEmailMode,
-        }}
-        detailsAction={updateAptitudeTestAction.bind(null, test.id)}
-        detailsValues={{
-          title: test.title,
-          description: test.description,
-          showScoreToCandidate: test.showScoreToCandidate,
-          passMarkPercent: test.passMarkPercent,
-          invitationsExpire: test.invitationsExpire,
-          invitationTtlHours: test.invitationTtlHours,
-          timeLimitMinutes: test.timeLimitMinutes,
-        }}
-      />
+      {/* Analysis / Dashboard at the top */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Invited" value={summary.invited} icon={Users} />
+        <StatCard label="Completed" value={summary.submitted} icon={CheckCircle2} tone="good" />
+        <StatCard label="Completion rate" value={completionRate} icon={Timer} />
+        <StatCard
+          label="Average score"
+          value={summary.averagePercent !== null ? `${summary.averagePercent}%` : "-"}
+          icon={Trophy}
+          tone="good"
+        />
+      </div>
+
+      {/* Responses on a paginated table */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="size-4" />
+              Candidate responses
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Invitations, candidate progress, and test scores.
+            </CardDescription>
+          </div>
+          {test.publicLinkEnabled && (
+            <Badge variant="outline" className="text-xs gap-1.5 py-1">
+              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Public link active
+            </Badge>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <AptitudeResponsesTable
+            testId={test.id}
+            canWrite={canWrite}
+            invitations={paginatedResult.invitations}
+            resendAction={resendInvitationAction.bind(null, test.id)}
+            revokeAction={revokeInvitationAction.bind(null, test.id)}
+          />
+
+          <DataTablePagination
+            page={paginatedResult.page}
+            totalPages={paginatedResult.totalPages}
+            total={paginatedResult.total}
+            pageSize={paginatedResult.pageSize}
+            buildHref={pageHref}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

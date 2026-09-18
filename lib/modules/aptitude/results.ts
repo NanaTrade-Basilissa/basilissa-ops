@@ -22,6 +22,40 @@ export async function listAptitudeTests() {
   });
 }
 
+export async function listAptitudeTestsPaginated(params?: { page?: number; pageSize?: number }) {
+  const page = Math.max(1, params?.page ?? 1);
+  const pageSize = params?.pageSize ?? 10;
+  const where = { deletedAt: null };
+
+  const [tests, total] = await Promise.all([
+    prisma.aptitudeTest.findMany({
+      where,
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        showScoreToCandidate: true,
+        timeLimitMinutes: true,
+        createdAt: true,
+        publishedAt: true,
+        _count: { select: { invitations: true, sections: true } },
+      },
+    }),
+    prisma.aptitudeTest.count({ where }),
+  ]);
+
+  return {
+    tests,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
+
 export async function getAptitudeTestForEditing(testId: string) {
   return prisma.aptitudeTest.findFirst({
     where: { id: testId, deletedAt: null },
@@ -92,6 +126,51 @@ export async function listInvitations(testId: string) {
       },
     },
   });
+}
+
+export async function listInvitationsPaginated(testId: string, params?: { page?: number; pageSize?: number }) {
+  const page = Math.max(1, params?.page ?? 1);
+  const pageSize = params?.pageSize ?? 10;
+  const where = { testId };
+
+  const [invitations, total] = await Promise.all([
+    prisma.aptitudeInvitation.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        candidateName: true,
+        candidateEmail: true,
+        expiresAt: true,
+        openedAt: true,
+        revokedAt: true,
+        createdAt: true,
+        attempt: {
+          select: {
+            id: true,
+            startedAt: true,
+            submittedAt: true,
+            scoredPoints: true,
+            maxPoints: true,
+            identityMismatch: true,
+            declaredName: true,
+            autoSubmitted: true,
+          },
+        },
+      },
+    }),
+    prisma.aptitudeInvitation.count({ where }),
+  ]);
+
+  return {
+    invitations,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
 /** One candidate's answers next to the answer key. Reads the SNAPSHOTTED

@@ -23,6 +23,39 @@ export async function listAssessments() {
   });
 }
 
+export async function listAssessmentsPaginated(params?: { page?: number; pageSize?: number }) {
+  const page = Math.max(1, params?.page ?? 1);
+  const pageSize = params?.pageSize ?? 10;
+  const where = { deletedAt: null };
+
+  const [assessments, total] = await Promise.all([
+    prisma.assessment.findMany({
+      where,
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        showScoreToTaker: true,
+        createdAt: true,
+        publishedAt: true,
+        _count: { select: { invitations: true, sections: true } },
+      },
+    }),
+    prisma.assessment.count({ where }),
+  ]);
+
+  return {
+    assessments,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
+
 /** The authoring view: structure and answer key. */
 export async function getAssessmentForEditing(assessmentId: string) {
   return prisma.assessment.findFirst({
@@ -96,6 +129,51 @@ export async function listInvitations(assessmentId: string) {
       },
     },
   });
+}
+
+export async function listInvitationsPaginated(assessmentId: string, params?: { page?: number; pageSize?: number }) {
+  const page = Math.max(1, params?.page ?? 1);
+  const pageSize = params?.pageSize ?? 10;
+  const where = { assessmentId };
+
+  const [invitations, total] = await Promise.all([
+    prisma.assessmentInvitation.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        inviteeName: true,
+        inviteeEmail: true,
+        employeeId: true,
+        expiresAt: true,
+        openedAt: true,
+        revokedAt: true,
+        createdAt: true,
+        response: {
+          select: {
+            id: true,
+            startedAt: true,
+            submittedAt: true,
+            scoredPoints: true,
+            maxPoints: true,
+            identityMismatch: true,
+            declaredName: true,
+          },
+        },
+      },
+    }),
+    prisma.assessmentInvitation.count({ where }),
+  ]);
+
+  return {
+    invitations,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
 /**

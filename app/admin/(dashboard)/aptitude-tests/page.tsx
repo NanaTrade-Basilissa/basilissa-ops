@@ -1,30 +1,38 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { CheckCircle2, FileEdit, ListChecks, Plus, Send, Timer } from "lucide-react";
+import { Plus } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
-import { aptitudeOverview } from "@/lib/modules/aptitude/server";
+import { listAptitudeTestsPaginated } from "@/lib/modules/aptitude/server";
 import { createAptitudeTestAction } from "@/lib/modules/aptitude/actions";
-import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
-import { StatCard } from "@/components/admin/stat-card";
 import { AptitudeTestCreateDialog } from "@/components/admin/aptitude-test-create-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatAccraDateTime } from "@/lib/platform/date";
+import { AptitudeTestsTable } from "@/components/admin/aptitude-tests-table";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Timer } from "lucide-react";
 
 export const metadata: Metadata = { title: "Aptitude Tests" };
 export const dynamic = "force-dynamic";
 
-/**
- * The landing page for Aptitude Tests, mirrors the Assessments overview
- * page's shape (`app/admin/(dashboard)/assessments/page.tsx`), for the same
- * reason: a high-level picture before authoring or invitations, which stay
- * on `/all`, `/new`, `/[id]`.
- */
-export default async function AptitudeTestsOverviewPage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+function first(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function AptitudeTestsPage({ searchParams }: { searchParams: SearchParams }) {
   const actor = await requirePermission("aptitude:read");
   const canWrite = can(actor, "aptitude:write");
-  const overview = await aptitudeOverview();
+
+  const rawParams = await searchParams;
+  const page = Number(first(rawParams.page)) || 1;
+
+  const { tests, total, totalPages, pageSize } = await listAptitudeTestsPaginated({ page, pageSize: 10 });
+
+  function pageHref(targetPage: number) {
+    return targetPage === 1
+      ? "/admin/aptitude-tests"
+      : `/admin/aptitude-tests?page=${targetPage}`;
+  }
 
   return (
     <div className="space-y-6">
@@ -35,10 +43,7 @@ export default async function AptitudeTestsOverviewPage() {
             Timed screening tests for job candidates.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href="/admin/aptitude-tests/all" className={buttonVariants({ variant: "outline", size: "sm" })}>
-            <ListChecks className="size-4" /> View all
-          </Link>
+        <div>
           {canWrite && (
             <AptitudeTestCreateDialog
               action={createAptitudeTestAction}
@@ -52,94 +57,28 @@ export default async function AptitudeTestsOverviewPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total tests" value={overview.total} icon={Timer} />
-        <StatCard label="Active" value={overview.published} subtext="Published" icon={Send} tone="good" />
-        <StatCard label="Draft" value={overview.draft} icon={FileEdit} />
-        <StatCard
-          label="Completed submissions"
-          value={overview.totalSubmitted}
-          subtext={`${overview.totalInvitations} invited in total`}
-          icon={CheckCircle2}
-        />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recent tests</CardTitle>
-            <CardDescription className="text-xs">Latest created tests.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {overview.recentTests.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nothing yet.{" "}
-                {canWrite && (
-                  <AptitudeTestCreateDialog
-                    action={createAptitudeTestAction}
-                    trigger={
-                      <button type="button" className="underline underline-offset-4">
-                        Create the first one
-                      </button>
-                    }
-                  />
-                )}
-              </p>
-            ) : (
-              <ul className="divide-y divide-border text-sm">
-                {overview.recentTests.map((test) => (
-                  <li key={test.id} className="flex items-center gap-3 py-2.5">
-                    <Link
-                      href={`/admin/aptitude-tests/${test.id}`}
-                      className="min-w-0 flex-1 truncate font-medium underline-offset-4 hover:underline"
-                    >
-                      {test.title}
-                    </Link>
-                    <Badge variant={test.status === "PUBLISHED" ? "default" : "outline"} className="shrink-0 text-xs">
-                      {STATUS_LABEL[test.status]}
-                    </Badge>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {formatAccraDateTime(test.createdAt)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recent activity</CardTitle>
-            <CardDescription className="text-xs">Latest completed submissions.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {overview.recentActivity.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nobody has completed one yet.</p>
-            ) : (
-              <ul className="divide-y divide-border text-sm">
-                {overview.recentActivity.map((attempt) => (
-                  <li key={attempt.id} className="py-2.5">
-                    <Link
-                      href={`/admin/aptitude-tests/${attempt.invitation.test.id}/attempts/${attempt.id}`}
-                      className="block"
-                    >
-                      <span className="font-medium">{attempt.invitation.candidateName}</span>{" "}
-                      <span className="text-muted-foreground">
-                        {attempt.autoSubmitted ? "timed out on" : "completed"}
-                      </span>{" "}
-                      <span className="underline-offset-4 hover:underline">{attempt.invitation.test.title}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {formatAccraDateTime(attempt.submittedAt!)}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {tests.length === 0 ? (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Timer />
+            </EmptyMedia>
+            <EmptyTitle>Nothing here yet</EmptyTitle>
+            <EmptyDescription className="text-xs">Create a test to get started.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        <div className="space-y-4">
+          <AptitudeTestsTable tests={tests} />
+          <DataTablePagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            pageSize={pageSize}
+            buildHref={pageHref}
+          />
+        </div>
+      )}
     </div>
   );
 }
