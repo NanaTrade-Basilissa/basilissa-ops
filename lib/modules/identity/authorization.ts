@@ -210,6 +210,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "attendance:read",
     "employee:read",
     "schedule:read",
+    "schedule:write",
   ],
 
   // Everything, including granting roles. Should be one or two people.

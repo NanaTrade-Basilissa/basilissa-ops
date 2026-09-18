@@ -33,14 +33,27 @@ import { defineConfig } from "prisma/config";
  */
 
 const isProduction = process.env.NODE_ENV === "production";
+const targetEnvFile = process.env.PRISMA_ENV_FILE;
 
-loadEnvConfig(process.cwd(), !isProduction, {
-  // Next's loader logs "Environments: .env.local, .env" at info level. Route
-  // it through a quieter channel and add the resolved target, so every Prisma
-  // command states which database it is about to touch.
-  info: () => {},
-  error: (...args: unknown[]) => console.error(...args),
-});
+if (targetEnvFile) {
+  // Explicit env file requested (e.g. .env for production deploy).
+  // Do NOT call Next's loadEnvConfig, which forces .env.local ahead of .env.
+  if (typeof process.loadEnvFile === "function") {
+    try {
+      process.loadEnvFile(path.resolve(process.cwd(), targetEnvFile));
+    } catch (err) {
+      console.warn(`[prisma] Could not load ${targetEnvFile}:`, err);
+    }
+  }
+} else {
+  loadEnvConfig(process.cwd(), !isProduction, {
+    // Next's loader logs "Environments: .env.local, .env" at info level. Route
+    // it through a quieter channel and add the resolved target, so every Prisma
+    // command states which database it is about to touch.
+    info: () => {},
+    error: (...args: unknown[]) => console.error(...args),
+  });
+}
 
 /**
  * Host and database only — never the credentials. Printed so that running a
@@ -57,8 +70,8 @@ function describeTarget(url: string | undefined): string {
   }
 }
 
-if (!isProduction) {
-  console.log(`[prisma] database target: ${describeTarget(process.env.DATABASE_URL)}`);
+if (!isProduction || targetEnvFile) {
+  console.log(`[prisma] database target: ${describeTarget(process.env.DATABASE_URL)}${targetEnvFile ? ` (from ${targetEnvFile})` : ""}`);
 }
 
 export default defineConfig({
