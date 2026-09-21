@@ -18,7 +18,10 @@ export type AuthoringFailure =
   | "NOT_DRAFT"
   | "ALREADY_PUBLISHED"
   | "NOTHING_TO_PUBLISH"
-  | "QUESTION_WITHOUT_ANSWER";
+  | "QUESTION_WITHOUT_ANSWER"
+  | "NOT_PUBLISHED"
+  | "NOT_CLOSED"
+  | "HAS_ATTEMPTS";
 
 export type AuthoringFailureResult = {
   ok: false;
@@ -554,3 +557,187 @@ export async function deleteAptitudeTest(testId: string, actor: AuditActor): Pro
   });
   return DONE;
 }
+
+/**
+ * Reverts a published test to DRAFT status if and only if no candidate attempts
+ * have been made yet (attemptCount === 0). Once in draft, questions, sections,
+ * and options can be edited freely again.
+ */
+export async function unpublishAptitudeTest(testId: string, actor: AuditActor): Promise<AuthoringOutcome> {
+  const test = await prisma.aptitudeTest.findUnique({
+    where: { id: testId },
+    select: { id: true, title: true, status: true, deletedAt: true },
+  });
+  if (!test || test.deletedAt) return fail("NOT_FOUND", "No such aptitude test.");
+  if (test.status !== AptitudeTestStatus.PUBLISHED) {
+    return fail("NOT_PUBLISHED", "Only published tests can be reverted to draft.");
+  }
+
+  const attemptCount = await prisma.aptitudeAttempt.count({
+    where: { invitation: { testId } },
+  });
+  if (attemptCount > 0) {
+    return fail(
+      "HAS_ATTEMPTS",
+      `Cannot unpublish this test because ${attemptCount} candidate ${attemptCount === 1 ? "attempt has" : "attempts have"} already been recorded. Duplicate the test as a new draft to make changes.`,
+    );
+  }
+
+  await prisma.aptitudeTest.update({
+    where: { id: testId },
+    data: { status: AptitudeTestStatus.DRAFT, publishedAt: null },
+  });
+
+  await recordAudit({
+    actor,
+    action: "aptitude.test_unpublished",
+    entityType: "AptitudeTest",
+    entityId: testId,
+    before: { status: test.status },
+    after: { status: AptitudeTestStatus.DRAFT },
+  });
+
+  log.info("aptitude test reverted to draft", { testId });
+  return DONE;
+}
+
+/** Reopens a CLOSED test back to PUBLISHED status to resume accepting submissions. */
+export async function reopenAptitudeTest(testId: string, actor: AuditActor): Promise<AuthoringOutcome> {
+  const test = await prisma.aptitudeTest.findUnique({
+    where: { id: testId },
+    select: { id: true, title: true, status: true, deletedAt: true },
+  });
+  if (!test || test.deletedAt) return fail("NOT_FOUND", "No such aptitude test.");
+  if (test.status !== AptitudeTestStatus.CLOSED) {
+    return fail("NOT_CLOSED", "Only closed tests can be reopened.");
+  }
+
+  await prisma.aptitudeTest.update({
+    where: { id: testId },
+    data: { status: AptitudeTestStatus.PUBLISHED, closedAt: null },
+  });
+
+  await recordAudit({
+    actor,
+    action: "aptitude.test_reopened",
+    entityType: "AptitudeTest",
+    entityId: testId,
+    before: { status: test.status },
+    after: { status: AptitudeTestStatus.PUBLISHED },
+  });
+
+  log.info("aptitude test reopened", { testId });
+  return DONE;
+}
+
+/**
+ * Creates a complete copy of an existing test in DRAFT status, deep-cloning
+ * all sections, questions, and options. Preserves historical attempt integrity
+ * for the original test while giving HR a clean slate to edit questions for a new cycle.
+ */
+export async function duplicateAptitudeTest(
+  testId: string,
+  actor: AuditActor,
+): Promise<AuthoringOutcome<{ newTestId: string }>> {
+  const source = await prisma.aptitudeTest.findUnique({
+    where: { id: testId },
+    select: {
+      title: true,
+      description: true,
+      showScoreToCandidate: true,
+      passMarkPercent: true,
+      timeLimitMinutes: true,
+      invitationsExpire: true,
+      invitationTtlHours: true,
+      publicLinkNameMode: true,
+      publicLinkEmailMode: true,
+      deletedAt: true,
+      sections: {
+        orderBy: { order: "asc" },
+        select: {
+          title: true,
+          description: true,
+          order: true,
+          timeLimitMinutes: true,
+          questions: {
+            orderBy: { order: "asc" },
+            select: {
+              kind: true,
+              text: true,
+              order: true,
+              points: true,
+              required: true,
+              options: {
+                orderBy: { order: "asc" },
+                select: {
+                  text: true,
+                  order: true,
+                  isCorrect: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!source || source.deletedAt) return fail("NOT_FOUND", "No such aptitude test.");
+
+  const copyTitle = `${source.title} (Copy)`.slice(0, 150);
+
+  const created = await prisma.aptitudeTest.create({
+    data: {
+      title: copyTitle,
+      description: source.description,
+      showScoreToCandidate: source.showScoreToCandidate,
+      passMarkPercent: source.passMarkPercent,
+      timeLimitMinutes: source.timeLimitMinutes,
+      invitationsExpire: source.invitationsExpire,
+      invitationTtlHours: source.invitationTtlHours,
+      publicLinkEnabled: false,
+      publicLinkNameMode: source.publicLinkNameMode,
+      publicLinkEmailMode: source.publicLinkEmailMode,
+      status: AptitudeTestStatus.DRAFT,
+      createdBy: actor.userId,
+      sections: {
+        create: source.sections.map((sec) => ({
+          title: sec.title,
+          description: sec.description,
+          order: sec.order,
+          timeLimitMinutes: sec.timeLimitMinutes,
+          questions: {
+            create: sec.questions.map((q) => ({
+              kind: q.kind,
+              text: q.text,
+              order: q.order,
+              points: q.points,
+              required: q.required,
+              options: {
+                create: q.options.map((opt) => ({
+                  text: opt.text,
+                  order: opt.order,
+                  isCorrect: opt.isCorrect,
+                })),
+              },
+            })),
+          },
+        })),
+      },
+    },
+    select: { id: true },
+  });
+
+  await recordAudit({
+    actor,
+    action: "aptitude.test_duplicated",
+    entityType: "AptitudeTest",
+    entityId: created.id,
+    before: { sourceTestId: testId },
+    after: { title: copyTitle },
+  });
+
+  log.info("aptitude test duplicated", { sourceTestId: testId, newTestId: created.id });
+  return { ok: true, value: { newTestId: created.id } };
+}
+

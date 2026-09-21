@@ -78,8 +78,9 @@ export function AptitudeTestEditor({
             <Lock className="size-4" />
             <AlertTitle>Questions and scoring are frozen</AlertTitle>
             <AlertDescription className="text-xs">
-              This test is published, so its questions and scoring structure cannot change.
-              Title and details can still be updated in Settings.
+              This test is {isClosed ? "closed" : "published"}, so its questions and scoring structure cannot change.
+              If no candidates have attempted this test, you can revert it to draft from the test overview to edit questions.
+              If attempts already exist, duplicate the test as a new draft to make changes.
             </AlertDescription>
           </Alert>
         )}

@@ -98,6 +98,7 @@ export default async function AptitudeTestPage({
         {canWrite && (
           <AptitudeTestActions
             test={test}
+            attemptCount={summary.attempts}
             publicLinkUrl={publicLinkUrl}
           />
         )}

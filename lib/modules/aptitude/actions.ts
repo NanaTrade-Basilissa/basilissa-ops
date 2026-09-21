@@ -25,7 +25,10 @@ import {
   createAptitudeTest,
   deleteAptitudeTest,
   deleteQuestion,
+  duplicateAptitudeTest,
   publishAptitudeTest,
+  reopenAptitudeTest,
+  unpublishAptitudeTest,
   updateAptitudeTestDetails,
   updateQuestion,
   updateSection,
@@ -281,6 +284,47 @@ export async function closeAptitudeTestAction(
 
   revalidatePath(`/admin/aptitude-tests/${testId}`);
   return { saved: true };
+}
+
+export async function unpublishAptitudeTestAction(
+  testId: string,
+  _prev: AptitudeFormState,
+  _formData: FormData,
+): Promise<AptitudeFormState> {
+  const actor = await requirePermission("aptitude:write");
+  const outcome = await unpublishAptitudeTest(testId, auditActorFrom(actor));
+  if (!outcome.ok) return { error: outcome.message };
+
+  revalidatePath(`/admin/aptitude-tests/${testId}`);
+  revalidatePath("/admin/aptitude-tests");
+  return { saved: true };
+}
+
+export async function reopenAptitudeTestAction(
+  testId: string,
+  _prev: AptitudeFormState,
+  _formData: FormData,
+): Promise<AptitudeFormState> {
+  const actor = await requirePermission("aptitude:write");
+  const outcome = await reopenAptitudeTest(testId, auditActorFrom(actor));
+  if (!outcome.ok) return { error: outcome.message };
+
+  revalidatePath(`/admin/aptitude-tests/${testId}`);
+  revalidatePath("/admin/aptitude-tests");
+  return { saved: true };
+}
+
+export async function duplicateAptitudeTestAction(
+  testId: string,
+  _prev: AptitudeFormState,
+  _formData: FormData,
+): Promise<AptitudeFormState & { newTestId?: string }> {
+  const actor = await requirePermission("aptitude:write");
+  const outcome = await duplicateAptitudeTest(testId, auditActorFrom(actor));
+  if (!outcome.ok) return { error: outcome.message };
+
+  revalidatePath("/admin/aptitude-tests");
+  return { saved: true, newTestId: outcome.value.newTestId };
 }
 
 export async function deleteAptitudeTestAction(

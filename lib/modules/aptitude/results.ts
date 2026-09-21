@@ -319,7 +319,7 @@ export async function aptitudeOverview() {
 
 /** Headline numbers for the invitation list. */
 export async function aptitudeTestSummary(testId: string) {
-  const [invited, submitted, scores] = await Promise.all([
+  const [invited, submitted, attempts, scores] = await Promise.all([
     prisma.aptitudeInvitation.count({
       where: {
         testId,
@@ -331,6 +331,7 @@ export async function aptitudeTestSummary(testId: string) {
       },
     }),
     prisma.aptitudeAttempt.count({ where: { invitation: { testId }, submittedAt: { not: null } } }),
+    prisma.aptitudeAttempt.count({ where: { invitation: { testId } } }),
     prisma.aptitudeAttempt.findMany({
       where: { invitation: { testId }, submittedAt: { not: null } },
       select: { scoredPoints: true, maxPoints: true },
@@ -343,5 +344,5 @@ export async function aptitudeTestSummary(testId: string) {
       ? null
       : Math.round(scorable.reduce((sum, s) => sum + (s.scoredPoints! / s.maxPoints!) * 100, 0) / scorable.length);
 
-  return { invited, submitted, averagePercent };
+  return { invited, submitted, attempts, averagePercent };
 }
