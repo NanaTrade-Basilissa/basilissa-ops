@@ -6,6 +6,8 @@
 import { JobStatus, Role } from "@prisma/client";
 
 export const SESSION_COOKIE_NAME = "basilissa_admin_session";
+export const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days sliding window
+export const SESSION_REFRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000; // Refresh window: renew if < 6 days remaining (active within last day)
 
 /**
  * Holds a half-finished sign-in between the password step and the second

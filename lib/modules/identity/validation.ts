@@ -6,7 +6,15 @@ export const adminLoginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+export const apiLoginSchema = z.object({
+  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+  password: z.string().min(1, "Password is required"),
+  mfaCode: z.string().trim().optional(),
+  clientName: z.string().trim().max(100).optional(),
+});
+
 export type AdminLoginInput = z.infer<typeof adminLoginSchema>;
+export type ApiLoginInput = z.infer<typeof apiLoginSchema>;
 
 export const forgotPasswordSchema = z.object({
   email: z.string().min(1, "Email is required").email("Enter a valid email address"),

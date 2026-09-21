@@ -7,6 +7,8 @@ import { scoped } from "@/lib/platform/logger";
 import {
   MFA_PENDING_COOKIE_NAME,
   SESSION_COOKIE_NAME,
+  SESSION_DURATION_MS,
+  SESSION_REFRESH_THRESHOLD_MS,
   TRUSTED_DEVICE_COOKIE_NAME,
   TRUSTED_DEVICE_DURATION_MS,
 } from "./constants";
@@ -20,9 +22,7 @@ import {
  * buys three things a stateless token cannot:
  *
  *   - revocation. A terminated employee loses access on their next request,
- *     not whenever their token happens to expire. This was the blocking
- *     defect in the previous design: an 8-hour window in which a dismissed
- *     person still had a valid admin session.
+ *     not whenever their token happens to expire.
  *   - freshness. A demotion takes effect immediately, because roles are read
  *     at check time rather than baked into a token at sign-in.
  *   - bulk invalidation, via `sessionVersion`, without hunting session rows.
@@ -32,9 +32,13 @@ import {
  * its page both ask.
  */
 
-export { SESSION_COOKIE_NAME, MFA_PENDING_COOKIE_NAME, TRUSTED_DEVICE_COOKIE_NAME };
-
-const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours
+export {
+  SESSION_COOKIE_NAME,
+  SESSION_DURATION_MS,
+  SESSION_REFRESH_THRESHOLD_MS,
+  MFA_PENDING_COOKIE_NAME,
+  TRUSTED_DEVICE_COOKIE_NAME,
+};
 
 /** What the cookie carries. Pointers only — never roles, never a name. */
 export type SessionToken = {
@@ -103,6 +107,7 @@ export async function createSession(userId: string, userAgent?: string): Promise
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     expires: expiresAt,
+    maxAge: Math.floor(SESSION_DURATION_MS / 1000),
     path: "/",
   });
 }
@@ -127,15 +132,45 @@ export type ResolvedSession = {
   };
 };
 
+export const API_SESSION_DURATION_MS = SESSION_DURATION_MS; // 7 days sliding window
+
 /**
- * Reads the cookie and resolves it against the database.
- *
- * Every rejection below is deliberate; each corresponds to a way a token can
- * outlive the authority it was issued with.
+ * Creates an API session row and generates a signed Bearer token for external clients.
+ * Valid for durationMs (defaults to 7 days sliding).
  */
-export async function getSession(): Promise<ResolvedSession | null> {
-  const cookieStore = await cookies();
-  const token = await decrypt(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+export async function createApiSession(
+  userId: string,
+  userAgent?: string,
+  durationMs: number = SESSION_DURATION_MS,
+): Promise<{ token: string; expiresAt: Date; sessionId: string }> {
+  const expiresAt = new Date(Date.now() + durationMs);
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { sessionVersion: true },
+  });
+  if (!user) throw new Error(`createApiSession called for unknown user ${userId}`);
+
+  const session = await prisma.session.create({
+    data: { userId, expiresAt, userAgent: userAgent?.slice(0, 512) },
+    select: { id: true },
+  });
+
+  const token = await encrypt(
+    { userId, sessionId: session.id, sessionVersion: user.sessionVersion },
+    expiresAt,
+  );
+
+  return { token, expiresAt, sessionId: session.id };
+}
+
+/**
+ * Resolves a signed token string (from Bearer header or cookie) against the database.
+ * Every rejection corresponds to a way a token can outlive the authority it was issued with.
+ */
+export async function resolveSessionFromToken(tokenString: string | undefined): Promise<ResolvedSession | null> {
+  if (!tokenString) return null;
+  const token = await decrypt(tokenString);
   if (!token) return null;
 
   const session = await prisma.session.findUnique({
@@ -186,6 +221,19 @@ export async function getSession(): Promise<ResolvedSession | null> {
   if (session.user.sessionVersion !== token.sessionVersion) return null;
   if (session.user.status !== "ACTIVE") return null;
 
+  // Sliding window extension: if active and within the refresh threshold (remaining < 6 days out of 7),
+  // extend session.expiresAt by SESSION_DURATION_MS (7 days) and update lastUsedAt.
+  const timeRemainingMs = session.expiresAt.getTime() - Date.now();
+  if (timeRemainingMs < SESSION_DURATION_MS - SESSION_REFRESH_THRESHOLD_MS) {
+    const extendedExpiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+    prisma.session
+      .update({
+        where: { id: session.id },
+        data: { expiresAt: extendedExpiresAt, lastUsedAt: new Date() },
+      })
+      .catch((err) => scoped("session").warn("failed to extend sliding session in database", { err }));
+  }
+
   return {
     sessionId: session.id,
     user: {
@@ -203,6 +251,33 @@ export async function getSession(): Promise<ResolvedSession | null> {
         : null,
     },
   };
+}
+
+/**
+ * Public helper for API routes and external services to verify a Bearer token.
+ */
+export async function verifySessionToken(tokenString: string | undefined): Promise<ResolvedSession | null> {
+  return resolveSessionFromToken(tokenString);
+}
+
+/**
+ * Revokes a session row directly by ID.
+ */
+export async function revokeSessionById(sessionId: string): Promise<boolean> {
+  const result = await prisma.session.updateMany({
+    where: { id: sessionId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  return result.count > 0;
+}
+
+/**
+ * Reads the cookie and resolves it against the database.
+ */
+export async function getSession(): Promise<ResolvedSession | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  return resolveSessionFromToken(token);
 }
 
 /** Revoke one session (sign out) and clear the cookie. */

@@ -177,12 +177,14 @@ section.
 
 ### 🟢 B1 — `/api/v1` bearer-token API
 
-**Deferred to:** whichever of Phase 2 (device gateway) or Phase 5 (mobile)
-needs it first.
+**Status:** Built for external authentication integrations (Trello-style system).
 
-Listed as Phase 0 work, not built. It has no consumer, and a token lifecycle
-designed with no client to validate against is a token lifecycle designed
-wrong. Its shape will be clearer when the first real caller exists.
+Endpoints:
+- `POST /api/v1/auth/login`: Authenticates with email & password, returning a 30-day signed Bearer JWT and user profile.
+- `GET /api/v1/auth/me`: Verifies active session against database `Session` and `User.sessionVersion`.
+- `POST /api/v1/auth/logout`: Revokes the session row immediately on server.
+
+Tokens carry `userId`, `sessionId`, and `sessionVersion` signed via HS256 (`SESSION_SECRET`). Instant revocation is enforced on password/status change via `sessionVersion` or on demand via `revokedAt`. See `docs/integrations/trello-auth-guide.md` and OpenAPI spec at `/docs`.
 
 ### 🟢 B2 — `SyncOutbox`
 

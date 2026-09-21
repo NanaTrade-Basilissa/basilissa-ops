@@ -62,6 +62,10 @@ Welcome to the Basilissa Operations Platform API documentation.
       name: "Notifications",
       description: "Push notification token registration and staff messaging alerts.",
     },
+    {
+      name: "External Authentication",
+      description: "Email & password authentication and session management for external integrations (e.g. Trello system).",
+    },
   ],
   paths: {
     "/api/health": {
@@ -931,6 +935,144 @@ Verifies the 6-digit SMS OTP code against the challenge token and binds the smar
         },
       },
     },
+
+    "/api/v1/auth/login": {
+      post: {
+        tags: ["External Authentication"],
+        summary: "Sign In External User (Email & Password)",
+        description: `
+Authenticates a user using their Basilissa email and password, returning a 7-day sliding Bearer token and user profile. Automatically extends on visit; expires after 7 days of inactivity.
+
+- **Rate Limit**: 10 attempts per 10 minutes per IP address.
+- **Timing Safe**: Employs constant-time dummy password comparison.
+- **Revocation**: Backed by server session and \`sessionVersion\` for instant invalidation.
+- **MFA Support**: If the account has TOTP MFA enabled, supply \`mfaCode\`. If omitted, responds with 401 \`MFA_REQUIRED\`.
+        `.trim(),
+        operationId: "apiAuthLogin",
+        requestBody: {
+          required: true,
+          description: "User login credentials.",
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/ApiLoginInput",
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Successful authentication",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ApiLoginResponse",
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error or malformed payload",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Invalid credentials or MFA required/invalid",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+          },
+          "429": {
+            description: "Too many login attempts",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    "/api/v1/auth/me": {
+      get: {
+        tags: ["External Authentication"],
+        summary: "Verify Session & Get Current User",
+        description: "Validates the Bearer token and returns the current user profile, active roles, and custom permissions.",
+        operationId: "apiAuthMe",
+        security: [{ BearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Session is valid",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ApiMeResponse",
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Missing, expired, or revoked token",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    "/api/v1/auth/logout": {
+      post: {
+        tags: ["External Authentication"],
+        summary: "Revoke Session (Sign Out)",
+        description: "Invalidates the current Bearer token session in the database.",
+        operationId: "apiAuthLogout",
+        security: [{ BearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Signed out successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    message: { type: "string", example: "Signed out successfully" },
+                  },
+                  required: ["ok", "message"],
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Invalid or already revoked token",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ErrorResponse",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
@@ -945,6 +1087,12 @@ Verifies the 6-digit SMS OTP code against the challenge token and binds the smar
         scheme: "bearer",
         bearerFormat: "DeviceToken",
         description: "Signed 30-day mobile device session token issued by /api/v1/auth/mobile/otp/verify.",
+      },
+      BearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        description: "Signed 7-day sliding session token issued by /api/v1/auth/login for external applications.",
       },
     },
     schemas: {
@@ -1197,6 +1345,105 @@ Verifies the 6-digit SMS OTP code against the challenge token and binds the smar
           },
         },
         required: ["ok", "message", "employee", "deviceToken"],
+      },
+      ApiLoginInput: {
+        type: "object",
+        properties: {
+          email: { type: "string", format: "email", example: "manager@basilissa.com" },
+          password: { type: "string", format: "password", example: "SecretPassword123" },
+          mfaCode: {
+            type: "string",
+            description: "Optional 6-digit TOTP code if user has MFA enabled",
+            example: "123456",
+          },
+          clientName: {
+            type: "string",
+            description: "Identifier for the client application (e.g. 'trello_app')",
+            example: "trello_app",
+          },
+        },
+        required: ["email", "password"],
+      },
+      ApiLoginResponse: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean", example: true },
+          token: { type: "string", description: "Signed 30-day Bearer token", example: "eyJhbGciOi..." },
+          expiresAt: { type: "string", format: "date-time", example: "2026-10-19T20:00:00.000Z" },
+          user: {
+            type: "object",
+            properties: {
+              id: { type: "string", example: "cm123abc" },
+              name: { type: "string", example: "Jane Doe" },
+              email: { type: "string", example: "jane@basilissa.com" },
+              status: { type: "string", example: "ACTIVE" },
+              roles: {
+                type: "array",
+                items: { type: "string" },
+                example: ["BRANCH_MANAGER"],
+              },
+              roleAssignments: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    role: { type: "string", example: "BRANCH_MANAGER" },
+                    scopeType: { type: "string", example: "BRANCH" },
+                    scopeId: { type: "string", example: "branch_spintex" },
+                  },
+                  required: ["role", "scopeType", "scopeId"],
+                },
+              },
+              permissions: {
+                type: "array",
+                items: { type: "string" },
+                example: ["feedback:read", "branch:read"],
+              },
+            },
+            required: ["id", "name", "email", "status", "roles"],
+          },
+        },
+        required: ["ok", "token", "expiresAt", "user"],
+      },
+      ApiMeResponse: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean", example: true },
+          user: {
+            type: "object",
+            properties: {
+              id: { type: "string", example: "cm123abc" },
+              name: { type: "string", example: "Jane Doe" },
+              email: { type: "string", example: "jane@basilissa.com" },
+              status: { type: "string", example: "ACTIVE" },
+              roles: {
+                type: "array",
+                items: { type: "string" },
+                example: ["BRANCH_MANAGER"],
+              },
+              roleAssignments: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    role: { type: "string", example: "BRANCH_MANAGER" },
+                    scopeType: { type: "string", example: "BRANCH" },
+                    scopeId: { type: "string", example: "branch_spintex" },
+                  },
+                  required: ["role", "scopeType", "scopeId"],
+                },
+              },
+              permissions: {
+                type: "array",
+                items: { type: "string" },
+                example: ["feedback:read", "branch:read"],
+              },
+            },
+            required: ["id", "name", "email", "status", "roles"],
+          },
+          sessionId: { type: "string", example: "cm456def" },
+        },
+        required: ["ok", "user", "sessionId"],
       },
       ErrorResponse: {
         type: "object",

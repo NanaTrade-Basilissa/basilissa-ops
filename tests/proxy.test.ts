@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
+import { SignJWT } from "jose";
 import { proxy } from "@/proxy";
 import { SESSION_COOKIE_NAME } from "@/lib/modules/identity/constants";
 
@@ -50,5 +51,42 @@ describe("proxy (optimistic admin route protection)", () => {
   it("leaves the public feedback API untouched", () => {
     const res = proxy(makeRequest("/api/feedback"));
     expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("slides/refreshes the session cookie when remaining lifetime is under 6 days", async () => {
+    const secret = new TextEncoder().encode(process.env.SESSION_SECRET || "default_test_secret_32_characters_long");
+    process.env.SESSION_SECRET = process.env.SESSION_SECRET || "default_test_secret_32_characters_long";
+
+    // Token issued 2 days ago with 5 days remaining (< 6 days threshold)
+    const token = await new SignJWT({ sid: "sess_slide_1", sv: 1 })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject("user_slide_1")
+      .setIssuedAt(Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60)
+      .setExpirationTime(Math.floor(Date.now() / 1000) + 5 * 24 * 60 * 60)
+      .sign(secret);
+
+    const res = proxy(makeRequest("/admin", token));
+    expect(res.headers.get("location")).toBeNull();
+    const setCookie = res.cookies.get(SESSION_COOKIE_NAME);
+    expect(setCookie).toBeDefined();
+    expect(setCookie?.value).not.toBe(token); // Refreshed new token!
+  });
+
+  it("does not slide a freshly issued session cookie (no redundant cookie churn)", async () => {
+    const secret = new TextEncoder().encode(process.env.SESSION_SECRET || "default_test_secret_32_characters_long");
+    process.env.SESSION_SECRET = process.env.SESSION_SECRET || "default_test_secret_32_characters_long";
+
+    // Token issued just now with full 7 days remaining
+    const token = await new SignJWT({ sid: "sess_fresh_1", sv: 1 })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject("user_fresh_1")
+      .setIssuedAt()
+      .setExpirationTime(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60)
+      .sign(secret);
+
+    const res = proxy(makeRequest("/admin", token));
+    expect(res.headers.get("location")).toBeNull();
+    const setCookie = res.cookies.get(SESSION_COOKIE_NAME);
+    expect(setCookie).toBeUndefined(); // Fresh, no need to touch cookie
   });
 });
