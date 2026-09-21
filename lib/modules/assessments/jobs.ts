@@ -15,7 +15,7 @@ import { PermanentJobError } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { APP_NAME } from "@/lib/platform/constants";
 import { DEFAULT_INVITATION_TTL_HOURS } from "./constants";
-import { getHrNotificationEmails } from "@/lib/modules/identity/hr-recipients";
+import { getHrNotificationEmails } from "@/lib/modules/identity/jobs";
 
 const log = scoped("assessments.invitation-send");
 

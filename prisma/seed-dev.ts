@@ -16,7 +16,6 @@ import {
   AssessmentQuestionKind,
   AptitudeTestStatus,
   AptitudeQuestionKind,
-  Prisma,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";

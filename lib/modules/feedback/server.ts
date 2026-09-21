@@ -21,3 +21,4 @@ export * from "./scoping";
 export * from "./analytics";
 export * from "./notifications";
 export * from "./jobs";
+export * from "./recipients";

@@ -314,7 +314,6 @@ export async function GET(request: NextRequest) {
     : isCompleted
       ? "COMPLETED"
       : "CLOCKED_OUT";
-  const dutyStatus = liveStatus;
 
   const matchingShift = resolvedSchedule
     ? shifts.find((s) => s.id === resolvedSchedule.shiftId)

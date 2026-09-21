@@ -122,8 +122,8 @@ export async function POST(request: NextRequest) {
       direction,
       error: result.error,
       message: result.message,
-      distanceMeters: (result as any).distanceMeters,
-      radiusMeters: (result as any).radiusMeters,
+      distanceMeters: "distanceMeters" in result ? result.distanceMeters : undefined,
+      radiusMeters: "radiusMeters" in result ? result.radiusMeters : undefined,
     });
 
     const status =

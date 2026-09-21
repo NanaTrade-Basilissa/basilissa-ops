@@ -82,7 +82,7 @@ export function RoleDialog({
     } else if (state?.error) {
       toast.error(state.error);
     }
-  }, [state, isEditing, name, onSaved]);
+  }, [state, isEditing, name, onSaved, setOpen]);
 
   const togglePermission = (key: string) => {
     setSelectedPermissions((prev) => {

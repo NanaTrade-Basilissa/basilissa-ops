@@ -3,7 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Download, MapPin, MessageSquareText, Pencil, Star } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
-import { getDashboardData, getBranchTrendSeries, type TrendGranularity } from "@/lib/modules/feedback/server";
+import {
+  getDashboardData,
+  getBranchTrendSeries,
+  listConfigurableRecipientsForBranch,
+  type TrendGranularity,
+} from "@/lib/modules/feedback/server";
 import { toggleBranchActive, updateBranch } from "@/lib/modules/branches/actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +16,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { BranchDialog } from "@/components/admin/branch-dialog";
 import { BranchGeofenceCard } from "@/components/admin/branch-geofence-card";
 import { BranchFeedbackRecipientsCard } from "@/components/admin/branch-feedback-recipients-card";
-import { listConfigurableRecipientsForBranch } from "@/lib/modules/feedback/recipients";
 import { StatCard } from "@/components/admin/stat-card";
 import { CopyLinkButton } from "@/components/admin/copy-link-button";
 import {

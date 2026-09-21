@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Mail, Plus, Trash2, UserCheck, ShieldAlert } from "lucide-react";
+import { Mail, Plus, Trash2, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { saveBranchRecipientsAction } from "@/lib/modules/branches/recipient-actions";
-import type { ConfigurableRecipient } from "@/lib/modules/feedback/recipients";
+import { saveBranchRecipientsAction } from "@/lib/modules/branches/actions";
+import type { ConfigurableRecipient } from "@/lib/modules/feedback/constants";
 
 interface BranchFeedbackRecipientsCardProps {
   branchId: string;

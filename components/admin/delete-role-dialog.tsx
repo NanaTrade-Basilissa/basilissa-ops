@@ -39,7 +39,6 @@ export function DeleteRoleDialog({
     undefined,
   );
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (state?.success) {
       toast.success(`Role "${role.name}" deleted successfully.`);
@@ -48,7 +47,7 @@ export function DeleteRoleDialog({
     } else if (state?.error) {
       toast.error(state.error);
     }
-  }, [state, role.name, onDeleted]);
+  }, [state, role.name, onDeleted, setOpen]);
 
   const hasAssignedUsers = role.userCount > 0;
 

@@ -2,16 +2,9 @@ import "server-only";
 import { prisma } from "@/lib/platform/prisma";
 import { auditActorFrom, type Actor } from "@/lib/modules/identity/authorization";
 import { recordAudit } from "@/lib/platform/audit";
+import type { ConfigurableRecipient } from "./constants";
 
-export type ConfigurableRecipient = {
-  id?: string;
-  email: string;
-  name: string;
-  roleLabel: string;
-  userId?: string | null;
-  enabled: boolean;
-  isDefaultManager: boolean;
-};
+export type { ConfigurableRecipient };
 
 /**
  * Resolves the destination email addresses for a new feedback submission.

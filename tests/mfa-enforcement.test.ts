@@ -62,15 +62,15 @@ describe("the enrolment page stays reachable", () => {
   });
 
   it("gates on authentication alone, not permission", () => {
-    expect(gateOf(read("app/admin/(dashboard)/security/page.tsx"))).toBe("auth");
+    expect(gateOf(read("app/admin/(dashboard)/settings/page.tsx"))).toBe("auth");
   });
 
   it("is the page the MFA check actually redirects to", () => {
     const dal = read("lib/modules/identity/dal.ts");
-    const target = dal.match(/redirect\("(\/admin\/security[^"]*)"\)/)?.[1];
+    const target = dal.match(/redirect\("(\/admin\/settings[^"]*)"\)/)?.[1];
 
-    expect(target).toBe("/admin/security?enrol=required");
-    expect(existsSync(path.join(GROUP, "security/page.tsx"))).toBe(true);
+    expect(target).toBe("/admin/settings?enrol=required");
+    expect(existsSync(path.join(GROUP, "settings/page.tsx"))).toBe(true);
   });
 
   // requireAdminShell exists only to break the loop. A comment saying so is
@@ -84,15 +84,13 @@ describe("the enrolment page stays reachable", () => {
     expect(body).toMatch(/requireAuth\(\)/);
   });
 
-  // Querying privileged data (like audit logs) on the enrolment page calls
-  // `requirePermission`, which delegates to `requireMfaIfNeeded` and redirects
-  // back to `/admin/security?enrol=required`. The enrolment page must not
-  // run those queries until MFA is actually confirmed.
+  // Querying privileged data on the enrolment page would delegate to
+  // `requireMfaIfNeeded` and redirect back to `/admin/settings?enrol=required`.
+  // The enrolment page must not run permission-gated queries.
   it("does not execute permission-gated queries when MFA is required but not yet enabled", () => {
-    const page = read("app/admin/(dashboard)/security/page.tsx");
-    expect(page).toMatch(
-      /canViewAudit\s*=\s*can\(actor,\s*"user:read"\)\s*&&\s*\(!isRequiredRole\s*\|\|\s*enabled\)/,
-    );
+    const page = read("app/admin/(dashboard)/settings/page.tsx");
+    expect(page).not.toMatch(/requirePermission\(/);
+    expect(page).toMatch(/requireAuth\(/);
   });
 });
 
@@ -137,7 +135,7 @@ describe("no page relies on a layout for its protection", () => {
       .filter((file) => gateOf(readFileSync(file, "utf8")) === "auth")
       .map((file) => path.relative(GROUP, file));
 
-    expect(authOnly).toEqual(["security/page.tsx"]);
+    expect(authOnly).toEqual(["settings/page.tsx"]);
   });
 });
 

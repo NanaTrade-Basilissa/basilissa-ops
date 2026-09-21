@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { requireAdminShell } from "@/lib/modules/identity/server";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -7,6 +8,7 @@ export default async function SecurityPage({
 }: {
   searchParams: SearchParams;
 }) {
+  await requireAdminShell();
   const sp = await searchParams;
   const params = new URLSearchParams();
 

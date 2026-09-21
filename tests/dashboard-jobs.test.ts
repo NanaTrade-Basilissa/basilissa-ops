@@ -5,10 +5,27 @@ import {
   resendEmailJobAction,
   cancelEmailJobAction,
 } from "@/lib/modules/identity/actions";
-import * as dalModule from "@/lib/modules/identity/dal";
-import * as emailQueueModule from "@/lib/modules/identity/email-queue";
 import { isSuperAdmin, type Actor } from "@/lib/modules/identity/authorization";
 import { revalidatePath } from "next/cache";
+
+const { mockRequirePermission, mockRetryEmailJob, mockResendEmailJob, mockCancelEmailJob } = vi.hoisted(() => ({
+  mockRequirePermission: vi.fn(),
+  mockRetryEmailJob: vi.fn(),
+  mockResendEmailJob: vi.fn(),
+  mockCancelEmailJob: vi.fn(),
+}));
+
+vi.mock("@/lib/modules/identity/dal", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  requirePermission: mockRequirePermission,
+}));
+
+vi.mock("@/lib/modules/identity/email-queue", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  retryEmailJob: mockRetryEmailJob,
+  resendEmailJob: mockResendEmailJob,
+  cancelEmailJob: mockCancelEmailJob,
+}));
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
@@ -34,6 +51,10 @@ describe("Dashboard Jobs: Super Admin Visibility and Actions", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.mocked(revalidatePath).mockReset();
+    mockRequirePermission.mockReset();
+    mockRetryEmailJob.mockReset();
+    mockResendEmailJob.mockReset();
+    mockCancelEmailJob.mockReset();
   });
 
   describe("isSuperAdmin role gating", () => {
@@ -58,8 +79,8 @@ describe("Dashboard Jobs: Super Admin Visibility and Actions", () => {
   describe("retryEmailJobAction", () => {
     it("revalidates both email-queue and admin dashboard on success", async () => {
       const superAdmin = makeActor(Role.SUPER_ADMIN);
-      vi.spyOn(dalModule, "requirePermission").mockResolvedValue(superAdmin as never);
-      vi.spyOn(emailQueueModule, "retryEmailJob").mockResolvedValue({ success: true });
+      mockRequirePermission.mockResolvedValue(superAdmin);
+      mockRetryEmailJob.mockResolvedValue({ success: true });
 
       const result = await retryEmailJobAction("job_123");
 
@@ -70,8 +91,8 @@ describe("Dashboard Jobs: Super Admin Visibility and Actions", () => {
 
     it("does not revalidate if retry fails", async () => {
       const superAdmin = makeActor(Role.SUPER_ADMIN);
-      vi.spyOn(dalModule, "requirePermission").mockResolvedValue(superAdmin as never);
-      vi.spyOn(emailQueueModule, "retryEmailJob").mockResolvedValue({
+      mockRequirePermission.mockResolvedValue(superAdmin);
+      mockRetryEmailJob.mockResolvedValue({
         success: false,
         error: "Job not found",
       });
@@ -86,8 +107,8 @@ describe("Dashboard Jobs: Super Admin Visibility and Actions", () => {
   describe("resendEmailJobAction", () => {
     it("revalidates both email-queue and admin dashboard on success", async () => {
       const superAdmin = makeActor(Role.SUPER_ADMIN);
-      vi.spyOn(dalModule, "requirePermission").mockResolvedValue(superAdmin as never);
-      vi.spyOn(emailQueueModule, "resendEmailJob").mockResolvedValue({
+      mockRequirePermission.mockResolvedValue(superAdmin);
+      mockResendEmailJob.mockResolvedValue({
         success: true,
         newJobId: "job_456",
       });
@@ -102,8 +123,8 @@ describe("Dashboard Jobs: Super Admin Visibility and Actions", () => {
 
     it("does not revalidate if resend fails", async () => {
       const superAdmin = makeActor(Role.SUPER_ADMIN);
-      vi.spyOn(dalModule, "requirePermission").mockResolvedValue(superAdmin as never);
-      vi.spyOn(emailQueueModule, "resendEmailJob").mockResolvedValue({
+      mockRequirePermission.mockResolvedValue(superAdmin);
+      mockResendEmailJob.mockResolvedValue({
         success: false,
         error: "Job not found",
       });
@@ -118,8 +139,8 @@ describe("Dashboard Jobs: Super Admin Visibility and Actions", () => {
   describe("cancelEmailJobAction", () => {
     it("revalidates both email-queue and admin dashboard on success", async () => {
       const superAdmin = makeActor(Role.SUPER_ADMIN);
-      vi.spyOn(dalModule, "requirePermission").mockResolvedValue(superAdmin as never);
-      vi.spyOn(emailQueueModule, "cancelEmailJob").mockResolvedValue({ success: true });
+      mockRequirePermission.mockResolvedValue(superAdmin);
+      mockCancelEmailJob.mockResolvedValue({ success: true });
 
       const result = await cancelEmailJobAction("job_123");
 
@@ -130,8 +151,8 @@ describe("Dashboard Jobs: Super Admin Visibility and Actions", () => {
 
     it("does not revalidate if cancellation fails", async () => {
       const superAdmin = makeActor(Role.SUPER_ADMIN);
-      vi.spyOn(dalModule, "requirePermission").mockResolvedValue(superAdmin as never);
-      vi.spyOn(emailQueueModule, "cancelEmailJob").mockResolvedValue({
+      mockRequirePermission.mockResolvedValue(superAdmin);
+      mockCancelEmailJob.mockResolvedValue({
         success: false,
         error: "Cannot cancel completed job",
       });

@@ -7,7 +7,6 @@ import {
 import { POST as cronPost } from "@/lib/../app/api/cron/attendance/route";
 import { prisma } from "@/lib/platform/prisma";
 import * as pushModule from "@/lib/platform/push";
-import * as attendanceServer from "@/lib/modules/attendance/server";
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),

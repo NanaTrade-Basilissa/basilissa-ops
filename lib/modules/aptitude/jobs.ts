@@ -15,7 +15,7 @@ import { scoped } from "@/lib/platform/logger";
 import { APP_NAME } from "@/lib/platform/constants";
 import { DEFAULT_INVITATION_TTL_HOURS, APTITUDE_NOTIFY_HR } from "./constants";
 import { finalizeAttempt } from "./finalize";
-import { getHrNotificationEmails } from "@/lib/modules/identity/hr-recipients";
+import { getHrNotificationEmails } from "@/lib/modules/identity/jobs";
 
 const log = scoped("aptitude.invitation-send");
 

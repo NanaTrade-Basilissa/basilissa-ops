@@ -37,3 +37,13 @@ export const FEEDBACK_QUESTION_COUNT = FEEDBACK_QUESTIONS.length;
 
 /** sessionStorage key used to make the public feedback form idempotent. */
 export const FEEDBACK_TOKEN_STORAGE_KEY = "basilissa:feedback:submission";
+
+export type ConfigurableRecipient = {
+  id?: string;
+  email: string;
+  name: string;
+  roleLabel: string;
+  userId?: string | null;
+  enabled: boolean;
+  isDefaultManager: boolean;
+};

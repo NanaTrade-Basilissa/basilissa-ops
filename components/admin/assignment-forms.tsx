@@ -271,7 +271,7 @@ export function RevokeDeviceButton({
           <AlertDialogHeader>
             <AlertDialogTitle>Release bound device?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will unbind {deviceLabel ? `"${deviceLabel}"` : "this mobile device"} from this employee's account. The physical phone will be released and the employee will be permitted to register a new phone via OTP.
+              This will unbind {deviceLabel ? `"${deviceLabel}"` : "this mobile device"} from this employee&apos;s account. The physical phone will be released and the employee will be permitted to register a new phone via OTP.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

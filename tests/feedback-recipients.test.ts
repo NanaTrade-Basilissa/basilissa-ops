@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Actor } from "@/lib/modules/identity/authorization";
 
 const mockPrisma = vi.hoisted(() => ({
   branchFeedbackRecipient: {
@@ -12,7 +13,7 @@ const mockPrisma = vi.hoisted(() => ({
   auditLog: {
     create: vi.fn(),
   },
-  $transaction: vi.fn(async (callback: (tx: any) => Promise<any>) => {
+  $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
     return callback(mockPrisma);
   }),
 }));
@@ -25,7 +26,7 @@ const {
   getFeedbackRecipientsForBranch,
   listConfigurableRecipientsForBranch,
   saveBranchFeedbackRecipients,
-} = await import("@/lib/modules/feedback/recipients");
+} = await import("@/lib/modules/feedback/server");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -110,10 +111,11 @@ describe("saveBranchFeedbackRecipients", () => {
       ],
       {
         userId: "user_admin",
+        name: "Admin User",
         email: "admin@basilissa.gh",
-        assignments: [{ role: "SUPER_ADMIN", scopeType: "GLOBAL", scopeId: null }],
-        sessionVersion: 1,
-      } as any,
+        status: "ACTIVE",
+        assignments: [{ role: "SUPER_ADMIN", scopeType: "GLOBAL", scopeId: "" }],
+      } satisfies Actor,
     );
 
     expect(mockPrisma.branchFeedbackRecipient.deleteMany).toHaveBeenCalledWith({
