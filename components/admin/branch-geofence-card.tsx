@@ -82,9 +82,7 @@ export function BranchGeofenceCard({ branch, canWrite }: BranchGeofenceCardProps
       <CardHeader className="pb-3 border-b border-border/40">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-amber-500/10 text-primary">
-              <Navigation className="size-4" />
-            </div>
+            <Navigation className="size-5 text-foreground shrink-0" />
             <div>
               <div className="flex items-center gap-2">
                 <CardTitle className="text-base font-bold">Attendance Geofence & Location</CardTitle>
@@ -156,7 +154,7 @@ export function BranchGeofenceCard({ branch, canWrite }: BranchGeofenceCardProps
               <div className="rounded-xl border border-border/50 bg-slate-50/70 p-3.5 space-y-1.5">
                 <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
                   <span className="flex items-center gap-1.5">
-                    <MapPin className="size-3.5 text-primary" />
+                    <MapPin className="size-3.5 text-foreground" />
                     GPS Coordinates
                   </span>
                   {hasCoords && (
@@ -213,7 +211,7 @@ export function BranchGeofenceCard({ branch, canWrite }: BranchGeofenceCardProps
             {/* Architectural Rule Cards */}
             <div className="rounded-xl border border-border/50 bg-slate-50/40 p-3.5 space-y-2.5">
               <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <ShieldCheck className="size-3.5 text-primary" />
+                <ShieldCheck className="size-3.5 text-foreground" />
                 Clock-In Enforcement Rules
               </div>
               <ul className="text-xs text-muted-foreground space-y-1.5 pl-1">

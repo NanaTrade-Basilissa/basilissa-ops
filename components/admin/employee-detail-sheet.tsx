@@ -98,6 +98,7 @@ export function EmployeeDetailSheet({
               canSchedule={detail.canSchedule}
               attendanceEnabled={detail.attendanceEnabled}
               attendanceHistory={detail.attendanceHistory}
+              branchDevices={detail.branchDevices}
               onMutated={load}
             />
 

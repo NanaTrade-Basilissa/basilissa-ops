@@ -1,8 +1,9 @@
-import { Building2, CalendarClock, Smartphone } from "lucide-react";
+import { Building2, CalendarClock, Fingerprint, Smartphone } from "lucide-react";
 import {
   assignBranch,
   assignShift,
   endBranchAssignment,
+  linkDevicePin,
   revokeDeviceIdentity,
   updateEmployee,
 } from "@/lib/modules/employees/actions";
@@ -11,6 +12,7 @@ import type { getEmployee } from "@/lib/modules/employees/server";
 import { EmployeeForm } from "@/components/admin/employee-form";
 import {
   BranchAssignmentForm,
+  DevicePinLinkRow,
   EndAssignmentButton,
   RevokeDeviceButton,
   ShiftAssignmentForm,
@@ -42,6 +44,7 @@ export function EmployeeDetailContent({
   canSchedule,
   attendanceEnabled = true,
   attendanceHistory,
+  branchDevices = [],
   onMutated,
 }: {
   employee: Employee;
@@ -58,6 +61,7 @@ export function EmployeeDetailContent({
   canSchedule: boolean;
   attendanceEnabled?: boolean;
   attendanceHistory?: EmployeeAttendanceHistoryData | null;
+  branchDevices?: { id: string; serialNumber: string; label: string | null; branchId: string; branch: { name: string } }[];
   onMutated?: () => void;
 }) {
   const profileContent = (
@@ -150,6 +154,40 @@ export function EmployeeDetailContent({
         </CardContent>
       </Card>
 
+      {branchDevices.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Fingerprint className="size-4" />
+              Terminal PINs
+            </CardTitle>
+            <CardDescription className="text-xs">
+              The PIN a fingerprint terminal reports for this person, per branch.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border">
+              {branchDevices.map((device) => {
+                const linked = employee.deviceIdentities?.find(
+                  (d) => d.providerType === "FINGERPRINT" && d.deviceId === device.serialNumber,
+                );
+                return (
+                  <DevicePinLinkRow
+                    key={device.id}
+                    device={device}
+                    linkedPin={linked?.externalId ?? null}
+                    linkedIdentityId={linked?.id ?? null}
+                    linkAction={linkDevicePin.bind(null, employee.id)}
+                    revokeAction={revokeDeviceIdentity}
+                    canWrite={canWrite}
+                    onMutated={onMutated}
+                  />
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {attendanceEnabled && (
         <Card>

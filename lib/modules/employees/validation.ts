@@ -75,6 +75,15 @@ export const branchAssignmentSchema = z.object({
     .refine((value) => !Number.isNaN(value.getTime()), "Invalid date"),
 });
 
+export const devicePinLinkSchema = z.object({
+  deviceId: z.string().min(1, "Device is required"),
+  pin: z
+    .string()
+    .trim()
+    .min(1, "PIN is required")
+    .max(20, "PIN must be at most 20 characters"),
+});
+
 export const shiftInputSchema = z
   .object({
     name: z.string().trim().min(2, "Name the shift").max(60),

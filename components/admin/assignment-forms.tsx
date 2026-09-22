@@ -294,3 +294,97 @@ export function RevokeDeviceButton({
   );
 }
 
+/**
+ * One row per fingerprint terminal at a branch this employee is assigned to
+ * — either the linked PIN with an unlink action, or a small inline form to
+ * link one. Deliberately not bundled into the branch-assignment form itself:
+ * the PIN is rarely known at the moment the branch is assigned, since it
+ * only exists once someone has physically enrolled the employee on that
+ * terminal, which can happen days later.
+ */
+export function DevicePinLinkRow({
+  device,
+  linkedPin,
+  linkedIdentityId,
+  linkAction,
+  revokeAction,
+  canWrite,
+  onMutated,
+}: {
+  device: { id: string; serialNumber: string; label: string | null; branch: { name: string } };
+  linkedPin: string | null;
+  linkedIdentityId: string | null;
+  linkAction: (prevState: FormState, formData: FormData) => Promise<FormState>;
+  revokeAction: (prevState: FormState, formData: FormData) => Promise<FormState>;
+  canWrite: boolean;
+  onMutated?: () => void;
+}) {
+  const [linkState, linkFormAction, linkPending] = useActionState<FormState, FormData>(linkAction, undefined);
+  const [revokeState, revokeFormAction, revokePending] = useActionState<FormState, FormData>(revokeAction, undefined);
+
+  useEffect(() => {
+    if (linkState?.success) {
+      toast.success("PIN linked");
+      onMutated?.();
+    } else if (linkState?.error) {
+      toast.error(linkState.error);
+    }
+  }, [linkState, onMutated]);
+
+  useEffect(() => {
+    if (revokeState?.success) {
+      toast.success("PIN unlinked");
+      onMutated?.();
+    } else if (revokeState?.error) {
+      toast.error(revokeState.error);
+    }
+  }, [revokeState, onMutated]);
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3">
+      <div className="space-y-0.5">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <span>{device.branch.name}</span>
+          {device.label && <span className="font-normal text-muted-foreground">· {device.label}</span>}
+        </div>
+        <p className="font-mono text-xs text-muted-foreground">{device.serialNumber}</p>
+      </div>
+
+      {linkedPin ? (
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm">PIN {linkedPin}</span>
+          {canWrite && (
+            <form action={revokeFormAction}>
+              <input type="hidden" name="deviceIdentityId" value={linkedIdentityId ?? ""} />
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                disabled={revokePending}
+                className="text-destructive hover:bg-destructive/10"
+              >
+                {revokePending ? <Loader2 className="size-3.5 animate-spin" /> : "Unlink"}
+              </Button>
+            </form>
+          )}
+        </div>
+      ) : canWrite ? (
+        <form action={linkFormAction} className="flex items-center gap-2">
+          <input type="hidden" name="deviceId" value={device.id} />
+          <Input name="pin" placeholder="PIN" required className="h-8 w-20 font-mono text-sm" />
+          <Button type="submit" variant="outline" size="sm" disabled={linkPending}>
+            {linkPending ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+            Link
+          </Button>
+        </form>
+      ) : (
+        <span className="text-xs italic text-muted-foreground">Not linked</span>
+      )}
+
+      {linkState?.fieldErrors?.pin && (
+        <p className="w-full text-xs text-destructive">{linkState.fieldErrors.pin}</p>
+      )}
+    </li>
+  );
+}
+

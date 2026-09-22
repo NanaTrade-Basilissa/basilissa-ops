@@ -34,11 +34,16 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
     can(actor, "attendance:read") ||
     employeeBranchIds.some((branchId) => can(actor, "attendance:read", { branchId }));
 
-  const [branches, shifts, shiftAssignments, attendanceHistory] = await Promise.all([
+  const [branches, shifts, shiftAssignments, attendanceHistory, branchDevices] = await Promise.all([
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     listShifts(scope),
     listShiftAssignments(employee.id),
     canReadAttendance ? getEmployeeAttendanceHistory(scope, employee.id) : null,
+    prisma.device.findMany({
+      where: { branchId: { in: employeeBranchIds }, isActive: true },
+      orderBy: { registeredAt: "asc" },
+      select: { id: true, serialNumber: true, label: true, branchId: true, branch: { select: { name: true } } },
+    }),
   ]);
 
   return (
@@ -52,6 +57,7 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
         canSchedule={canSchedule}
         attendanceEnabled={true}
         attendanceHistory={attendanceHistory}
+        branchDevices={branchDevices}
       />
     </div>
   );

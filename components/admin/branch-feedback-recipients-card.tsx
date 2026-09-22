@@ -106,8 +106,8 @@ export function BranchFeedbackRecipientsCard({
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="space-y-1">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Mail className="size-4 text-primary" />
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <Mail className="size-5 text-foreground shrink-0" />
               Customer Feedback Email Routing
             </CardTitle>
             <CardDescription className="text-xs">
@@ -193,24 +193,34 @@ export function BranchFeedbackRecipientsCard({
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Add Additional Recipient
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                placeholder="Full name (optional)"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <Input
+                  placeholder="Full name (optional)"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  disabled={isPending}
+                  className="bg-background"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <Input
+                  type="email"
+                  placeholder="Email address (required)"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  disabled={isPending}
+                  required
+                  className="bg-background"
+                />
+              </div>
+              <Button
+                type="submit"
+                size="sm"
+                variant="outline"
                 disabled={isPending}
-              />
-              <Input
-                type="email"
-                placeholder="Email address (required)"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                disabled={isPending}
-                required
-              />
-            </div>
-            <div className="flex justify-end">
-              <Button type="submit" size="sm" variant="outline" disabled={isPending}>
+                className="shrink-0 h-9 gap-1.5"
+              >
                 <Plus className="size-4" /> Add recipient
               </Button>
             </div>

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@prisma/client";
+import { Prisma, ProviderType } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import {
   auditActorFrom,
@@ -15,6 +15,7 @@ import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import {
   branchAssignmentSchema,
+  devicePinLinkSchema,
   employeeInputSchema,
   shiftAssignmentSchema,
   shiftInputSchema,
@@ -596,11 +597,19 @@ export async function getEmployeeDetailAction(employeeId: string) {
     can(actor, "attendance:read") ||
     employeeBranchIds.some((branchId) => can(actor, "attendance:read", { branchId }));
 
-  const [branches, shifts, shiftAssignments, attendanceHistory] = await Promise.all([
+  const [branches, shifts, shiftAssignments, attendanceHistory, branchDevices] = await Promise.all([
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     listShifts(scope),
     listShiftAssignments(employee.id),
     canReadAttendance ? getEmployeeAttendanceHistory(scope, employeeId) : null,
+    // Fingerprint terminals at branches this employee is currently assigned
+    // to — what the "link a PIN" UI offers. A device at a branch they're not
+    // assigned to isn't offered; linkDevicePin refuses it too.
+    prisma.device.findMany({
+      where: { branchId: { in: employeeBranchIds }, isActive: true },
+      orderBy: { registeredAt: "asc" },
+      select: { id: true, serialNumber: true, label: true, branchId: true, branch: { select: { name: true } } },
+    }),
   ]);
 
   return {
@@ -612,6 +621,7 @@ export async function getEmployeeDetailAction(employeeId: string) {
     canSchedule,
     attendanceEnabled: true,
     attendanceHistory,
+    branchDevices,
   };
 }
 
@@ -667,6 +677,110 @@ export async function revokeDeviceIdentity(
 
   revalidatePath(`/admin/employees/${identity.employeeId}`);
   revalidatePath(`/admin/employees`);
+  return { success: true };
+}
+
+/**
+ * Links a fingerprint terminal PIN to an employee. The PIN itself comes from
+ * whoever physically enrolled them on the device — this just records what it
+ * means. Never creates the branch assignment itself; the employee must
+ * already be assigned to the device's branch, matching the sequence HR
+ * actually follows (assign branch, then enrol, then link the PIN).
+ */
+export async function linkDevicePin(
+  employeeId: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireAuth();
+
+  const parsed = devicePinLinkSchema.safeParse({
+    deviceId: formData.get("deviceId"),
+    pin: formData.get("pin"),
+  });
+  if (!parsed.success) {
+    return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  const [employee, device] = await Promise.all([
+    prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { branchAssignments: { where: { validTo: null }, select: { branchId: true } } },
+    }),
+    prisma.device.findUnique({ where: { id: parsed.data.deviceId } }),
+  ]);
+
+  if (!employee) return { error: "Employee not found." };
+  if (!device) return { error: "Device not found." };
+
+  const employeeBranchIds = employee.branchAssignments.map((b) => b.branchId);
+  const allowed =
+    can(actor, "employee:write") ||
+    employeeBranchIds.some((branchId) => can(actor, "employee:write", { branchId }));
+  if (!allowed) {
+    return { error: "You do not have permission to manage this employee's devices." };
+  }
+
+  if (!employeeBranchIds.includes(device.branchId)) {
+    return { error: "Employee is not assigned to this device's branch." };
+  }
+
+  // No database constraint enforces "one active employee per PIN per
+  // device" — same reasoning as B9 (a partial unique index Prisma cannot
+  // declare), so it's checked here instead.
+  const conflict = await prisma.employeeDeviceIdentity.findFirst({
+    where: {
+      providerType: ProviderType.FINGERPRINT,
+      deviceId: device.serialNumber,
+      externalId: parsed.data.pin,
+      revokedAt: null,
+      employeeId: { not: employeeId },
+    },
+    select: { id: true },
+  });
+  if (conflict) {
+    return {
+      error: "That PIN is already linked to someone else on this device.",
+      fieldErrors: { pin: "Already in use on this device" },
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // A PIN changing (re-enrolment) closes the old link rather than
+    // leaving two active ones — same reasoning as branch reassignment.
+    await tx.employeeDeviceIdentity.updateMany({
+      where: {
+        employeeId,
+        providerType: ProviderType.FINGERPRINT,
+        deviceId: device.serialNumber,
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
+    });
+
+    const created = await tx.employeeDeviceIdentity.create({
+      data: {
+        employeeId,
+        providerType: ProviderType.FINGERPRINT,
+        externalId: parsed.data.pin,
+        deviceId: device.serialNumber,
+        label: device.label,
+      },
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "employee.device_pin_linked",
+        entityType: "Employee",
+        entityId: employeeId,
+        after: { deviceId: device.serialNumber, branchId: device.branchId, pin: parsed.data.pin, linkId: created.id },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath(`/admin/employees/${employeeId}`);
   return { success: true };
 }
 

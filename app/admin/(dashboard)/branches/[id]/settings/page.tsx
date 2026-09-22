@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Building2, Globe, MapPin, Navigation } from "lucide-react";
+import { ArrowLeft, Building2, Globe, MapPin } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { listConfigurableRecipientsForBranch } from "@/lib/modules/feedback/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +27,6 @@ export default async function BranchSettingsPage({ params }: { params: Params })
 
   const initialRecipients = await listConfigurableRecipientsForBranch(branch.id);
   const feedbackUrl = `${getEnv().NEXT_PUBLIC_APP_URL}/feedback?branch=${branch.slug}`;
-  const hasCoords = branch.latitude != null && branch.longitude != null;
 
   return (
     <div className="space-y-6">
@@ -71,9 +70,7 @@ export default async function BranchSettingsPage({ params }: { params: Params })
       <Card className="rounded-2xl border border-border/60 bg-card overflow-hidden">
         <CardHeader className="pb-3 border-b border-border/40">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Building2 className="size-4" />
-            </div>
+            <Building2 className="size-5 text-foreground shrink-0" />
             <div>
               <CardTitle className="text-base font-bold">General Branch Profile</CardTitle>
               <CardDescription className="text-xs text-muted-foreground mt-0.5">
@@ -83,10 +80,10 @@ export default async function BranchSettingsPage({ params }: { params: Params })
           </div>
         </CardHeader>
         <CardContent className="p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="rounded-xl border border-border/50 bg-slate-50/70 p-3.5 space-y-1">
               <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-                <Building2 className="size-3.5 text-primary" />
+                <Building2 className="size-3.5 text-foreground" />
                 Branch Name
               </div>
               <div className="text-sm font-semibold text-foreground">{branch.name}</div>
@@ -95,43 +92,19 @@ export default async function BranchSettingsPage({ params }: { params: Params })
 
             <div className="rounded-xl border border-border/50 bg-slate-50/70 p-3.5 space-y-1">
               <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-                <MapPin className="size-3.5 text-primary" />
+                <MapPin className="size-3.5 text-foreground" />
                 Physical Address
               </div>
               <div className="text-sm font-semibold text-foreground truncate">{branch.location}</div>
-              <div className="text-xs text-muted-foreground">Operational physical site</div>
             </div>
 
             <div className="rounded-xl border border-border/50 bg-slate-50/70 p-3.5 space-y-1">
               <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-                <Globe className="size-3.5 text-primary" />
+                <Globe className="size-3.5 text-foreground" />
                 Regional Timezone
               </div>
               <div className="text-sm font-semibold font-mono text-foreground">
                 {branch.timezone ?? "Africa/Accra"}
-              </div>
-              <div className="text-xs text-muted-foreground">Local workDate anchor</div>
-            </div>
-
-            <div className="rounded-xl border border-border/50 bg-slate-50/70 p-3.5 space-y-1">
-              <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-                <Navigation className="size-3.5 text-primary" />
-                Geofence State
-              </div>
-              <div className="text-sm font-semibold text-foreground">
-                {branch.geofenceEnabled ? (
-                  <span className="text-emerald-700 font-medium flex items-center gap-1.5">
-                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Enforced ({branch.geofenceRadiusMeters}m)
-                  </span>
-                ) : hasCoords ? (
-                  <span className="text-amber-700 font-medium">Configured (Disabled)</span>
-                ) : (
-                  <span className="text-muted-foreground">Unconfigured</span>
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {hasCoords ? "GPS coordinates registered" : "GPS coordinates required"}
               </div>
             </div>
           </div>
