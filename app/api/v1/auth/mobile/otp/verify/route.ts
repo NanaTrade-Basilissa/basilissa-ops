@@ -10,7 +10,8 @@ const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
 
 const verifyOtpSchema = z
   .object({
-    phone: z.string().min(8, "Phone number is required"),
+    phone: z.string().optional(),
+    tel: z.string().optional(),
     code: z.string().optional(),
     otp: z.string().optional(),
     challengeToken: z.string().optional(),
@@ -18,16 +19,28 @@ const verifyOtpSchema = z
     deviceName: z.string().optional(),
     platform: z.string().optional(),
   })
+  .refine(
+    (data) =>
+      Boolean(
+        (data.phone && data.phone.trim().length >= 8) ||
+          (data.tel && data.tel.trim().length >= 8),
+      ),
+    {
+      message: "Phone number (phone or tel) is required",
+      path: ["phone"],
+    },
+  )
   .transform((data) => {
+    const rawPhone = (data.phone || data.tel || "").trim();
     const rawCode = (data.code || data.otp || "").trim();
     const rawDeviceId =
       data.deviceId ||
       (data.platform
-        ? `device_${data.platform}_${data.phone.replace(/\D/g, "")}`
-        : `device_mobile_${data.phone.replace(/\D/g, "")}`);
+        ? `device_${data.platform}_${rawPhone.replace(/\D/g, "")}`
+        : `device_mobile_${rawPhone.replace(/\D/g, "")}`);
 
     return {
-      phone: data.phone,
+      phone: rawPhone,
       code: rawCode,
       challengeToken: data.challengeToken || undefined,
       deviceId: rawDeviceId,

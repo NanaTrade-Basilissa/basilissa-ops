@@ -6,9 +6,31 @@ import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
-const requestOtpSchema = z.object({
-  phone: z.string().min(8, "Valid phone number is required"),
-});
+const requestOtpSchema = z
+  .object({
+    phone: z.string().optional(),
+    tel: z.string().optional(),
+    name: z.string().optional(),
+    email: z.string().optional(),
+    code: z.string().optional(),
+  })
+  .refine(
+    (data) =>
+      Boolean(
+        (data.phone && data.phone.trim().length >= 8) ||
+          (data.tel && data.tel.trim().length >= 8),
+      ),
+    {
+      message: "Valid phone number (phone or tel) is required",
+      path: ["phone"],
+    },
+  )
+  .transform((data) => ({
+    phone: (data.phone || data.tel || "").trim(),
+    name: data.name?.trim(),
+    email: data.email?.trim(),
+    code: data.code?.trim(),
+  }));
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -51,7 +73,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await requestMobileOtp(parsed.data.phone);
+  const { phone, name, email, code } = parsed.data;
+  const result = await requestMobileOtp(phone, { name, email, code });
 
   if (!result.ok) {
     const status =

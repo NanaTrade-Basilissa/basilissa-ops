@@ -1,13 +1,23 @@
 import "server-only";
-import { createHash, timingSafeEqual, randomInt } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { ProviderType } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { seal, open } from "@/lib/platform/secret-box";
-import { sendSms, normalizePhoneNumber } from "@/lib/platform/sms";
+import {
+  normalizePhoneNumber,
+  dispatchOtpViaGateway,
+  formatGhanaTel,
+} from "@/lib/platform/sms";
 import { recordAudit, SYSTEM_ACTOR } from "@/lib/platform/audit";
 import { scoped } from "@/lib/platform/logger";
 
 const log = scoped("mobile-auth");
+
+export interface RequestOtpOverrides {
+  name?: string;
+  email?: string;
+  code?: string;
+}
 
 export interface RequestOtpResult {
   ok: boolean;
@@ -91,8 +101,12 @@ function hashCode(code: string): string {
 
 /**
  * Requests an SMS verification code for a staff member using their registered mobile phone number.
+ * Dispatches the OTP via the Nana Trade Server notification gateway.
  */
-export async function requestMobileOtp(rawPhone: string): Promise<RequestOtpResult> {
+export async function requestMobileOtp(
+  rawPhone: string,
+  overrides?: RequestOtpOverrides,
+): Promise<RequestOtpResult> {
   const normalized = normalizePhoneNumber(rawPhone);
   const rawDigits = rawPhone.replace(/[^\d]/g, "");
   const localGhana = normalized.startsWith("+233") ? `0${normalized.slice(4)}` : normalized;
@@ -114,6 +128,7 @@ export async function requestMobileOtp(rawPhone: string): Promise<RequestOtpResu
       lastName: true,
       employeeCode: true,
       phone: true,
+      email: true,
       status: true,
     },
   });
@@ -127,26 +142,34 @@ export async function requestMobileOtp(rawPhone: string): Promise<RequestOtpResu
     };
   }
 
-  // Generate 6-digit code (e.g. 100000 - 999999) using cryptographically secure randomness
-  const code = randomInt(100_000, 1_000_000).toString();
-  const codeHash = hashCode(code);
-  const expiresInSeconds = 300; // 5 minutes
-  const expiresAt = Date.now() + expiresInSeconds * 1000;
+  const name = overrides?.name || employee.firstName || "Staff";
+  const email = overrides?.email || employee.email || undefined;
+  const clientCode = overrides?.code || employee.employeeCode || "MF7890";
 
-  // Send the SMS
-  const smsResult = await sendSms({
-    recipient: normalized,
-    message: `Your Basilissa verification code is: ${code}. Valid for 5 minutes. Do not share this code with anyone.`,
+  // Dispatch the OTP via the Nana Trade Server gateway
+  const otpResult = await dispatchOtpViaGateway({
+    tel: formatGhanaTel(employee.phone || rawPhone),
+    name,
+    email,
+    code: clientCode,
   });
 
-  if (!smsResult.ok) {
-    log.error("Failed to dispatch mobile OTP SMS", { phone: normalized, error: smsResult.error });
+  if (!otpResult.ok || !otpResult.otp) {
+    log.error("Failed to dispatch mobile OTP via gateway", {
+      phone: normalized,
+      error: otpResult.error,
+    });
     return {
       ok: false,
       error: "SMS_FAILED",
-      message: "Could not send SMS verification code. Please try again shortly.",
+      message: otpResult.error || "Could not send SMS verification code. Please try again shortly.",
     };
   }
+
+  const code = otpResult.otp;
+  const codeHash = hashCode(code);
+  const expiresInSeconds = 300; // 5 minutes
+  const expiresAt = Date.now() + expiresInSeconds * 1000;
 
   // Seal the challenge token with AES-256-GCM
   const challengePayload: OtpChallengePayload = {
@@ -162,15 +185,15 @@ export async function requestMobileOtp(rawPhone: string): Promise<RequestOtpResu
   log.info("Mobile OTP challenge issued", {
     employeeId: employee.id,
     phone: normalized,
-    simulated: smsResult.simulated,
+    simulated: otpResult.simulated,
   });
 
   return {
     ok: true,
-    message: "Verification code sent to your mobile phone.",
+    message: otpResult.message || "Verification code sent to your mobile phone.",
     challengeToken,
     expiresInSeconds,
-    ...(smsResult.simulated ? { debugOtp: code } : {}),
+    ...(otpResult.simulated ? { debugOtp: code } : {}),
   };
 }
 

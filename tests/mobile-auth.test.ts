@@ -254,4 +254,35 @@ describe("mobile-auth 6-digit OTP", () => {
       })
     );
   });
+
+  it("normalizes Ghana phone numbers with formatGhanaTel", async () => {
+    const { formatGhanaTel } = await import("@/lib/platform/sms");
+    expect(formatGhanaTel("+233542958451")).toBe("0542958451");
+    expect(formatGhanaTel("233542958451")).toBe("0542958451");
+    expect(formatGhanaTel("0542958451")).toBe("0542958451");
+    expect(formatGhanaTel("542958451")).toBe("0542958451");
+    expect(formatGhanaTel("054 295 8451")).toBe("0542958451");
+  });
+
+  it("passes custom overrides (name, email, code) to OTP request", async () => {
+    mockEmployeeFindFirst.mockResolvedValueOnce({
+      id: "emp_augustine_01",
+      phone: "+233542958451",
+      firstName: "Augustine",
+      lastName: "Cobbold",
+      email: "augustinecobbold6@gmail.com",
+      employeeCode: "BAS-ACC-099",
+      status: "ACTIVE",
+    });
+
+    const result = await requestMobileOtp("0542958451", {
+      name: "Augustine",
+      email: "augustinecobbold6@gmail.com",
+      code: "MF7890",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.challengeToken).toBeDefined();
+    expect(result.debugOtp).toBeDefined();
+  });
 });
