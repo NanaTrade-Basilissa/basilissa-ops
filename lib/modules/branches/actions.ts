@@ -140,6 +140,7 @@ export async function updateBranch(
 
   revalidatePath("/admin/branches");
   revalidatePath(`/admin/branches/${branchId}`);
+  revalidatePath(`/admin/branches/${branchId}/settings`);
   revalidatePath("/admin");
   return { success: true };
 }
@@ -175,6 +176,7 @@ export async function toggleBranchActive(formData: FormData): Promise<void> {
 
   revalidatePath("/admin/branches");
   revalidatePath(`/admin/branches/${id}`);
+  revalidatePath(`/admin/branches/${id}/settings`);
   revalidatePath("/admin");
 }
 
@@ -215,6 +217,7 @@ export async function toggleGeofenceEnabled(formData: FormData): Promise<void> {
 
   revalidatePath("/admin/branches");
   revalidatePath(`/admin/branches/${id}`);
+  revalidatePath(`/admin/branches/${id}/settings`);
   revalidatePath("/admin");
 }
 
@@ -284,6 +287,7 @@ export async function updateBranchGeofence(
 
   revalidatePath("/admin/branches");
   revalidatePath(`/admin/branches/${branchId}`);
+  revalidatePath(`/admin/branches/${branchId}/settings`);
   revalidatePath("/admin");
   return { success: true };
 }
@@ -323,6 +327,7 @@ export async function saveBranchRecipientsAction(
     const parsed = saveRecipientsSchema.parse({ branchId, recipients });
     await saveBranchFeedbackRecipients(branchId, parsed.recipients, actor);
     revalidatePath(`/admin/branches/${branchId}`);
+    revalidatePath(`/admin/branches/${branchId}/settings`);
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to save recipients";
