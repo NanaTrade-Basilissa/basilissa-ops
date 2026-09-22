@@ -60,6 +60,11 @@ export type SystemPermission =
   | "employee:read"
   /// The employment lifecycle: hiring, transferring, terminating. HR's domain.
   | "employee:write"
+  // Fingerprint terminals. Infrastructure, not people or branch config, but
+  // scoped like branch:write — registering hardware is a system-level change,
+  // not a branch manager's day-to-day.
+  | "device:read"
+  | "device:write"
   | "schedule:read"
   /// Rotas: shift templates and who works them. Operational, so branch
   /// managers hold it for their own branch.
@@ -145,6 +150,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "attendance:read",
     "employee:read",
     "schedule:read",
+    "device:read",
   ],
 
   // Runs their own branch. Cannot create people, change roles, or see any
@@ -159,6 +165,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "employee:read",
     "schedule:read",
     "schedule:write",
+    "device:read",
   ],
 
   // Same powers as a branch manager, across every branch they hold an
@@ -175,6 +182,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "employee:read",
     "schedule:read",
     "schedule:write",
+    "device:read",
+    "device:write",
   ],
 
   // Owns people, not systems. No branch or question configuration.
@@ -195,6 +204,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "employee:write",
     "schedule:read",
     "schedule:write",
+    "device:read",
   ],
 
   // Owns system configuration and user management (except Super Admin).
@@ -214,6 +224,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "employee:read",
     "schedule:read",
     "schedule:write",
+    "device:read",
+    "device:write",
   ],
 
   // Everything, including granting roles. Should be one or two people.
@@ -240,6 +252,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "assessment:write",
     "aptitude:read",
     "aptitude:write",
+    "device:read",
+    "device:write",
     "email_queue:read",
     "email_queue:manage",
     "jobs:read",
@@ -265,6 +279,8 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "employee:write": ["employees:create", "employees:update", "employees:delete", "employees:export"],
   "branch:read": ["branches:read"],
   "branch:write": ["branches:create", "branches:update", "branches:delete"],
+  "device:read": ["devices:read"],
+  "device:write": ["devices:create", "devices:update", "devices:delete"],
   "question:read": ["questions:read"],
   "question:write": ["questions:create", "questions:update", "questions:delete"],
   "feedback:read": ["feedback:read", "feedback:export"],
@@ -291,6 +307,7 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
 export const GRANULAR_TO_SYSTEM: Record<string, string> = {
   "employees:read": "employee:read",
   "branches:read": "branch:read",
+  "devices:read": "device:read",
   "questions:read": "question:read",
   "policies:read": "policy:read",
   "attendance:read": "attendance:read",

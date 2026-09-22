@@ -541,6 +541,12 @@ terminal model, firmware, protocol, network posture and capability set must be
 established by physical inspection before any implementation (§22, U1). What
 follows is the design shape and the decision fork it must resolve.
 
+> **U1/U2 closed** against a real ZKTeco K40 Pro — see
+> [device-investigation-findings.md](./device-investigation-findings.md).
+> Scenario A is confirmed viable for this hardware (below), and one
+> assumption in this section is corrected by that testing: see the
+> biometric-templates note.
+
 ### Deployment fork — the single largest cost variable in the programme
 
 ```
@@ -577,10 +583,15 @@ timeline far more than any code decision. Establish it before committing dates.
   deviceUserId)` is required, plus an import/reconciliation tool for the
   enrolments already on the installed machines. **Unmapped IDs quarantine — they
   never guess.** A mis-mapped terminal ID silently pays the wrong person.
-- **Fingerprint templates stay on the device.** We do not extract, store or
-  centralise them. The terminals remain the biometric authority for this
-  provider. This materially reduces our biometric compliance surface (§11, §18)
-  and should be an explicit, documented decision.
+- **Fingerprint templates stay on the device — by our choice, not the
+  device's.** We do not extract, store or centralise them, and the terminals
+  remain the biometric authority for this provider. **Correction from live
+  testing:** a real K40 Pro pushes full templates over the ADMS channel
+  unprompted, as part of a normal sync — they do not "stay put" on their
+  own. The ingest endpoint must explicitly discard template rows rather than
+  assume the device withholds them. This still materially reduces our
+  biometric compliance surface (§11, §18), but only because we throw the
+  data away on arrival, not because it never arrives.
 - **Clock drift is monitored, not assumed.** Scheduled probe comparing device
   time to server time; record skew on every event; alert past threshold;
   quarantine past a hard limit. Sync via NTP if the firmware supports it.

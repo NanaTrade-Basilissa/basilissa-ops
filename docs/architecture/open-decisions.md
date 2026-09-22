@@ -601,8 +601,8 @@ here so everything open is in one place.
 
 | ID | Unknown | Gates | Status |
 | --- | --- | --- | --- |
-| **U1** | Fingerprint terminals: model, protocol, TLS, offline buffer, clock sync | Phase 2 entirely | Open — physical inspection needed |
-| **U2** | Branch network topology; can on-prem hardware be sited | Phase 2 | Open — decides cloud endpoint vs per-branch agent |
+| **U1** | Fingerprint terminals: model, protocol, TLS, offline buffer, clock sync | Phase 2 entirely | **Closed** — [device-investigation-findings.md](./device-investigation-findings.md). ZKTeco K40 Pro, ADMS push protocol, TLS works but only with an explicit `https://` prefix, 200k-record buffer, clock not provably stable |
+| **U2** | Branch network topology; can on-prem hardware be sited | Phase 2 | **Closed** — [device-investigation-findings.md](./device-investigation-findings.md). Scenario A (direct device → cloud, no on-prem agent) confirmed live for this unit; re-verify per branch |
 | **U3** | Odoo API contract, **especially idempotency support** | Phase 4 | Open — non-negotiable ask |
 | **U4** | Odoo timeline | Phase 4 scheduling | Open |
 | **U5** | Existing terminal enrolments; where the authoritative employee list lives | Phases 1, 2, 4 | Open |
@@ -612,7 +612,7 @@ here so everything open is in one place.
 | **U9** | Act 843 requirements, DPIA, consent | Phase 6 — hard gate | Open — longest lead item, start early |
 | **U10** | Real branch coordinates and radii | Phase 5 | Open — see A2 |
 | **U11** | Employee smartphone ownership and data cost | Phase 5 | Open — may change mobile's priority |
-| **U12** | Acceptable capture-to-visibility latency | Phases 2, 5 | Open |
+| **U12** | Acceptable capture-to-visibility latency | Phases 2, 5 | Partly answered for Phase 2 — live device push measured at ~2s scan-to-server, see [device-investigation-findings.md](./device-investigation-findings.md). Phase 5 (mobile) still open |
 | **U13** | Face vendor: demographic accuracy on this workforce | Phase 6 | Open |
 | **U14** | All branches Africa/Accra | Phase 1 | Assumed — see A3 |
 | **U15** | Runtime topology | Phase 0 | **Closed** — ADR 0001 |

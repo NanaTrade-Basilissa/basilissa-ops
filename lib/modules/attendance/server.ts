@@ -10,6 +10,7 @@ export * from "./schedule";
 export * from "./projection";
 export * from "./settle";
 export * from "./ingest";
+export * from "./device-ingest";
 export * from "./corrections";
 export * from "./correction-service";
 export * from "./auto-close";

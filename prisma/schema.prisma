@@ -292,6 +292,7 @@ model Branch {
   employees   EmployeeBranchAssignment[]
   leaveRequests LeaveRequest[]
   feedbackRecipients BranchFeedbackRecipient[]
+  devices     Device[]
 
   @@index([isActive])
   @@map("branches")
@@ -1163,6 +1164,41 @@ model RateLimitCounter {
   @@id([key, windowStart])
   @@index([expiresAt])
   @@map("rate_limit_counters")
+}
+
+/**
+ * A physical capture device — fingerprint terminals today.
+ *
+ * A terminal's branch is a property of the device, not something to infer
+ * from whoever happens to punch on it: one unit sits bolted to one wall.
+ * Registered once by whoever installs it. `EmployeeDeviceIdentity.deviceId`
+ * is a free string by convention rather than a foreign key here, because
+ * that field also carries device identifiers for providers with no
+ * registered `Device` row at all — a phone under `MOBILE_APP` is never one
+ * of these.
+ */
+model Device {
+  id String @id @default(cuid())
+
+  providerType ProviderType
+  /// What the device calls itself on the wire — a ZK terminal's serial
+  /// number. Provider-scoped, not assumed globally unique across providers.
+  serialNumber String
+
+  branchId String
+  /// Restrict, not Cascade: deleting a branch must not silently erase which
+  /// device was ever installed there.
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  /// For the registration screen: "Accra Mall, staff entrance".
+  label    String?
+  isActive Boolean @default(true)
+
+  registeredAt DateTime @default(now())
+
+  @@unique([providerType, serialNumber])
+  @@index([branchId])
+  @@map("devices")
 }
 
 /**

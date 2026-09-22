@@ -40,9 +40,10 @@ describe("every provider is described", () => {
 });
 
 describe("what is actually buildable today", () => {
-  it("includes manual entry, mobile app, and auto-close", () => {
+  it("includes manual entry, mobile app, fingerprint terminal, and auto-close", () => {
     expect(implementedProviders().map((p) => p.type).sort()).toEqual(
       [
+        ProviderType.FINGERPRINT,
         ProviderType.MANAGER_MANUAL,
         ProviderType.MOBILE_APP,
         ProviderType.SYSTEM_AUTO_CLOSE,
@@ -50,8 +51,8 @@ describe("what is actually buildable today", () => {
     );
   });
 
-  it("registers fingerprint as unbuilt provider and mobile app as implemented", () => {
-    expect(isProviderImplemented(ProviderType.FINGERPRINT)).toBe(false);
+  it("registers fingerprint and mobile app as implemented", () => {
+    expect(isProviderImplemented(ProviderType.FINGERPRINT)).toBe(true);
     expect(isProviderImplemented(ProviderType.MOBILE_APP)).toBe(true);
   });
 });
@@ -124,10 +125,11 @@ describe("device identity", () => {
     expect(needsDevice).toEqual([ProviderType.FINGERPRINT, ProviderType.MOBILE_APP].sort());
   });
 
-  it("is required only by mobile app among currently implemented providers", () => {
+  it("is required by mobile app and fingerprint terminal among currently implemented providers", () => {
     const implementedNeedingDevice = implementedProviders()
       .filter((p) => p.capabilities.deviceIdentity === "REQUIRED")
-      .map((p) => p.type);
-    expect(implementedNeedingDevice).toEqual([ProviderType.MOBILE_APP]);
+      .map((p) => p.type)
+      .sort();
+    expect(implementedNeedingDevice).toEqual([ProviderType.FINGERPRINT, ProviderType.MOBILE_APP].sort());
   });
 });

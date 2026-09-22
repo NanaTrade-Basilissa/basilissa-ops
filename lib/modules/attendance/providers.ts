@@ -113,8 +113,8 @@ export const PROVIDERS: Record<ProviderType, ProviderDescriptor> = {
   [ProviderType.FINGERPRINT]: {
     type: ProviderType.FINGERPRINT,
     label: "Fingerprint terminal",
-    status: "PLANNED",
-    plannedFor: "Phase 2",
+    status: "IMPLEMENTED",
+    plannedFor: null,
     baseline: PROVIDER_BASELINE[ProviderType.FINGERPRINT],
     capabilities: {
       // The terminal's clock, because it must keep working with the network

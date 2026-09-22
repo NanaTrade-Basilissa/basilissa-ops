@@ -51,6 +51,11 @@ Welcome to the Basilissa Operations Platform API documentation.
       description: "GPS-geofenced mobile punch ingestion and clock-in/out processing.",
     },
     {
+      name: "Device Ingest",
+      description:
+        "Fixed-path receiver for ZKTeco ADMS fingerprint terminal pushes. Paths and query parameters are dictated by the terminal firmware, not by this API — see docs/architecture/device-investigation-findings.md.",
+    },
+    {
       name: "Mobile Authentication",
       description: "SMS OTP phone verification and device binding for staff mobile app.",
     },
@@ -309,6 +314,84 @@ Ingests mobile clock-in/out punches from branch staff.
                 },
               },
             },
+          },
+        },
+      },
+    },
+
+    "/iclock/cdata": {
+      get: {
+        tags: ["Device Ingest"],
+        summary: "Fingerprint Terminal Handshake",
+        description:
+          "Called by a ZKTeco ADMS terminal on connect, before it pushes any table. Path and query shape are fixed by the terminal firmware. Always acknowledges with a plain-text `OK` body — the terminal has no meaningful error-handling to react to a non-200 response.",
+        operationId: "deviceHandshake",
+        security: [],
+        parameters: [
+          { name: "SN", in: "query", schema: { type: "string" }, description: "Terminal serial number.", example: "GED7234700295" },
+          { name: "options", in: "query", schema: { type: "string" }, description: "Terminal-supplied, unused." },
+          { name: "language", in: "query", schema: { type: "string" }, description: "Terminal-supplied, unused." },
+          { name: "pushver", in: "query", schema: { type: "string" }, description: "ADMS protocol version." },
+        ],
+        responses: {
+          "200": {
+            description: "Acknowledged.",
+            content: { "text/plain": { schema: { type: "string", example: "OK" } } },
+          },
+        },
+      },
+      post: {
+        tags: ["Device Ingest"],
+        summary: "Fingerprint Terminal Data Push",
+        description: `
+Receives a ZKTeco ADMS table push. Body is tab-separated plain text, not JSON — the format is fixed by the terminal firmware, confirmed against a real K40 Pro (see docs/architecture/device-investigation-findings.md).
+
+**\`table=ATTLOG\`** — attendance rows, one per line: \`PIN, "YYYY-MM-DD HH:MM:SS", statusCode, verifyMethod, ...\`. Each row is resolved to a registered \`Device\` (by \`SN\`) and an \`EmployeeDeviceIdentity\` (by PIN, scoped to that device); either missing quarantines the row rather than guessing.
+
+**\`table=USER\`** and **\`table=OPERLOG\`** — acknowledged and discarded, never stored. \`OPERLOG\` is where a real unit pushed a full fingerprint template unprompted during testing; nothing here reads or persists it.
+
+**Rate limit**: 120 requests per minute per terminal serial number.
+        `.trim(),
+        operationId: "deviceAttlogPush",
+        security: [],
+        parameters: [
+          { name: "SN", in: "query", required: true, schema: { type: "string" }, description: "Terminal serial number.", example: "GED7234700295" },
+          { name: "table", in: "query", schema: { type: "string", enum: ["ATTLOG", "USER", "OPERLOG"] }, description: "Which table this push carries." },
+        ],
+        requestBody: {
+          required: true,
+          description: "Tab-separated rows, one per line. Shape depends on `table`.",
+          content: {
+            "text/plain": {
+              schema: { type: "string", example: "2\t2026-09-22 18:50:23\t0\t1\t0\t0\t0\t0\t0\t0\t" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Acknowledged — always 200, regardless of how many rows quarantined or were rejected. Outcomes are logged and written to `quarantined_events`, not surfaced via HTTP status.",
+            content: { "text/plain": { schema: { type: "string", example: "OK" } } },
+          },
+        },
+      },
+    },
+
+    "/iclock/getrequest": {
+      get: {
+        tags: ["Device Ingest"],
+        summary: "Fingerprint Terminal Heartbeat",
+        description:
+          "Polled by the terminal roughly every 8-20 seconds asking for any pending commands. No commands are issued yet; always acknowledges to keep the terminal connected without implementing the ADMS command-response format.",
+        operationId: "deviceHeartbeat",
+        security: [],
+        parameters: [
+          { name: "SN", in: "query", schema: { type: "string" }, description: "Terminal serial number.", example: "GED7234700295" },
+          { name: "INFO", in: "query", schema: { type: "string" }, description: "Terminal firmware version and status string, logged but not parsed." },
+        ],
+        responses: {
+          "200": {
+            description: "Acknowledged.",
+            content: { "text/plain": { schema: { type: "string", example: "OK" } } },
           },
         },
       },

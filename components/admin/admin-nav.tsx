@@ -5,6 +5,7 @@ import {
   CalendarRange,
   ClipboardCheck,
   ClipboardList,
+  Fingerprint,
   History,
   Layers,
   LayoutDashboard,
@@ -55,6 +56,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: "/admin/employees", label: "Employees", icon: Users, exact: false, permission: "employee:read" },
       { href: "/admin/branches", label: "Branches", icon: Store, exact: false, permission: "branch:read" },
+      { href: "/admin/devices", label: "Devices", icon: Fingerprint, exact: false, permission: "device:read" },
       { href: "/admin/attendance", label: "Attendance", icon: ClipboardList, exact: true, permission: "attendance:read" },
       { href: "/admin/shifts", label: "Shifts", icon: CalendarRange, exact: false, permission: "schedule:read" },
       { href: "/admin/attendance/policy", label: "Attendance policy", icon: CalendarClock, exact: false, permission: "policy:read" },

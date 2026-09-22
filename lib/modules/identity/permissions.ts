@@ -80,6 +80,16 @@ export const PERMISSION_REGISTRY = {
       delete: { label: "Delete", description: "Remove branch locations" },
     },
   },
+  devices: {
+    label: "Devices",
+    description: "Fingerprint terminals and their branch assignment",
+    actions: {
+      create: { label: "Create", description: "Register a new terminal" },
+      read: { label: "View", description: "View registered terminals" },
+      update: { label: "Update", description: "Edit a terminal's label, branch, or active status" },
+      delete: { label: "Delete", description: "Remove a terminal registration" },
+    },
+  },
   schedules: {
     label: "Schedules",
     description: "Shift rotas, templates, and weekly schedules",
