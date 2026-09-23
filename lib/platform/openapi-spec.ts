@@ -323,8 +323,11 @@ Ingests mobile clock-in/out punches from branch staff.
       get: {
         tags: ["Device Ingest"],
         summary: "Fingerprint Terminal Handshake",
-        description:
-          "Called by a ZKTeco ADMS terminal on connect, before it pushes any table. Path and query shape are fixed by the terminal firmware. Always acknowledges with a plain-text `OK` body — the terminal has no meaningful error-handling to react to a non-200 response.",
+        description: `
+Called by a ZKTeco ADMS terminal on connect, before it pushes any table. Path and query shape are fixed by the terminal firmware.
+
+Responds with the ADMS config block the firmware expects — **not** a bare \`OK\`. A previous version of this endpoint sent \`OK\` here, which is the likely cause of an observed clock reset on real hardware: without a \`TimeZone=\` line, the terminal appears to fall back to a firmware default. Confirmed against ZKTeco's PUSH protocol documentation and a working reference server (github.com/skylinebiz/adms).
+        `.trim(),
         operationId: "deviceHandshake",
         security: [],
         parameters: [
@@ -335,8 +338,16 @@ Ingests mobile clock-in/out punches from branch staff.
         ],
         responses: {
           "200": {
-            description: "Acknowledged.",
-            content: { "text/plain": { schema: { type: "string", example: "OK" } } },
+            description: "ADMS config block, including this device's resolved `TimeZone=` (from its registered branch, or Africa/Accra if unregistered).",
+            content: {
+              "text/plain": {
+                schema: {
+                  type: "string",
+                  example:
+                    "GET OPTION FROM: GED7234700295\nATTLOGStamp=9999\nOPERLOGStamp=9999\nErrorDelay=60\nDelay=30\nTransTimes=00:00;14:05\nTransInterval=1\nTransFlag=1111111111\nTimeZone=0\nRealtime=1\nEncrypt=0\n",
+                },
+              },
+            },
           },
         },
       },

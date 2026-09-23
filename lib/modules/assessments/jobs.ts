@@ -10,7 +10,7 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/platform/prisma";
 import { getEnv } from "@/lib/platform/env";
-import { escapeHtml, sendEmail } from "@/lib/platform/email";
+import { escapeHtml, renderEmailLogo, sendEmail } from "@/lib/platform/email";
 import { PermanentJobError } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { APP_NAME } from "@/lib/platform/constants";
@@ -48,9 +48,18 @@ function buildInvitationEmailHtml(url: string, assessmentTitle: string, expiresA
   <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
       <div style="margin-bottom:16px;">
-        <span style="display:inline-block;padding:4px 10px;background:#F0F9FF;color:#0284C7;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">
-          Basilissa Assessment
-        </span>
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="vertical-align:middle;padding-right:10px;">
+              ${renderEmailLogo(36)}
+            </td>
+            <td style="vertical-align:middle;">
+              <span style="display:inline-block;padding:4px 10px;background:#F0F9FF;color:#0284C7;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">
+                Basilissa Assessment
+              </span>
+            </td>
+          </tr>
+        </table>
       </div>
       <h1 style="margin:0 0 16px;font-size:20px;color:#18181B;font-weight:700;">${escapeHtml(assessmentTitle)}</h1>
       <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
@@ -183,10 +192,20 @@ function buildAssessmentCompletedEmailHtml(params: {
   <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
     <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #34A4E0;">
       <div style="border-bottom:1px solid #F4F4F5;padding-bottom:16px;margin-bottom:20px;">
-        <span style="display:inline-block;padding:4px 10px;background:#F0F9FF;color:#0284C7;border-radius:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
-          Assessment Completed
-        </span>
-        <h1 style="margin:12px 0 0;font-size:20px;color:#18181B;font-weight:700;">${escapeHtml(params.assessmentTitle)}</h1>
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+          <tr>
+            <td style="vertical-align:middle;padding-right:10px;">
+              ${renderEmailLogo(36)}
+            </td>
+            <td style="vertical-align:middle;">
+              <span style="font-size:16px;font-weight:700;color:#18181B;margin-right:8px;">${escapeHtml(APP_NAME)}</span>
+              <span style="display:inline-block;padding:4px 10px;background:#F0F9FF;color:#0284C7;border-radius:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
+                Assessment Completed
+              </span>
+            </td>
+          </tr>
+        </table>
+        <h1 style="margin:0;font-size:20px;color:#18181B;font-weight:700;">${escapeHtml(params.assessmentTitle)}</h1>
       </div>
 
       <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">

@@ -1,9 +1,14 @@
 import "server-only";
+import fs from "node:fs";
+import path from "node:path";
 import { Resend } from "resend";
 import { getEnv, isEmailConfigured } from "@/lib/platform/env";
 import { scoped } from "@/lib/platform/logger";
 
 const log = scoped("email");
+
+/** Content-ID used for inline logo attachment in transactional emails. */
+export const EMAIL_LOGO_CID = "basilissa-logo";
 
 /**
  * Generic transactional email sender. Domain modules own their own templates
@@ -62,6 +67,24 @@ export function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Resolves the publicly accessible absolute URL for the Basilissa brand logo
+ * to embed in transactional email templates.
+ */
+export function getEmailLogoUrl(): string {
+  const env = getEnv();
+  return `${env.NEXT_PUBLIC_APP_URL}/bsa-logo-icon.png`;
+}
+
+/**
+ * Returns an email-client safe HTML <img> snippet for the Basilissa brand logo.
+ * Uses CID inline embedding so the logo renders reliably across all email clients
+ * (including Gmail, Outlook, Apple Mail) even in local development without a public domain.
+ */
+export function renderEmailLogo(size = 36): string {
+  return `<img src="cid:${EMAIL_LOGO_CID}" alt="Basilissa" width="${size}" height="${size}" style="display:block;border-radius:8px;width:${size}px;height:${size}px;" />`;
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -88,11 +111,30 @@ export async function sendEmail({
     const rawFrom = env.RESEND_FROM_EMAIL!;
     const from = rawFrom.includes("<") ? rawFrom : `Basilissa <${rawFrom}>`;
 
+    // Attach inline logo when referenced via CID in the email HTML
+    const attachments = [];
+    if (html.includes(`cid:${EMAIL_LOGO_CID}`)) {
+      try {
+        const logoPath = path.join(process.cwd(), "public", "bsa-logo-icon.png");
+        if (fs.existsSync(logoPath)) {
+          attachments.push({
+            filename: "bsa-logo-icon.png",
+            content: fs.readFileSync(logoPath),
+            contentType: "image/png",
+            inlineContentId: EMAIL_LOGO_CID,
+          });
+        }
+      } catch (err) {
+        log.warn("failed to attach inline logo to email", { err });
+      }
+    }
+
     const { data, error } = await resend.emails.send({
       from,
       to,
       subject,
       html,
+      ...(attachments.length > 0 ? { attachments } : {}),
     });
 
     if (error) {

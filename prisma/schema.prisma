@@ -1194,11 +1194,48 @@ model Device {
   label    String?
   isActive Boolean @default(true)
 
-  registeredAt DateTime @default(now())
+  registeredAt DateTime  @default(now())
+  /// Bumped on every request the device makes — handshake, heartbeat, or a
+  /// data push. Cheaper than scanning DeviceLog for "is this thing alive",
+  /// and survives even when heartbeats themselves aren't logged (see below).
+  lastSeenAt   DateTime?
 
   @@unique([providerType, serialNumber])
   @@index([branchId])
   @@map("devices")
+}
+
+/**
+ * A record of one request a device made, kept for debugging — "is it even
+ * talking to us", "what did it actually send", "when did the pushes stop."
+ *
+ * Keyed by `serialNumber`, not a foreign key to `Device`, on purpose: traffic
+ * from a terminal nobody has registered yet is exactly the case this needs to
+ * explain ("why isn't my new terminal showing up"), and a hard FK would drop
+ * that traffic silently instead of surfacing it.
+ *
+ * Heartbeats (`/iclock/getrequest`, every ~8-20s) are deliberately NOT logged
+ * here — at that frequency they would drown out the events worth looking at
+ * within hours. `Device.lastSeenAt` answers "is it alive" instead; this table
+ * is for handshakes and data pushes, which are infrequent enough to keep.
+ *
+ * `summary` is a short human line, never the raw device payload for `USER`
+ * or `OPERLOG` — those tables carry plaintext passwords and fingerprint
+ * templates (confirmed against real hardware; see
+ * docs/architecture/device-investigation-findings.md), and this table must
+ * not become a second place that data ends up. `ATTLOG` rows are timestamps
+ * and PINs, not biometric data, so their content is safe to summarize.
+ */
+model DeviceLog {
+  id           String   @id @default(cuid())
+  serialNumber String
+  /// "HANDSHAKE" | "ATTLOG" | "USER" | "OPERLOG" | "UNKNOWN_TABLE"
+  kind         String
+  summary      String
+  receivedAt   DateTime @default(now())
+
+  @@index([serialNumber, receivedAt])
+  @@map("device_logs")
 }
 
 /**

@@ -46,6 +46,7 @@ export default async function DevicesPage() {
     label: d.label,
     isActive: d.isActive,
     registeredAt: d.registeredAt.toISOString(),
+    lastSeenAt: d.lastSeenAt?.toISOString() ?? null,
     canWrite: can(actor, "device:write", { branchId: d.branchId }),
   }));
 

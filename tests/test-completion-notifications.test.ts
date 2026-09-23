@@ -19,10 +19,14 @@ vi.mock("@/lib/platform/prisma", () => ({
 
 const mockSendEmail = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/platform/email", () => ({
-  sendEmail: mockSendEmail,
-  escapeHtml: (str: string) => str,
-}));
+vi.mock("@/lib/platform/email", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/platform/email")>();
+  return {
+    ...actual,
+    sendEmail: mockSendEmail,
+    escapeHtml: (str: string) => str,
+  };
+});
 
 vi.mock("@/lib/platform/env", () => ({
   getEnv: () => ({
@@ -100,6 +104,8 @@ describe("handleAssessmentNotifyHr", () => {
     expect(callArgs.html).toContain("18 / 20 (90%)");
     expect(callArgs.html).toContain("Passed");
     expect(callArgs.html).toContain("https://example.test/admin/assessments/assess_1/responses/resp_1");
+    expect(callArgs.html).toContain("cid:basilissa-logo");
+    expect(callArgs.html).toContain('alt="Basilissa"');
   });
 });
 
@@ -141,5 +147,7 @@ describe("handleAptitudeNotifyHr", () => {
     expect(callArgs.html).toContain("Auto-submitted (time limit expired)");
     expect(callArgs.html).toContain("Did not pass");
     expect(callArgs.html).toContain("https://example.test/admin/aptitude-tests/test_1/attempts/attempt_1");
+    expect(callArgs.html).toContain("cid:basilissa-logo");
+    expect(callArgs.html).toContain('alt="Basilissa"');
   });
 });

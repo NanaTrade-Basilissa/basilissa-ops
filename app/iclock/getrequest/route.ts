@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { touchDeviceLastSeen } from "@/lib/modules/attendance/server";
 import { rateLimit } from "@/lib/platform/rate-limit";
 import { scoped } from "@/lib/platform/logger";
 
@@ -20,8 +21,11 @@ export async function GET(request: NextRequest) {
   const limit = await rateLimit(`device-heartbeat:${sn}`, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
   if (!limit.success) {
     log.warn("device heartbeat rate-limited", { sn });
-  } else if (info) {
-    log.debug("device heartbeat", { sn, info });
+  } else {
+    if (info) log.debug("device heartbeat", { sn, info });
+    // Not logged to DeviceLog — every 8-20s would drown out the events
+    // worth looking at. lastSeenAt is what answers "is it alive".
+    await touchDeviceLastSeen(sn);
   }
 
   return new NextResponse("OK", { status: 200, headers: { "Content-Type": "text/plain" } });

@@ -152,3 +152,35 @@ export async function toggleDeviceActive(formData: FormData): Promise<void> {
 
   revalidatePath("/admin/devices");
 }
+
+export type DeviceActivityEntry = { kind: string; summary: string; receivedAt: string };
+
+/**
+ * The debugging trail for one device — recent handshakes and data pushes,
+ * for "is it even talking to us, what did it send". Read-only, so
+ * `device:read` is enough; no branch check needed beyond that, matching how
+ * broadly device:read is already granted.
+ */
+export async function getDeviceActivityLog(deviceId: string): Promise<DeviceActivityEntry[]> {
+  const actor = await requireAuth();
+
+  const device = await prisma.device.findUnique({
+    where: { id: deviceId },
+    select: { serialNumber: true, branchId: true },
+  });
+  if (!device) return [];
+
+  // Branch-scoped, matching every other device:read/write check in this
+  // module — a plain can(actor, "device:read") would wrongly deny a
+  // BRANCH_MANAGER, whose grant is BRANCH-scoped, not GLOBAL.
+  if (!can(actor, "device:read", { branchId: device.branchId })) return [];
+
+  const logs = await prisma.deviceLog.findMany({
+    where: { serialNumber: device.serialNumber },
+    orderBy: { receivedAt: "desc" },
+    take: 25,
+    select: { kind: true, summary: true, receivedAt: true },
+  });
+
+  return logs.map((l) => ({ kind: l.kind, summary: l.summary, receivedAt: l.receivedAt.toISOString() }));
+}

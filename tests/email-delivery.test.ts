@@ -51,6 +51,26 @@ describe("a successful send", () => {
       }),
     );
   });
+
+  it("attaches inline logo when referenced via CID in HTML", async () => {
+    await sendEmail({
+      to: ["candidate@basilissa.gh"],
+      subject: "Test Invite",
+      html: '<p><img src="cid:basilissa-logo" alt="Basilissa" /></p>',
+    });
+
+    expect(resend.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          expect.objectContaining({
+            filename: "bsa-logo-icon.png",
+            contentType: "image/png",
+            inlineContentId: "basilissa-logo",
+          }),
+        ],
+      }),
+    );
+  });
 });
 
 describe("outcomes that are not failures", () => {

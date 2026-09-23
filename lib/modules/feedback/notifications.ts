@@ -1,6 +1,6 @@
 import "server-only";
 import { getEnv } from "@/lib/platform/env";
-import { escapeHtml, sendEmail, type SendEmailResult } from "@/lib/platform/email";
+import { escapeHtml, renderEmailLogo, sendEmail, type SendEmailResult } from "@/lib/platform/email";
 import { formatAccraDateTime } from "@/lib/platform/date";
 import { getFeedbackRecipientsForBranch } from "./recipients";
 
@@ -31,8 +31,18 @@ function buildEmailHtml(payload: FeedbackNotificationPayload, dashboardUrl: stri
     <table role="presentation" width="100%" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #E4E4E7;">
       <tr>
         <td style="background:#18181B;padding:24px 28px;border-top:4px solid #EFCE02;">
-          <span style="color:#34A4E0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Basilissa Ghana</span>
-          <h1 style="color:#ffffff;font-size:20px;margin:6px 0 0;font-weight:700;">New customer feedback</h1>
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+            <tr>
+              <td style="vertical-align:middle;padding-right:12px;">
+                ${renderEmailLogo(36)}
+              </td>
+              <td style="vertical-align:middle;">
+                <span style="color:#ffffff;font-size:16px;font-weight:700;letter-spacing:-0.02em;">Basilissa</span>
+                <span style="color:#34A4E0;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-left:6px;">Ghana</span>
+              </td>
+            </tr>
+          </table>
+          <h1 style="color:#ffffff;font-size:20px;margin:0;font-weight:700;">New customer feedback</h1>
         </td>
       </tr>
       <tr>

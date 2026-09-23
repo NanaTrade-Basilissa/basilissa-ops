@@ -1,6 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ProviderType } from "@prisma/client";
-import { parseAttlogBody, recordDeviceAttlogBatch } from "@/lib/modules/attendance/server";
+import {
+  parseAttlogBody,
+  recordDeviceAttlogBatch,
+  recordDeviceActivity,
+  touchDeviceLastSeen,
+  computeTimeZoneOptionValue,
+  buildAdmsHandshakeResponse,
+  resolveDeviceTimeZone,
+} from "@/lib/modules/attendance/server";
 import { prisma } from "@/lib/platform/prisma";
 
 /**
@@ -187,5 +195,134 @@ describe("recordDeviceAttlogBatch", () => {
     });
 
     expect(outcomes).toEqual([{ status: "REJECTED", reason: "EMPLOYEE_NOT_ACTIVE" }]);
+  });
+});
+
+/**
+ * These never store the request body for USER/OPERLOG — only a caller-built
+ * summary string — and never throw, since a logging failure must not be why
+ * a device's actual push gets rejected.
+ */
+describe("recordDeviceActivity", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const SN = "GED7234700295";
+
+  it("writes a DeviceLog row and bumps the device's lastSeenAt together", async () => {
+    vi.spyOn(prisma, "$transaction").mockImplementation((ops: unknown) =>
+      Promise.all(ops as Promise<unknown>[]),
+    );
+    const createSpy = vi.spyOn(prisma.deviceLog, "create").mockResolvedValueOnce({} as never);
+    const updateManySpy = vi.spyOn(prisma.device, "updateMany").mockResolvedValueOnce({ count: 1 });
+
+    await recordDeviceActivity(SN, "ATTLOG", "3 row(s): 2 accepted, 1 quarantined");
+
+    expect(createSpy).toHaveBeenCalledWith({
+      data: { serialNumber: SN, kind: "ATTLOG", summary: "3 row(s): 2 accepted, 1 quarantined" },
+    });
+    expect(updateManySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { providerType: ProviderType.FINGERPRINT, serialNumber: SN },
+        data: { lastSeenAt: expect.any(Date) },
+      }),
+    );
+  });
+
+  it("never throws when the write fails — a logging failure must not reject a real push", async () => {
+    vi.spyOn(prisma, "$transaction").mockRejectedValueOnce(new Error("db unavailable"));
+
+    await expect(recordDeviceActivity(SN, "HANDSHAKE", "Connected")).resolves.toBeUndefined();
+  });
+});
+
+describe("touchDeviceLastSeen", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("bumps lastSeenAt without writing a DeviceLog row", async () => {
+    const updateManySpy = vi.spyOn(prisma.device, "updateMany").mockResolvedValueOnce({ count: 1 });
+    const createSpy = vi.spyOn(prisma.deviceLog, "create");
+
+    await touchDeviceLastSeen("GED7234700295");
+
+    expect(updateManySpy).toHaveBeenCalledWith({
+      where: { providerType: ProviderType.FINGERPRINT, serialNumber: "GED7234700295" },
+      data: { lastSeenAt: expect.any(Date) },
+    });
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it("never throws when the update fails", async () => {
+    vi.spyOn(prisma.device, "updateMany").mockRejectedValueOnce(new Error("db unavailable"));
+    await expect(touchDeviceLastSeen("GED7234700295")).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * A bare "OK" to the handshake is the likely cause of an observed clock
+ * reset on real hardware — see the doc comment on buildAdmsHandshakeResponse.
+ * These pin the exact wire format against a working reference
+ * implementation (github.com/skylinebiz/adms), not a guess.
+ */
+describe("computeTimeZoneOptionValue", () => {
+  it("encodes a whole-hour offset as a plain signed integer", () => {
+    // Africa/Accra is UTC+0 year-round — the case this project actually
+    // needs, and the one the reference implementation notes as confirmed
+    // against real hardware.
+    expect(computeTimeZoneOptionValue("Africa/Accra", new Date("2026-09-23T12:00:00Z"))).toBe("0");
+  });
+
+  it("encodes a different whole-hour offset correctly", () => {
+    expect(computeTimeZoneOptionValue("Asia/Bangkok", new Date("2026-09-23T12:00:00Z"))).toBe("7");
+  });
+
+  it("encodes a fractional offset as total signed minutes", () => {
+    // India Standard Time, +05:30 — not the case this project needs today,
+    // but the format must still be right if a branch is ever added there.
+    expect(computeTimeZoneOptionValue("Asia/Kolkata", new Date("2026-09-23T12:00:00Z"))).toBe("330");
+  });
+});
+
+describe("buildAdmsHandshakeResponse", () => {
+  it("matches the field set and format the terminal firmware expects", () => {
+    const body = buildAdmsHandshakeResponse("GED7234700295", "Africa/Accra");
+    expect(body).toBe(
+      [
+        "GET OPTION FROM: GED7234700295",
+        "ATTLOGStamp=9999",
+        "OPERLOGStamp=9999",
+        "ErrorDelay=60",
+        "Delay=30",
+        "TransTimes=00:00;14:05",
+        "TransInterval=1",
+        "TransFlag=1111111111",
+        "TimeZone=0",
+        "Realtime=1",
+        "Encrypt=0",
+        "",
+      ].join("\n"),
+    );
+  });
+});
+
+describe("resolveDeviceTimeZone", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("uses the registered device's branch timezone", async () => {
+    vi.spyOn(prisma.device, "findUnique").mockResolvedValueOnce({
+      branch: { timezone: "Asia/Bangkok" },
+    } as never);
+
+    expect(await resolveDeviceTimeZone("SN-1")).toBe("Asia/Bangkok");
+  });
+
+  it("falls back to the app default for an unregistered device", async () => {
+    vi.spyOn(prisma.device, "findUnique").mockResolvedValueOnce(null);
+    expect(await resolveDeviceTimeZone("SN-unknown")).toBe("Africa/Accra");
   });
 });

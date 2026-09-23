@@ -12,7 +12,7 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/platform/prisma";
 import { getEnv } from "@/lib/platform/env";
-import { escapeHtml, sendEmail } from "@/lib/platform/email";
+import { escapeHtml, renderEmailLogo, sendEmail } from "@/lib/platform/email";
 import { PermanentJobError } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { APP_NAME } from "@/lib/platform/constants";
@@ -51,6 +51,18 @@ function buildInviteEmailHtml(url: string, expiresAt: Date, name?: string): stri
   return `
   <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
+      <div style="margin-bottom:20px;">
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="vertical-align:middle;padding-right:10px;">
+              ${renderEmailLogo(36)}
+            </td>
+            <td style="vertical-align:middle;">
+              <span style="font-size:16px;font-weight:700;letter-spacing:-0.02em;color:#18181B;">${escapeHtml(APP_NAME)}</span>
+            </td>
+          </tr>
+        </table>
+      </div>
       <h1 style="margin:0 0 16px;font-size:20px;color:#18181B;font-weight:700;">Your ${escapeHtml(APP_NAME)} account</h1>
       <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
         ${greeting} an account has been created for you. Choose a password using the
@@ -80,6 +92,18 @@ function buildResetEmailHtml(resetUrl: string, expiresAt: Date): string {
   return `
   <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
+      <div style="margin-bottom:20px;">
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="vertical-align:middle;padding-right:10px;">
+              ${renderEmailLogo(36)}
+            </td>
+            <td style="vertical-align:middle;">
+              <span style="font-size:16px;font-weight:700;letter-spacing:-0.02em;color:#18181B;">${escapeHtml(APP_NAME)}</span>
+            </td>
+          </tr>
+        </table>
+      </div>
       <h1 style="margin:0 0 16px;font-size:20px;color:#18181B;font-weight:700;">Set a new password</h1>
       <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
         Someone asked to reset the password for your ${escapeHtml(APP_NAME)} account.

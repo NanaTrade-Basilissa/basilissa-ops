@@ -3,10 +3,65 @@ import { Prisma, ProviderType } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { SYSTEM_ACTOR } from "@/lib/platform/audit";
 import { scoped } from "@/lib/platform/logger";
-import { zonedMinutesToUtc } from "@/lib/platform/date";
+import { zonedMinutesToUtc, zoneOffsetMinutes } from "@/lib/platform/date";
+import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { ingestEvent, type IngestCommand } from "./ingest";
 
 const log = scoped("attendance.device-ingest");
+
+/**
+ * The `TimeZone=` value ADMS firmware expects in the handshake response: a
+ * whole-hour offset as a plain signed integer (`7` for GMT+7); a fractional
+ * offset (IST's +05:30, Nepal's +05:45) as total signed minutes (`330`).
+ * Confirmed against a working ADMS server implementation
+ * (github.com/skylinebiz/adms) — whole-hour encoding is noted there as
+ * tested against real hardware; fractional-minute encoding is not, so
+ * Africa/Accra (UTC+0, whole-hour) is squarely in the confirmed case.
+ */
+export function computeTimeZoneOptionValue(timeZone: string, now: Date = new Date()): string {
+  const offsetMinutes = zoneOffsetMinutes(now, timeZone);
+  return offsetMinutes % 60 === 0 ? String(offsetMinutes / 60) : String(offsetMinutes);
+}
+
+/**
+ * The device's handshake (`GET /iclock/cdata?options=all`) expects a real
+ * config block back, not a bare `OK` — confirmed against ZKTeco's PUSH
+ * protocol documentation and a working reference server. This was previously
+ * missing entirely, which is the likely cause of an observed clock reset:
+ * without a `TimeZone=` line, the terminal appears to fall back to a
+ * firmware default (plausibly China Standard Time, UTC+8 — ZKTeco's home
+ * market — which matches an ~8-9h jump seen during testing almost exactly).
+ *
+ * Field meanings (ATTLOGStamp/OPERLOGStamp/ErrorDelay/Delay/TransTimes/
+ * TransInterval/TransFlag/Realtime/Encrypt) are the terminal's own sync
+ * bookkeeping, not attendance data — sent as sane, permissive defaults since
+ * this app doesn't yet track per-device sync watermarks.
+ */
+export function buildAdmsHandshakeResponse(serialNumber: string, timeZone: string): string {
+  const lines = [
+    `GET OPTION FROM: ${serialNumber}`,
+    "ATTLOGStamp=9999",
+    "OPERLOGStamp=9999",
+    "ErrorDelay=60",
+    "Delay=30",
+    "TransTimes=00:00;14:05",
+    "TransInterval=1",
+    "TransFlag=1111111111",
+    `TimeZone=${computeTimeZoneOptionValue(timeZone)}`,
+    "Realtime=1",
+    "Encrypt=0",
+  ];
+  return lines.join("\n") + "\n";
+}
+
+/** The branch timezone for a registered device, or the app default if unregistered or inactive. */
+export async function resolveDeviceTimeZone(serialNumber: string): Promise<string> {
+  const device = await prisma.device.findUnique({
+    where: { providerType_serialNumber: { providerType: ProviderType.FINGERPRINT, serialNumber } },
+    select: { branch: { select: { timezone: true } } },
+  });
+  return device?.branch.timezone || DISPLAY_TIMEZONE;
+}
 
 /**
  * Turns a raw ZKTeco ADMS `ATTLOG` push into attendance events.
@@ -199,5 +254,54 @@ async function quarantine(serialNumber: string, reason: string, rawPayload: unkn
     });
   } catch (error) {
     log.error("failed to persist quarantined device event", { serialNumber, reason, error });
+  }
+}
+
+export type DeviceLogKind = "HANDSHAKE" | "ATTLOG" | "USER" | "OPERLOG" | "UNKNOWN_TABLE";
+
+/**
+ * Records one request from a device — for the "is it even talking to us,
+ * what did it send" debugging trail, not for attendance data itself.
+ *
+ * `summary` must never carry a raw `USER` or `OPERLOG` body: those tables
+ * carry plaintext passwords and fingerprint templates on real hardware (see
+ * docs/architecture/device-investigation-findings.md), and this table exists
+ * to help debugging, not to become a second place that data lands. Callers
+ * pass counts and outcomes, never the request body, for those two kinds.
+ *
+ * Best-effort: a logging failure must never be why a device's actual push
+ * gets rejected, so this never throws.
+ */
+export async function recordDeviceActivity(
+  serialNumber: string,
+  kind: DeviceLogKind,
+  summary: string,
+): Promise<void> {
+  try {
+    await prisma.$transaction([
+      prisma.deviceLog.create({ data: { serialNumber, kind, summary } }),
+      prisma.device.updateMany({
+        where: { providerType: ProviderType.FINGERPRINT, serialNumber },
+        data: { lastSeenAt: new Date() },
+      }),
+    ]);
+  } catch (error) {
+    log.error("failed to record device activity", { serialNumber, kind, error });
+  }
+}
+
+/**
+ * Bumps `Device.lastSeenAt` without a `DeviceLog` row — for heartbeats
+ * (`/iclock/getrequest`), which arrive every ~8-20s and would drown out the
+ * events worth looking at within hours if logged individually.
+ */
+export async function touchDeviceLastSeen(serialNumber: string): Promise<void> {
+  try {
+    await prisma.device.updateMany({
+      where: { providerType: ProviderType.FINGERPRINT, serialNumber },
+      data: { lastSeenAt: new Date() },
+    });
+  } catch (error) {
+    log.error("failed to update device lastSeenAt", { serialNumber, error });
   }
 }

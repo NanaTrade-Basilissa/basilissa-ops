@@ -61,7 +61,7 @@ export function dateKeyInZone(date: Date, timeZone: string): string {
 }
 
 /** Minutes a zone is ahead of UTC at a given instant. Negative when behind. */
-function zoneOffsetMinutes(instant: Date, timeZone: string): number {
+export function zoneOffsetMinutes(instant: Date, timeZone: string): number {
   const name = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
     .formatToParts(instant)
     .find((part) => part.type === "timeZoneName")?.value;
