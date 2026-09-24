@@ -169,12 +169,12 @@ async function sendFCMPushNotification(
         error: resp?.error?.message || resp?.error?.code || "FCM_DISPATCH_FAILED",
       };
     });
-  } catch (err: any) {
+  } catch (err) {
     log.error("Failed to connect to Firebase Cloud Messaging service", { error: err });
     return tokens.map((token) => ({
       ok: false,
       token,
-      error: err?.message || "FCM_NETWORK_ERROR",
+      error: (err instanceof Error && err.message) || "FCM_NETWORK_ERROR",
     }));
   }
 }
