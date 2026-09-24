@@ -21,7 +21,11 @@ import { GeneralQrButton } from "@/components/admin/general-qr-button";
 import { getEnv } from "@/lib/platform/env";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Operations Dashboard" };
+export const metadata: Metadata = {
+  title: "Operations Dashboard",
+  description:
+    "Operations dashboard for Basilissa Ghana — monitor real-time attendance, shifts, branch performance, and key operational metrics.",
+};
 export const dynamic = "force-dynamic";
 
 export default async function OperationsDashboardPage() {

@@ -13,8 +13,7 @@ vi.mock("@/lib/platform/email", async (importOriginal) => {
 vi.mock("@/lib/platform/env", () => ({
   getEnv: () => ({
     NEXT_PUBLIC_APP_URL: "https://test.basilissa.com",
-    RESEND_API_KEY: "re_test_123",
-    RESEND_FROM_EMAIL: "notifications@basilissa.com",
+    EMAIL_SERVER_URL: "https://nana-trade-server.vercel.app/email",
   }),
   isEmailConfigured: () => true,
 }));
@@ -29,7 +28,9 @@ vi.mock("@/lib/platform/prisma", () => ({
   },
 }));
 
-const { getEmailLogoUrl, renderEmailLogo, EMAIL_LOGO_CID } = await import("@/lib/platform/email");
+const { getEmailLogoUrl, renderEmailLogo, HOSTED_EMAIL_LOGO_URL } = await import(
+  "@/lib/platform/email"
+);
 const { sendFeedbackNotification } = await import("@/lib/modules/feedback/notifications");
 const { handlePasswordResetSend } = await import("@/lib/modules/identity/jobs");
 const { handleAssessmentInvitationSend } = await import("@/lib/modules/assessments/jobs");
@@ -41,13 +42,13 @@ beforeEach(() => {
 });
 
 describe("email logo helpers", () => {
-  it("resolves the absolute logo URL using NEXT_PUBLIC_APP_URL", () => {
-    expect(getEmailLogoUrl()).toBe("https://test.basilissa.com/bsa-logo-icon.png");
+  it("resolves the hosted logo URL", () => {
+    expect(getEmailLogoUrl()).toBe(HOSTED_EMAIL_LOGO_URL);
   });
 
-  it("renders email-client safe HTML image tag with inline CID and dimensions", () => {
+  it("renders email-client safe HTML image tag with hosted URL and dimensions", () => {
     const html = renderEmailLogo(36);
-    expect(html).toContain(`src="cid:${EMAIL_LOGO_CID}"`);
+    expect(html).toContain(`src="${HOSTED_EMAIL_LOGO_URL}"`);
     expect(html).toContain('alt="Basilissa"');
     expect(html).toContain('width="36"');
     expect(html).toContain('height="36"');
@@ -68,10 +69,10 @@ describe("transactional email templates contain Basilissa logo", () => {
 
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     const { html } = mockSendEmail.mock.calls[0]![0];
-    expect(html).toContain(`cid:${EMAIL_LOGO_CID}`);
+    expect(html).toContain(HOSTED_EMAIL_LOGO_URL);
     expect(html).toContain('alt="Basilissa"');
-    expect(html).toContain("Basilissa");
-    expect(html).toContain("Ghana");
+    expect(html).toContain("NEW CUSTOMER FEEDBACK");
+    expect(html).toContain("Basilissa Restaurant &middot; NanaTrade Group");
   });
 
   it("includes logo in staff account invite email", async () => {
@@ -85,9 +86,9 @@ describe("transactional email templates contain Basilissa logo", () => {
 
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     const { html } = mockSendEmail.mock.calls[0]![0];
-    expect(html).toContain(`cid:${EMAIL_LOGO_CID}`);
+    expect(html).toContain(HOSTED_EMAIL_LOGO_URL);
     expect(html).toContain('alt="Basilissa"');
-    expect(html).toContain("Your Basilissa account");
+    expect(html).toContain("HELLO, KWAME");
   });
 
   it("includes logo in staff password reset email", async () => {
@@ -100,9 +101,9 @@ describe("transactional email templates contain Basilissa logo", () => {
 
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     const { html } = mockSendEmail.mock.calls[0]![0];
-    expect(html).toContain(`cid:${EMAIL_LOGO_CID}`);
+    expect(html).toContain(HOSTED_EMAIL_LOGO_URL);
     expect(html).toContain('alt="Basilissa"');
-    expect(html).toContain("Set a new password");
+    expect(html).toContain("SET A NEW PASSWORD");
   });
 
   it("includes logo in assessment invitation email", async () => {
@@ -116,9 +117,9 @@ describe("transactional email templates contain Basilissa logo", () => {
 
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     const { html } = mockSendEmail.mock.calls[0]![0];
-    expect(html).toContain(`cid:${EMAIL_LOGO_CID}`);
+    expect(html).toContain(HOSTED_EMAIL_LOGO_URL);
     expect(html).toContain('alt="Basilissa"');
-    expect(html).toContain("Basilissa Assessment");
+    expect(html).toContain("HELLO, ABENA");
   });
 
   it("includes logo in aptitude test invitation email", async () => {
@@ -132,8 +133,8 @@ describe("transactional email templates contain Basilissa logo", () => {
 
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     const { html } = mockSendEmail.mock.calls[0]![0];
-    expect(html).toContain(`cid:${EMAIL_LOGO_CID}`);
+    expect(html).toContain(HOSTED_EMAIL_LOGO_URL);
     expect(html).toContain('alt="Basilissa"');
-    expect(html).toContain("Basilissa Aptitude Test");
+    expect(html).toContain("HELLO, YAW");
   });
 });

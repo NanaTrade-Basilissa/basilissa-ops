@@ -10,12 +10,16 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/platform/prisma";
 import { getEnv } from "@/lib/platform/env";
-import { escapeHtml, renderEmailLogo, sendEmail } from "@/lib/platform/email";
+import { sendEmail } from "@/lib/platform/email";
 import { PermanentJobError } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
-import { APP_NAME } from "@/lib/platform/constants";
 import { DEFAULT_INVITATION_TTL_HOURS } from "./constants";
 import { getHrNotificationEmails } from "@/lib/modules/identity/jobs";
+import { APP_NAME } from "@/lib/platform/constants";
+import {
+  buildAssessmentInvitationEmailHtml,
+  buildAssessmentCompletedEmailHtml,
+} from "@/lib/email-templates";
 
 const log = scoped("assessments.invitation-send");
 
@@ -40,46 +44,6 @@ export const assessmentInvitationSendPayload = z.object({
   inviteeName: z.string().min(1),
 });
 
-function buildInvitationEmailHtml(url: string, assessmentTitle: string, expiresAt: Date, name: string): string {
-  const first = name.split(" ")[0]!;
-  const deadline = expiresAt.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
-
-  return `
-  <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
-      <div style="margin-bottom:16px;">
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0">
-          <tr>
-            <td style="vertical-align:middle;padding-right:10px;">
-              ${renderEmailLogo(36)}
-            </td>
-            <td style="vertical-align:middle;">
-              <span style="display:inline-block;padding:4px 10px;background:#F0F9FF;color:#0284C7;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">
-                Basilissa Assessment
-              </span>
-            </td>
-          </tr>
-        </table>
-      </div>
-      <h1 style="margin:0 0 16px;font-size:20px;color:#18181B;font-weight:700;">${escapeHtml(assessmentTitle)}</h1>
-      <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
-        Hello ${escapeHtml(first)}, you have been invited to take this assessment for
-        ${escapeHtml(APP_NAME)}. The link below is yours alone and works once. It
-        expires ${escapeHtml(deadline)}.
-      </p>
-      <p style="margin:0 0 24px;">
-        <a href="${escapeHtml(url)}"
-           style="display:inline-block;background:#EFCE02;color:#18181B;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;">
-          Start the assessment
-        </a>
-      </p>
-      <p style="margin:16px 0 0;font-size:12px;color:#A1A1AA;word-break:break-all;">
-        If the button does not work, paste this into your browser:<br /><a href="${escapeHtml(url)}" style="color:#0284C7;text-decoration:underline;">${escapeHtml(url)}</a>
-      </p>
-    </div>
-  </div>`;
-}
-
 export async function handleAssessmentInvitationSend(payload: unknown): Promise<void> {
   const { email, token, expiresAt, assessmentTitle, inviteeName } =
     assessmentInvitationSendPayload.parse(payload);
@@ -94,10 +58,23 @@ export async function handleAssessmentInvitationSend(payload: unknown): Promise<
     return;
   }
 
+  const first = inviteeName.split(" ")[0]!;
+  const deadline = expiry.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+
   const result = await sendEmail({
     to: [email],
+    from: "Basilissa HR",
+    recipientName: inviteeName,
     subject: `You've been invited to take "${assessmentTitle}"`,
-    html: buildInvitationEmailHtml(url, assessmentTitle, expiry, inviteeName),
+    template: "generic",
+    data: {
+      heading: `HELLO, ${inviteeName.toUpperCase()}`,
+      message: `Hello ${first},\n\nYou have been invited to take this assessment for ${APP_NAME}. The link below is yours alone and works once.\n\nIt expires on ${deadline}.\n\nGood luck!`,
+      buttonText: "Start the assessment",
+      buttonUrl: url,
+      from: "Basilissa HR Team",
+    },
+    html: buildAssessmentInvitationEmailHtml(url, assessmentTitle, expiry, inviteeName),
     // Deliberately no context: the logger would record it alongside the
     // subject, and a live token in the logs is the thing this guards against.
   });
@@ -166,94 +143,7 @@ export const assessmentNotifyHrPayload = z.object({
   responseId: z.string().min(1),
 });
 
-function buildAssessmentCompletedEmailHtml(params: {
-  url: string;
-  assessmentTitle: string;
-  candidateName: string;
-  candidateEmail: string | null;
-  submittedAt: Date;
-  scoredPoints: number;
-  maxPoints: number;
-  percent: number;
-  passMarkPercent: number | null;
-}): string {
-  const formattedDate = params.submittedAt.toLocaleString("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-  const passStatus =
-    params.passMarkPercent !== null
-      ? params.percent >= params.passMarkPercent
-        ? `<span style="color:#166534;font-weight:600;">Passed (Pass mark: ${params.passMarkPercent}%)</span>`
-        : `<span style="color:#991b1b;font-weight:600;">Did not pass (Pass mark: ${params.passMarkPercent}%)</span>`
-      : null;
 
-  return `
-  <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #34A4E0;">
-      <div style="border-bottom:1px solid #F4F4F5;padding-bottom:16px;margin-bottom:20px;">
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
-          <tr>
-            <td style="vertical-align:middle;padding-right:10px;">
-              ${renderEmailLogo(36)}
-            </td>
-            <td style="vertical-align:middle;">
-              <span style="font-size:16px;font-weight:700;color:#18181B;margin-right:8px;">${escapeHtml(APP_NAME)}</span>
-              <span style="display:inline-block;padding:4px 10px;background:#F0F9FF;color:#0284C7;border-radius:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
-                Assessment Completed
-              </span>
-            </td>
-          </tr>
-        </table>
-        <h1 style="margin:0;font-size:20px;color:#18181B;font-weight:700;">${escapeHtml(params.assessmentTitle)}</h1>
-      </div>
-
-      <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
-        A candidate has completed an assessment on ${escapeHtml(APP_NAME)}.
-      </p>
-
-      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:14px;color:#18181B;">
-        <tr style="border-bottom:1px solid #F4F4F5;">
-          <td style="padding:8px 0;color:#71717A;width:140px;">Candidate</td>
-          <td style="padding:8px 0;font-weight:600;">
-            ${escapeHtml(params.candidateName)}
-            ${params.candidateEmail ? `<span style="font-weight:normal;color:#71717A;">(${escapeHtml(params.candidateEmail)})</span>` : ""}
-          </td>
-        </tr>
-        <tr style="border-bottom:1px solid #F4F4F5;">
-          <td style="padding:8px 0;color:#71717A;">Submitted at</td>
-          <td style="padding:8px 0;">${escapeHtml(formattedDate)}</td>
-        </tr>
-        <tr style="border-bottom:1px solid #F4F4F5;">
-          <td style="padding:8px 0;color:#71717A;">Score</td>
-          <td style="padding:8px 0;font-weight:700;font-size:16px;color:#0284C7;">
-            ${params.scoredPoints} / ${params.maxPoints} (${params.percent}%)
-          </td>
-        </tr>
-        ${
-          passStatus
-            ? `
-        <tr style="border-bottom:1px solid #F4F4F5;">
-          <td style="padding:8px 0;color:#71717A;">Outcome</td>
-          <td style="padding:8px 0;">${passStatus}</td>
-        </tr>`
-            : ""
-        }
-      </table>
-
-      <p style="margin:0 0 24px;">
-        <a href="${escapeHtml(params.url)}"
-           style="display:inline-block;background:#EFCE02;color:#18181B;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;">
-          Review full response in Admin
-        </a>
-      </p>
-
-      <p style="margin:16px 0 0;font-size:12px;color:#A1A1AA;word-break:break-all;">
-        Or copy and paste this link:<br /><a href="${escapeHtml(params.url)}" style="color:#0284C7;text-decoration:underline;">${escapeHtml(params.url)}</a>
-      </p>
-    </div>
-  </div>`;
-}
 
 export async function handleAssessmentNotifyHr(payload: unknown): Promise<void> {
   const { responseId } = assessmentNotifyHrPayload.parse(payload);
@@ -307,6 +197,7 @@ export async function handleAssessmentNotifyHr(payload: unknown): Promise<void> 
 
   const result = await sendEmail({
     to: hrEmails,
+    from: "Basilissa Assessments",
     subject: `Assessment Completed: ${assessmentTitle} (${candidateName})`,
     html: buildAssessmentCompletedEmailHtml({
       url,

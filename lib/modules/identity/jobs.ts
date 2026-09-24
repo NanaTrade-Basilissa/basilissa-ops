@@ -12,10 +12,11 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/platform/prisma";
 import { getEnv } from "@/lib/platform/env";
-import { escapeHtml, renderEmailLogo, sendEmail } from "@/lib/platform/email";
+import { sendEmail } from "@/lib/platform/email";
 import { PermanentJobError } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { APP_NAME } from "@/lib/platform/constants";
+import { buildInviteEmailHtml, buildResetEmailHtml } from "@/lib/email-templates";
 import { RESET_TOKEN_TTL_MS } from "./constants";
 
 const log = scoped("identity.password-reset");
@@ -44,88 +45,6 @@ export const passwordResetSendPayload = z.object({
   name: z.string().optional(),
 });
 
-function buildInviteEmailHtml(url: string, expiresAt: Date, name?: string): string {
-  const minutes = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60_000));
-  const greeting = name ? `Hello ${escapeHtml(name.split(" ")[0]!)},` : "Hello,";
-
-  return `
-  <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
-      <div style="margin-bottom:20px;">
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0">
-          <tr>
-            <td style="vertical-align:middle;padding-right:10px;">
-              ${renderEmailLogo(36)}
-            </td>
-            <td style="vertical-align:middle;">
-              <span style="font-size:16px;font-weight:700;letter-spacing:-0.02em;color:#18181B;">${escapeHtml(APP_NAME)}</span>
-            </td>
-          </tr>
-        </table>
-      </div>
-      <h1 style="margin:0 0 16px;font-size:20px;color:#18181B;font-weight:700;">Your ${escapeHtml(APP_NAME)} account</h1>
-      <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
-        ${greeting} an account has been created for you. Choose a password using the
-        link below and you are set up. It works once and expires in about
-        ${minutes} minutes.
-      </p>
-      <p style="margin:0 0 24px;">
-        <a href="${escapeHtml(url)}"
-           style="display:inline-block;background:#EFCE02;color:#18181B;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;">
-          Choose a password
-        </a>
-      </p>
-      <p style="margin:0 0 8px;font-size:13px;color:#71717A;line-height:1.6;">
-        If the link has expired by the time you open this, use &ldquo;Forgotten
-        password&rdquo; on the sign-in page and one will be sent straight away.
-      </p>
-      <p style="margin:16px 0 0;font-size:12px;color:#A1A1AA;word-break:break-all;">
-        If the button does not work, paste this into your browser:<br /><a href="${escapeHtml(url)}" style="color:#0284C7;text-decoration:underline;">${escapeHtml(url)}</a>
-      </p>
-    </div>
-  </div>`;
-}
-
-function buildResetEmailHtml(resetUrl: string, expiresAt: Date): string {
-  const minutes = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60_000));
-
-  return `
-  <div style="background:#F8F9FA;padding:32px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px;border:1px solid #E4E4E7;border-top:4px solid #EFCE02;">
-      <div style="margin-bottom:20px;">
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0">
-          <tr>
-            <td style="vertical-align:middle;padding-right:10px;">
-              ${renderEmailLogo(36)}
-            </td>
-            <td style="vertical-align:middle;">
-              <span style="font-size:16px;font-weight:700;letter-spacing:-0.02em;color:#18181B;">${escapeHtml(APP_NAME)}</span>
-            </td>
-          </tr>
-        </table>
-      </div>
-      <h1 style="margin:0 0 16px;font-size:20px;color:#18181B;font-weight:700;">Set a new password</h1>
-      <p style="margin:0 0 16px;font-size:15px;color:#3F3F46;line-height:1.6;">
-        Someone asked to reset the password for your ${escapeHtml(APP_NAME)} account.
-        The link below works once and expires in about ${minutes} minutes.
-      </p>
-      <p style="margin:0 0 24px;">
-        <a href="${escapeHtml(resetUrl)}"
-           style="display:inline-block;background:#EFCE02;color:#18181B;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:15px;">
-          Set a new password
-        </a>
-      </p>
-      <p style="margin:0 0 8px;font-size:13px;color:#71717A;line-height:1.6;">
-        If you did not ask for this, you can ignore it. Your password has not changed.
-        Nobody can use the link without this email.
-      </p>
-      <p style="margin:16px 0 0;font-size:12px;color:#A1A1AA;word-break:break-all;">
-        If the button does not work, paste this into your browser:<br /><a href="${escapeHtml(resetUrl)}" style="color:#0284C7;text-decoration:underline;">${escapeHtml(resetUrl)}</a>
-      </p>
-    </div>
-  </div>`;
-}
-
 export async function handlePasswordResetSend(payload: unknown): Promise<void> {
   const { email, token, expiresAt, purpose, name } = passwordResetSendPayload.parse(payload);
 
@@ -143,7 +62,22 @@ export async function handlePasswordResetSend(payload: unknown): Promise<void> {
 
   const result = await sendEmail({
     to: [email],
+    from: "Basilissa Admin",
+    recipientName: name,
     subject: invite ? `Your ${APP_NAME} account` : `Set a new ${APP_NAME} password`,
+    template: invite ? "invite" : "password-reset",
+    data: invite
+      ? {
+          inviteUrl: resetUrl,
+          inviterName: "Basilissa Admin",
+          inviteTo: "the Basilissa Ops team",
+          role: "Staff Member",
+          expiresIn: `${Math.max(1, Math.round((expiry.getTime() - Date.now()) / 60_000))} minutes`,
+        }
+      : {
+          resetUrl,
+          expiresIn: `${Math.max(1, Math.round((expiry.getTime() - Date.now()) / 60_000))} minutes`,
+        },
     html: invite
       ? buildInviteEmailHtml(resetUrl, expiry, name)
       : buildResetEmailHtml(resetUrl, expiry),

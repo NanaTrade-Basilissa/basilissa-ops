@@ -1,28 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-/**
- * The bug this covers was invisible by construction: `sendEmail` swallowed
- * every failure, so the notification job returned normally and the queue
- * recorded SUCCEEDED while nothing had been delivered. The metric that would
- * have revealed it was the one reporting success.
- */
-
-const resend = vi.hoisted(() => ({
-  send: vi.fn(async () => ({ data: { id: "msg_1" }, error: null }) as unknown),
-}));
-
-vi.mock("resend", () => ({
-  Resend: class {
-    emails = { send: resend.send };
-  },
-}));
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
 
 const env = vi.hoisted(() => ({ configured: true }));
 
 vi.mock("@/lib/platform/env", () => ({
+  DEFAULT_EMAIL_SERVER_URL: "https://nana-trade-server.vercel.app/email",
   getEnv: () => ({
-    RESEND_API_KEY: "re_test",
-    RESEND_FROM_EMAIL: "noreply@basilissa.gh",
+    EMAIL_SERVER_URL: "https://nana-trade-server.vercel.app/email",
     NEXT_PUBLIC_APP_URL: "https://example.test",
   }),
   isEmailConfigured: () => env.configured,
@@ -33,52 +19,90 @@ const { sendEmail } = await import("@/lib/platform/email");
 const message = { to: ["ops@basilissa.gh"], subject: "New feedback", html: "<p>hi</p>" };
 
 beforeEach(() => {
-  resend.send.mockReset();
-  resend.send.mockResolvedValue({ data: { id: "msg_1" }, error: null });
+  mockFetch.mockReset();
+  mockFetch.mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    json: async () => ({ success: true, message: "Email sent" }),
+  });
   env.configured = true;
 });
 
 describe("a successful send", () => {
-  it("reports sent, with the provider's id for tracing", async () => {
-    expect(await sendEmail(message)).toEqual({ status: "sent", id: "msg_1" });
+  it("reports sent, with an id for tracing", async () => {
+    const result = await sendEmail(message);
+    expect(result.status).toBe("sent");
+    if (result.status === "sent") {
+      expect(result.id).toMatch(/^sent_\d+$/);
+    }
   });
 
-  it("formats the sender display name as Basilissa", async () => {
+  it("sends request to EMAIL_SERVER_URL with json body", async () => {
     await sendEmail(message);
-    expect(resend.send).toHaveBeenCalledWith(
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://nana-trade-server.vercel.app/email",
       expect.objectContaining({
-        from: "Basilissa <noreply@basilissa.gh>",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "ops@basilissa.gh",
+          from: "Basilissa",
+          subject: "New feedback",
+          html: "<p>hi</p>",
+        }),
       }),
     );
   });
 
-  it("attaches inline logo when referenced via CID in HTML", async () => {
+  it("passes dynamic sender display name when provided", async () => {
+    await sendEmail({ ...message, from: "Basilissa Spintex" });
+    const callArgs = JSON.parse(mockFetch.mock.calls[0]![1].body);
+    expect(callArgs.from).toBe("Basilissa Spintex");
+  });
+
+  it("passes template and data, omitting html when template is used", async () => {
     await sendEmail({
-      to: ["candidate@basilissa.gh"],
-      subject: "Test Invite",
-      html: '<p><img src="cid:basilissa-logo" alt="Basilissa" /></p>',
+      to: ["staff@basilissa.gh"],
+      from: "Basilissa Admin",
+      recipientName: "Kwame",
+      subject: "Set a new password",
+      template: "password-reset",
+      data: { resetUrl: "https://example.test/reset", expiresIn: "60 minutes" },
+      html: "<p>fallback html</p>",
     });
 
-    expect(resend.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attachments: [
-          expect.objectContaining({
-            filename: "bsa-logo-icon.png",
-            contentType: "image/png",
-            inlineContentId: "basilissa-logo",
-          }),
-        ],
-      }),
-    );
+    const callArgs = JSON.parse(mockFetch.mock.calls[0]![1].body);
+    expect(callArgs).toEqual({
+      email: "staff@basilissa.gh",
+      from: "Basilissa Admin",
+      name: "Kwame",
+      subject: "Set a new password",
+      template: "password-reset",
+      data: { resetUrl: "https://example.test/reset", expiresIn: "60 minutes" },
+    });
+    expect(callArgs.html).toBeUndefined();
+  });
+
+  it("sends sequentially to all recipients in the list", async () => {
+    await sendEmail({
+      ...message,
+      to: ["recipient1@basilissa.gh", "recipient2@basilissa.gh"],
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const body1 = JSON.parse(mockFetch.mock.calls[0]![1].body);
+    const body2 = JSON.parse(mockFetch.mock.calls[1]![1].body);
+    expect(body1.email).toBe("recipient1@basilissa.gh");
+    expect(body2.email).toBe("recipient2@basilissa.gh");
   });
 });
 
 describe("outcomes that are not failures", () => {
-  // Running without a Resend account is a supported deployment, not a fault.
-  it("skips when email is not configured, without calling the provider", async () => {
+  it("skips when email is not configured, without calling the gateway", async () => {
     env.configured = false;
     expect(await sendEmail(message)).toEqual({ status: "skipped", reason: "not_configured" });
-    expect(resend.send).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("skips when nobody is configured to receive it", async () => {
@@ -86,58 +110,82 @@ describe("outcomes that are not failures", () => {
       status: "skipped",
       reason: "no_recipients",
     });
-    expect(resend.send).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 
 describe("classifying a provider rejection", () => {
-  async function reject(name: string) {
-    resend.send.mockResolvedValue({ data: null, error: { name, message: name } });
-    return sendEmail(message);
-  }
+  it("treats HTTP 400 rejection as permanent non-retryable failure", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      statusText: "Bad Request",
+      json: async () => ({ success: false, error: "Recipient email is required" }),
+    });
 
-  it("gives up on a request that can never be accepted", async () => {
-    for (const name of ["validation_error", "invalid_parameter", "missing_required_field"]) {
-      expect(await reject(name)).toMatchObject({ status: "failed", retryable: false });
-    }
+    const result = await sendEmail(message);
+    expect(result).toMatchObject({
+      status: "failed",
+      retryable: false,
+      error: expect.any(Error),
+    });
   });
 
-  it("retries the provider's own bad minute", async () => {
-    for (const name of ["internal_server_error", "application_error", "rate_limit_exceeded"]) {
-      expect(await reject(name)).toMatchObject({ status: "failed", retryable: true });
-    }
+  it("treats HTTP 422 rejection as permanent non-retryable failure", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      statusText: "Unprocessable Entity",
+      json: async () => ({ success: false, error: "Invalid email syntax" }),
+    });
+
+    const result = await sendEmail(message);
+    expect(result).toMatchObject({
+      status: "failed",
+      retryable: false,
+    });
   });
 
-  /*
-    Credentials are configuration, and a human can correct configuration while
-    attempts remain. Classifying them permanent would throw away a message that
-    a five-minute fix would have delivered.
-  */
-  it("retries a credential problem rather than discarding the message", async () => {
-    for (const name of ["missing_api_key", "invalid_api_Key", "invalid_from_address"]) {
-      expect(await reject(name)).toMatchObject({ status: "failed", retryable: true });
-    }
+  it("retries on HTTP 500 server error", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({ success: false, error: "SMTP connection failed" }),
+    });
+
+    const result = await sendEmail(message);
+    expect(result).toMatchObject({
+      status: "failed",
+      retryable: true,
+      error: expect.any(Error),
+    });
   });
 
-  // Unrecognised codes appear when the provider adds one. Erring towards a
-  // retry wastes attempts; erring the other way loses mail.
-  it("treats an unfamiliar error as retryable", async () => {
-    expect(await reject("some_code_invented_next_year")).toMatchObject({
+  it("retries on HTTP 429 rate limit", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      statusText: "Too Many Requests",
+      json: async () => ({ success: false, error: "Rate limit exceeded" }),
+    });
+
+    const result = await sendEmail(message);
+    expect(result).toMatchObject({
       status: "failed",
       retryable: true,
     });
   });
 });
 
-describe("a thrown error", () => {
+describe("a thrown network error", () => {
   it("is retryable, being about the network rather than the message", async () => {
-    resend.send.mockRejectedValue(new Error("ECONNRESET"));
+    mockFetch.mockRejectedValueOnce(new Error("ECONNRESET"));
     expect(await sendEmail(message)).toMatchObject({ status: "failed", retryable: true });
   });
 
-  // The contract the callers rely on: this reports, it does not throw.
   it("never escapes to the caller", async () => {
-    resend.send.mockRejectedValue(new Error("boom"));
+    mockFetch.mockRejectedValueOnce(new Error("gateway timeout"));
     await expect(sendEmail(message)).resolves.toBeDefined();
   });
 });

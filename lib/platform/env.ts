@@ -85,11 +85,9 @@ const envSchema = z.object({
     z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
   ),
 
-  // Optional: email is best-effort by design. Unset means notifications are
-  // skipped with a warning, and everything else carries on.
-  RESEND_API_KEY: optional(z.string()),
-  RESEND_FROM_EMAIL: optional(z.string().email("RESEND_FROM_EMAIL must be a valid email address")),
-  FEEDBACK_NOTIFICATION_EMAILS: optional(z.string()),
+  // Email server REST endpoint (NanaTrade Server / Nodemailer gateway).
+  // Defaults to https://nana-trade-server.vercel.app/email
+  EMAIL_SERVER_URL: optional(z.string().url("EMAIL_SERVER_URL must be a valid URL")),
 
   // Optional: SMS / OTP notification gateway REST endpoint for mobile staff OTP verification.
   // Defaults to https://nana-trade-server.vercel.app/notify/otp
@@ -127,24 +125,13 @@ export function _resetEnvCache(): void {
   warnedMissingAppUrl = false;
 }
 
-/** Parsed, trimmed, de-duplicated notification recipient list. Empty if unset. */
-export function getNotificationEmails(): string[] {
-  const { FEEDBACK_NOTIFICATION_EMAILS } = getEnv();
-  if (!FEEDBACK_NOTIFICATION_EMAILS) return [];
-
-  return Array.from(
-    new Set(
-      FEEDBACK_NOTIFICATION_EMAILS.split(",")
-        .map((email) => email.trim())
-        .filter(Boolean),
-    ),
-  );
-}
+/** Default endpoint for sending email via the NanaTrade Nodemailer server. */
+export const DEFAULT_EMAIL_SERVER_URL = "https://nana-trade-server.vercel.app/email";
 
 /** Whether outbound email is configured at all. */
 export function isEmailConfigured(): boolean {
   const env = getEnv();
-  return Boolean(env.RESEND_API_KEY && env.RESEND_FROM_EMAIL);
+  return Boolean(env.EMAIL_SERVER_URL || DEFAULT_EMAIL_SERVER_URL);
 }
 
 /** Whether an outbound SMS / OTP gateway endpoint is configured. */

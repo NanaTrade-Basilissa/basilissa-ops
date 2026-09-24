@@ -4,7 +4,16 @@ import { verifySession } from "@/lib/modules/identity/server";
 import { AuthShell } from "@/components/admin/auth-shell";
 import { LoginForm } from "@/components/admin/login-form";
 
-export const metadata: Metadata = { title: "Admin sign in" };
+export const metadata: Metadata = {
+  title: "Admin sign in",
+  description:
+    "Sign in to Basilissa Operations to manage staff attendance, shift scheduling, candidate assessments, and branch operations.",
+  openGraph: {
+    title: "Admin sign in | Basilissa Ops",
+    description:
+      "Sign in to Basilissa Operations to manage staff attendance, shift scheduling, candidate assessments, and branch operations.",
+  },
+};
 export const dynamic = "force-dynamic";
 
 export default async function AdminLoginPage({
