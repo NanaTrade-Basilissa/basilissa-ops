@@ -150,5 +150,52 @@ describe("Mobile Push Notifications", () => {
         }),
       );
     });
+
+    it("registers push token using expoPushToken fallback alias", async () => {
+      vi.spyOn(prisma.employeeDeviceIdentity, "findFirst").mockResolvedValueOnce({
+        id: "identity_existing",
+        employeeId: "emp_100",
+        providerType: ProviderType.MOBILE_APP,
+        externalId: "device_phone_1",
+      } as never);
+
+      const updateSpy = vi.spyOn(prisma.employeeDeviceIdentity, "update").mockResolvedValueOnce({} as never);
+
+      const req = new NextRequest("http://localhost:3000/api/v1/notifications/push-token", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${validToken}` },
+        body: JSON.stringify({
+          expoPushToken: "fcm_token_sample_123456789",
+          platform: "android",
+        }),
+      });
+
+      const res = await registerPushToken(req);
+      expect(res.status).toBe(200);
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "identity_existing" },
+          data: expect.objectContaining({
+            label: expect.stringContaining("fcm_token_sample_123456789"),
+          }),
+        }),
+      );
+    });
+
+    it("dispatches FCM push tokens in simulated test environment", async () => {
+      const fcmReceipts = await sendPushNotification(
+        ["fcm_device_token_abc123", "fcm_device_token_def456"],
+        {
+          title: "Leave Approved",
+          body: "Your annual leave has been approved.",
+        },
+      );
+
+      expect(fcmReceipts.length).toBe(2);
+      expect(fcmReceipts[0].ok).toBe(true);
+      expect(fcmReceipts[0].token).toBe("fcm_device_token_abc123");
+      expect(fcmReceipts[0].simulated).toBe(true);
+    });
   });
 });

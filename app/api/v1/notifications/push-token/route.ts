@@ -8,12 +8,18 @@ import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
 const RATE_LIMIT_MAX = 20;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
-const registerPushTokenSchema = z.object({
-  pushToken: z.string().min(5, "Push token is required"),
-  platform: z.enum(["ios", "android", "web"]).optional().default("android"),
-  deviceName: z.string().max(100).optional(),
-  deviceToken: z.string().optional(),
-});
+const registerPushTokenSchema = z
+  .object({
+    pushToken: z.string().min(5, "Push token is required").optional(),
+    expoPushToken: z.string().min(5).optional(),
+    platform: z.enum(["ios", "android", "web"]).optional().default("android"),
+    deviceName: z.string().max(100).optional(),
+    deviceToken: z.string().optional(),
+  })
+  .refine((data) => Boolean(data.pushToken || data.expoPushToken), {
+    message: "Push token is required",
+    path: ["pushToken"],
+  });
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -52,7 +58,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { pushToken, platform, deviceName, deviceToken } = parsed.data;
+  const pushToken = (parsed.data.pushToken || parsed.data.expoPushToken)!;
+  const { platform, deviceName, deviceToken } = parsed.data;
 
   // 1. Authenticate via Bearer deviceToken or payload token
   const authHeader = request.headers.get("authorization");
