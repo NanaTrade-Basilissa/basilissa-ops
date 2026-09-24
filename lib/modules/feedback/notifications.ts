@@ -1,6 +1,6 @@
 import "server-only";
 import { getEnv } from "@/lib/platform/env";
-import { sendEmail, type SendEmailResult } from "@/lib/platform/email";
+import { sendEmail, type JobEmailOptions, type SendEmailResult } from "@/lib/platform/email";
 import {
   buildFeedbackNotificationEmail,
   type FeedbackNotificationPayload,
@@ -19,6 +19,7 @@ export type { NotificationAnswer, FeedbackNotificationPayload };
  */
 export async function sendFeedbackNotification(
   payload: FeedbackNotificationPayload,
+  options: JobEmailOptions = {},
 ): Promise<SendEmailResult> {
   const dashboardUrl = `${getEnv().NEXT_PUBLIC_APP_URL}/admin/branches/${payload.branchId}#submission-${payload.submissionId}`;
   const recipients = await getFeedbackRecipientsForBranch(payload.branchId);
@@ -29,5 +30,6 @@ export async function sendFeedbackNotification(
     subject: `New feedback: ${payload.branchName} (${payload.overallScore.toFixed(1)}/5)`,
     html: buildFeedbackNotificationEmail(payload, dashboardUrl),
     context: { submissionId: payload.submissionId },
+    ...options,
   });
 }

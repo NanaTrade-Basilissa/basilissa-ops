@@ -10,8 +10,8 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/platform/prisma";
 import { getEnv } from "@/lib/platform/env";
-import { sendEmail } from "@/lib/platform/email";
-import { PermanentJobError } from "@/lib/platform/jobs";
+import { sendEmail, emailOptionsForJob } from "@/lib/platform/email";
+import { PermanentJobError, type JobContext } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { DEFAULT_INVITATION_TTL_HOURS } from "./constants";
 import { getHrNotificationEmails } from "@/lib/modules/identity/jobs";
@@ -44,7 +44,7 @@ export const assessmentInvitationSendPayload = z.object({
   inviteeName: z.string().min(1),
 });
 
-export async function handleAssessmentInvitationSend(payload: unknown): Promise<void> {
+export async function handleAssessmentInvitationSend(payload: unknown, job?: JobContext): Promise<void> {
   const { email, token, expiresAt, assessmentTitle, inviteeName } =
     assessmentInvitationSendPayload.parse(payload);
 
@@ -75,6 +75,7 @@ export async function handleAssessmentInvitationSend(payload: unknown): Promise<
       from: "Basilissa HR Team",
     },
     html: buildAssessmentInvitationEmailHtml(url, assessmentTitle, expiry, inviteeName),
+    ...emailOptionsForJob(job),
     // Deliberately no context: the logger would record it alongside the
     // subject, and a live token in the logs is the thing this guards against.
   });
@@ -145,7 +146,7 @@ export const assessmentNotifyHrPayload = z.object({
 
 
 
-export async function handleAssessmentNotifyHr(payload: unknown): Promise<void> {
+export async function handleAssessmentNotifyHr(payload: unknown, job?: JobContext): Promise<void> {
   const { responseId } = assessmentNotifyHrPayload.parse(payload);
 
   const response = await prisma.assessmentResponse.findUnique({
@@ -211,6 +212,7 @@ export async function handleAssessmentNotifyHr(payload: unknown): Promise<void> 
       passMarkPercent: response.invitation.assessment.passMarkPercent,
     }),
     context: { responseId, assessmentId: response.invitation.assessment.id },
+    ...emailOptionsForJob(job),
   });
 
   if (result.status === "failed") {

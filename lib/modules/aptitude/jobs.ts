@@ -9,8 +9,8 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/platform/prisma";
 import { getEnv } from "@/lib/platform/env";
-import { sendEmail } from "@/lib/platform/email";
-import { PermanentJobError } from "@/lib/platform/jobs";
+import { sendEmail, emailOptionsForJob } from "@/lib/platform/email";
+import { PermanentJobError, type JobContext } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { DEFAULT_INVITATION_TTL_HOURS, APTITUDE_NOTIFY_HR } from "./constants";
 import { finalizeAttempt } from "./finalize";
@@ -34,7 +34,7 @@ export const aptitudeInvitationSendPayload = z.object({
   candidateName: z.string().min(1),
 });
 
-export async function handleAptitudeInvitationSend(payload: unknown): Promise<void> {
+export async function handleAptitudeInvitationSend(payload: unknown, job?: JobContext): Promise<void> {
   const { email, token, expiresAt, testTitle, candidateName } = aptitudeInvitationSendPayload.parse(payload);
 
   const url = `${getEnv().NEXT_PUBLIC_APP_URL}/aptitude/${encodeURIComponent(token)}`;
@@ -62,6 +62,7 @@ export async function handleAptitudeInvitationSend(payload: unknown): Promise<vo
       from: "Basilissa HR Team",
     },
     html: buildAptitudeInvitationEmailHtml(url, testTitle, expiry, candidateName),
+    ...emailOptionsForJob(job),
   });
 
   if (result.status === "skipped") {
@@ -133,7 +134,7 @@ export const aptitudeNotifyHrPayload = z.object({
 
 
 
-export async function handleAptitudeNotifyHr(payload: unknown): Promise<void> {
+export async function handleAptitudeNotifyHr(payload: unknown, job?: JobContext): Promise<void> {
   const { attemptId } = aptitudeNotifyHrPayload.parse(payload);
 
   const attempt = await prisma.aptitudeAttempt.findUnique({
@@ -201,6 +202,7 @@ export async function handleAptitudeNotifyHr(payload: unknown): Promise<void> {
       passMarkPercent: attempt.invitation.test.passMarkPercent,
     }),
     context: { attemptId, testId: attempt.invitation.test.id },
+    ...emailOptionsForJob(job),
   });
 
   if (result.status === "failed") {

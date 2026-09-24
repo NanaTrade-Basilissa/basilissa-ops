@@ -216,7 +216,9 @@ export async function retryEmailJob(
       status: "PENDING",
       runAt: new Date(),
       attempts: 0,
-      lastError: null,
+      // lastError is kept on purpose: it tells the worker this is a retry, so
+      // the send first checks whether an earlier, timed-out attempt already
+      // delivered (`JobContext.retrying`). A success clears it.
       lockedAt: null,
       lockedBy: null,
       completedAt: null,

@@ -1,3 +1,4 @@
+import type { JobContext } from "@/lib/platform/jobs";
 import { FEEDBACK_NOTIFY, handleFeedbackNotify } from "@/lib/modules/feedback/jobs";
 import { PASSWORD_RESET_SEND, handlePasswordResetSend } from "@/lib/modules/identity/jobs";
 import {
@@ -26,7 +27,7 @@ import {
  * running it, since the worker will be replaced shortly and the retry will
  * then succeed.
  */
-export type JobHandler = (payload: unknown) => Promise<void>;
+export type JobHandler = (payload: unknown, context: JobContext) => Promise<void>;
 
 export const HANDLERS: Record<string, JobHandler> = {
   [FEEDBACK_NOTIFY]: handleFeedbackNotify,

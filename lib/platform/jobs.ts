@@ -61,6 +61,8 @@ export type ClaimedJob = {
   payload: unknown;
   attempts: number;
   maxAttempts: number;
+  /** From the previous attempt. Kept when a person retries a DEAD job. */
+  lastError: string | null;
 };
 
 /**
@@ -88,7 +90,7 @@ export async function claim(workerId: string, limit = 5): Promise<ClaimedJob[]> 
       FOR UPDATE SKIP LOCKED
       LIMIT ${limit}
     )
-    RETURNING "id", "type", "payload", "attempts", "maxAttempts"
+    RETURNING "id", "type", "payload", "attempts", "maxAttempts", "lastError"
   `;
 }
 
@@ -123,6 +125,24 @@ export function backoffMs(attempts: number, baseMs = 10_000, capMs = 60 * 60_000
  * Dead-letters immediately rather than discarding. A job nobody can complete
  * is exactly the kind that needs a person, and deleting it hides that.
  */
+/**
+ * What the worker tells a handler about the job it is running. `jobId` is
+ * stable across retries, which makes it the idempotency key for anything a
+ * handler must not repeat: see `emailOptionsForJob`. Optional in handler
+ * signatures so a handler can still be called directly (tests, scripts), where
+ * it simply has no key.
+ *
+ * `retrying` is true when an earlier attempt failed, including one a person
+ * re-queued from the email queue (which resets `attempts` but keeps
+ * `lastError`). A failed attempt may still have done its work, a timed-out
+ * email being the known case, so a retry is when to check first.
+ */
+export type JobContext = { jobId: string; retrying: boolean };
+
+export function jobContextFor(job: Pick<ClaimedJob, "id" | "attempts" | "lastError">): JobContext {
+  return { jobId: job.id, retrying: job.attempts > 1 || job.lastError !== null };
+}
+
 export class PermanentJobError extends Error {
   override readonly name = "PermanentJobError";
 

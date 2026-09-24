@@ -96,6 +96,7 @@ const {
   queueDepth,
   backoffMs,
   PermanentJobError,
+  jobContextFor,
 } = await import("@/lib/platform/jobs");
 
 beforeEach(() => {
@@ -273,5 +274,14 @@ describe("queueDepth", () => {
     expect(depth.pending).toBe(1);
     expect(depth.dead).toBe(0);
     expect(depth.oldestPendingAt).not.toBeNull();
+  });
+});
+
+describe("the context a handler is given", () => {
+  it("is a retry after a failed attempt, or when a person re-queued a failed job", () => {
+    expect(jobContextFor({ id: "j", attempts: 1, lastError: null })).toEqual({ jobId: "j", retrying: false });
+    expect(jobContextFor({ id: "j", attempts: 2, lastError: "Error: timeout" }).retrying).toBe(true);
+    // A manual retry resets attempts to 0 but keeps the error.
+    expect(jobContextFor({ id: "j", attempts: 1, lastError: "Error: timeout" }).retrying).toBe(true);
   });
 });

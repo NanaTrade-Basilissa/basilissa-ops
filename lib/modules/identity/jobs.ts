@@ -12,8 +12,8 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/platform/prisma";
 import { getEnv } from "@/lib/platform/env";
-import { sendEmail } from "@/lib/platform/email";
-import { PermanentJobError } from "@/lib/platform/jobs";
+import { sendEmail, emailOptionsForJob } from "@/lib/platform/email";
+import { PermanentJobError, type JobContext } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { APP_NAME } from "@/lib/platform/constants";
 import { buildInviteEmailHtml, buildResetEmailHtml } from "@/lib/email-templates";
@@ -45,7 +45,7 @@ export const passwordResetSendPayload = z.object({
   name: z.string().optional(),
 });
 
-export async function handlePasswordResetSend(payload: unknown): Promise<void> {
+export async function handlePasswordResetSend(payload: unknown, job?: JobContext): Promise<void> {
   const { email, token, expiresAt, purpose, name } = passwordResetSendPayload.parse(payload);
 
   const resetUrl = `${getEnv().NEXT_PUBLIC_APP_URL}/admin/reset-password?token=${encodeURIComponent(token)}`;
@@ -81,6 +81,8 @@ export async function handlePasswordResetSend(payload: unknown): Promise<void> {
     html: invite
       ? buildInviteEmailHtml(resetUrl, expiry, name)
       : buildResetEmailHtml(resetUrl, expiry),
+    // The job id, never the token: the key is stored and hashed into headers.
+    ...emailOptionsForJob(job),
     // Deliberately no context: the logger would record it alongside the
     // subject, and a reset token in the logs is the thing this all guards.
   });

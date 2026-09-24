@@ -94,12 +94,17 @@ Attendance, scheduling, the policy editor, and aptitude tests have been promoted
 **Where:** `.env` on the deploy target
 
 `NEXT_PUBLIC_APP_URL` is `http://localhost:3001`, which is what QR codes and
-notification email links are built from. `RESEND_API_KEY` is currently empty
-(intentionally, after a test send).
+notification email links are built from.
 
-**What to do:** set the real public URL wherever production is hosted. Set the
-Resend key when notifications should resume — email is optional by design, so
-leaving it unset only means notifications are skipped with a warning.
+Email no longer goes through Resend. It goes through the NanaTradeServer
+gateway (`EMAIL_SERVER_URL`, default `https://nana-trade-server.vercel.app/email`),
+which sends over Gmail SMTP as `noreply@basilissagh.com`. As of 24 Sep 2026
+production was still running the Resend-era build (mail arrived from
+`feedback@basilissa.cobbold.dev`), so the gateway switch and E5 reach
+production only when it is redeployed, after migrating.
+
+**What to do:** set the real public URL wherever production is hosted. Deploy
+the gateway change (E5) before this app's, or retries lose their Sent check.
 
 ---
 
@@ -591,6 +596,51 @@ queue depth, dead jobs and backlog warnings every tick.
 
 **What to do:** once time-driven work exists (Phase 1 settlement), a dead
 worker matters even with an empty queue. Add a heartbeat then, not now.
+
+---
+
+### 🟢 E5 — Email delivery: retries, partial sends, gateway errors
+
+**Status: done (24 Sep 2026).** Found while diagnosing an outage whose cause
+was outside the code: Google Workspace blocked `noreply@basilissagh.com` from
+sending (`550 5.7.1 ... has a policy that prohibited the mail`), and an admin
+lifted it. The gateway reported that as a bare `500 Failed to send email`,
+which is why it looked like an app bug. The diagnosis also turned up four real
+problems, now fixed:
+
+- **A timed-out send was often delivered anyway, and the retry sent it again.**
+  Seen live: one password reset arrived twice. The timeout is now 45s (was 15s;
+  Vercel cold start plus SMTP exceeds 15s). Every queued email carries a stable
+  Message-ID, and a retry (`JobContext.retrying`) asks the gateway to look for
+  it in the Sent folder over IMAP and skip it if found. **A repeated Message-ID
+  alone does NOT deduplicate in Gmail**: tested, both copies arrived.
+- **One failing recipient stopped the rest, and the retry re-sent to everyone
+  before it.** `sendEmail` now tries every recipient, and `email_deliveries`
+  records who got each job's message, keyed `job:<jobId>`. A retry sends only to
+  those missing. A person's "Retry" in the email queue reuses the job, so the
+  same holds there; "Resend" makes a new job and deliberately sends again.
+- **The gateway hid Gmail's reply.** It now returns it, as 422 for a recipient
+  that does not exist (callers stop), 503 for a temporary refusal, and 502 for
+  everything else, **including a policy or auth rejection of the sender**. Those
+  stay retryable on purpose: today's block was lifted within the hour, and
+  killing every job at the first 5.7.1 would have lost them all.
+- **Gmail stacked repeat emails into one thread**, so a second invitation
+  looked like it never came. Queued email subjects end in `· #XXXXXX`, stable
+  per job so a retry keeps the same subject.
+
+**Residual gaps:**
+- A retry that starts while the gateway is still sending the earlier attempt
+  misses it in Sent. Not possible at the default 60s poll unless the gateway
+  runs longer than that.
+- If IMAP cannot be reached, the gateway sends anyway: a duplicate is better
+  than a lost message.
+- Gmail accepts a nonexistent address and bounces it later, to the noreply
+  inbox, so the 422 path rarely fires. Bounces are not read by anything.
+
+**Security, not fixed here:** the gateway's `/email` endpoint has no
+authentication and allows any origin. Anyone who finds the URL can send mail as
+`noreply@basilissagh.com`, which is also a plausible cause of Google
+restricting the account.
 
 ---
 

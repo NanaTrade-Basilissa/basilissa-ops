@@ -11,7 +11,7 @@ import type { SendEmailResult } from "@/lib/platform/email";
 
 type NotifyPayload = { answers: { questionText: string; score: number; label: string }[] };
 const send = vi.hoisted(() =>
-  ({ fn: vi.fn<(payload: NotifyPayload) => Promise<SendEmailResult>>() }),
+  ({ fn: vi.fn<(payload: NotifyPayload, options?: unknown) => Promise<SendEmailResult>>() }),
 );
 const db = vi.hoisted(() => ({ submission: null as unknown }));
 
@@ -45,6 +45,11 @@ beforeEach(() => {
 describe("when the send works", () => {
   it("completes, so the queue records success", async () => {
     await expect(handleFeedbackNotify(PAYLOAD)).resolves.toBeUndefined();
+  });
+
+  it("keys the send by the job id, so a retry skips who already has it", async () => {
+    await handleFeedbackNotify(PAYLOAD, { jobId: "job_7", retrying: true });
+    expect(send.fn.mock.calls[0]![1]).toEqual({ idempotencyKey: "job:job_7", skipIfAlreadySent: true });
   });
 
   it("sorts answers by question order and resolves each label", async () => {

@@ -2,7 +2,8 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/platform/prisma";
 import { scoped } from "@/lib/platform/logger";
-import { PermanentJobError } from "@/lib/platform/jobs";
+import { PermanentJobError, type JobContext } from "@/lib/platform/jobs";
+import { emailOptionsForJob } from "@/lib/platform/email";
 import { sendFeedbackNotification } from "./notifications";
 
 /**
@@ -22,7 +23,7 @@ export const feedbackNotifyPayload = z.object({
   submissionId: z.string().min(1),
 });
 
-export async function handleFeedbackNotify(payload: unknown): Promise<void> {
+export async function handleFeedbackNotify(payload: unknown, job?: JobContext): Promise<void> {
   const { submissionId } = feedbackNotifyPayload.parse(payload);
 
   const submission = await prisma.feedbackSubmission.findUnique({
@@ -61,7 +62,7 @@ export async function handleFeedbackNotify(payload: unknown): Promise<void> {
         score: answer.score,
         label: answer.question.ratingLabels[answer.score - 1] ?? "",
       })),
-  });
+  }, emailOptionsForJob(job));
 
   /*
     The job's outcome must reflect the send's outcome. Returning regardless

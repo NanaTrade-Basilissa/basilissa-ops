@@ -3,7 +3,7 @@
 import "./env";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/platform/prisma";
-import { claim, markFailed, markSucceeded, queueDepth, reclaimStuck } from "@/lib/platform/jobs";
+import { claim, jobContextFor, markFailed, markSucceeded, queueDepth, reclaimStuck } from "@/lib/platform/jobs";
 import { logger, setBaseFields } from "@/lib/platform/logger";
 import {
   autoCloseStaleDays,
@@ -14,6 +14,7 @@ import { purgeExpiredPasswordResets } from "@/lib/modules/identity/jobs";
 import { purgeSentInvitationJobs } from "@/lib/modules/assessments/jobs";
 import { autoSubmitExpiredAttempts, purgeSentInvitationJobs as purgeSentAptitudeInvitationJobs } from "@/lib/modules/aptitude/jobs";
 import { notifyJobDead, notifyWorkerError } from "@/lib/platform/slack";
+import { purgeOldEmailDeliveries } from "@/lib/platform/email";
 import { resolveHandler } from "./registry";
 
 /**
@@ -95,7 +96,7 @@ async function runOne(job: Awaited<ReturnType<typeof claim>>[number]): Promise<v
 
   const startedAt = Date.now();
   try {
-    await handler(job.payload);
+    await handler(job.payload, jobContextFor(job));
     await markSucceeded(job.id);
     logger.info("job succeeded", { jobId: job.id, type: job.type, ms: Date.now() - startedAt });
   } catch (error) {
@@ -194,6 +195,12 @@ async function runPeriodic(now: number): Promise<void> {
     await purgeSentAptitudeInvitationJobs(new Date());
   } catch (error) {
     logger.error("aptitude invitation send purge failed", { error });
+  }
+
+  try {
+    await purgeOldEmailDeliveries(new Date());
+  } catch (error) {
+    logger.error("email delivery purge failed", { error });
   }
 }
 

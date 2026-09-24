@@ -138,9 +138,10 @@ describe("email job controls — permissions and execution", () => {
       data: expect.objectContaining({
         status: "PENDING",
         attempts: 0,
-        lastError: null,
       }),
     });
+    // Kept, so the worker treats the run as a retry and checks before resending.
+    expect(updateSpy.mock.calls[0]![0].data).not.toHaveProperty("lastError");
 
     expect(auditSpy).toHaveBeenCalledWith(
       expect.objectContaining({

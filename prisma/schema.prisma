@@ -1088,6 +1088,26 @@ model Job {
   @@map("jobs")
 }
 
+/// Who has already received a given email, so a retried send reaches only the
+/// recipients still missing it.
+///
+/// Keyed by the sender's idempotency key (for queued mail, the job id), not by
+/// content: a retry of the same job must match even though its wording can
+/// differ ("expires in 58 minutes" vs "57"). Resending from the email queue
+/// enqueues a NEW job, so it gets a new key and sends again, as intended.
+///
+/// Rows are worthless once the job can no longer retry; the worker's periodic
+/// sweep deletes them after a week (`purgeOldEmailDeliveries`).
+model EmailDelivery {
+  key       String
+  recipient String
+  sentAt    DateTime @default(now())
+
+  @@id([key, recipient])
+  @@index([sentAt])
+  @@map("email_deliveries")
+}
+
 enum JobStatus {
   PENDING
   RUNNING

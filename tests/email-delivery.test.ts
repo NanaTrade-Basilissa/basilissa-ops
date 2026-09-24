@@ -14,7 +14,30 @@ vi.mock("@/lib/platform/env", () => ({
   isEmailConfigured: () => env.configured,
 }));
 
-const { sendEmail } = await import("@/lib/platform/email");
+const deliveries = vi.hoisted(() => ({ rows: new Set<string>(), failRead: false }));
+
+vi.mock("@/lib/platform/prisma", () => ({
+  prisma: {
+    emailDelivery: {
+      findMany: async ({ where }: { where: { key: string; recipient: { in: string[] } } }) => {
+        if (deliveries.failRead) throw new Error("db down");
+        return where.recipient.in
+          .filter((r) => deliveries.rows.has(`${where.key}|${r}`))
+          .map((recipient) => ({ recipient }));
+      },
+      upsert: async ({ create }: { create: { key: string; recipient: string } }) => {
+        deliveries.rows.add(`${create.key}|${create.recipient}`);
+        return create;
+      },
+    },
+  },
+}));
+
+vi.mock("@/lib/platform/slack", () => ({ notifyEmailFailure: async () => {} }));
+
+const { sendEmail, messageIdFor, subjectReference, emailOptionsForJob, EMAIL_GATEWAY_TIMEOUT_MS } = await import(
+  "@/lib/platform/email"
+);
 
 const message = { to: ["ops@basilissa.gh"], subject: "New feedback", html: "<p>hi</p>" };
 
@@ -27,7 +50,17 @@ beforeEach(() => {
     json: async () => ({ success: true, message: "Email sent" }),
   });
   env.configured = true;
+  deliveries.rows.clear();
+  deliveries.failRead = false;
 });
+
+const rejection = (status: number, error: string) => ({
+  ok: false,
+  status,
+  statusText: "",
+  json: async () => ({ success: false, error }),
+});
+const bodies = () => mockFetch.mock.calls.map((call) => JSON.parse(call[1].body));
 
 describe("a successful send", () => {
   it("reports sent, with an id for tracing", async () => {
@@ -187,5 +220,115 @@ describe("a thrown network error", () => {
   it("never escapes to the caller", async () => {
     mockFetch.mockRejectedValueOnce(new Error("gateway timeout"));
     await expect(sendEmail(message)).resolves.toBeDefined();
+  });
+});
+
+describe("one recipient failing", () => {
+  const three = { ...message, to: ["a@basilissa.gh", "b@basilissa.gh", "c@basilissa.gh"] };
+
+  it("does not stop the others being sent", async () => {
+    mockFetch.mockResolvedValueOnce(rejection(500, "SMTP down"));
+    const result = await sendEmail(three);
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({ status: "failed", retryable: true, failedRecipients: ["a@basilissa.gh"] });
+    if (result.status === "failed") expect(String(result.error)).toContain("2 of 3 sent");
+  });
+
+  it("is permanent only when every failure is permanent", async () => {
+    mockFetch.mockResolvedValueOnce(rejection(422, "550 5.1.1 no such user"));
+    expect(await sendEmail(three)).toMatchObject({ status: "failed", retryable: false });
+
+    mockFetch.mockResolvedValueOnce(rejection(422, "550 5.1.1 no such user"));
+    mockFetch.mockResolvedValueOnce(rejection(503, "try later"));
+    expect(await sendEmail(three)).toMatchObject({ status: "failed", retryable: true });
+  });
+
+  it("sends each address once, however it was written", async () => {
+    await sendEmail({ ...message, to: ["A@basilissa.gh", " a@basilissa.gh", "a@basilissa.gh"] });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a send with an idempotency key", () => {
+  const key = "job:job123";
+  const keyed = { ...message, to: ["a@basilissa.gh", "b@basilissa.gh"], idempotencyKey: key };
+
+  it("on retry, sends only to the recipients who did not get it", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK", json: async () => ({ success: true }) });
+    mockFetch.mockResolvedValueOnce(rejection(500, "SMTP down"));
+    expect(await sendEmail(keyed)).toMatchObject({ status: "failed", failedRecipients: ["b@basilissa.gh"] });
+
+    mockFetch.mockClear();
+    expect(await sendEmail(keyed)).toMatchObject({ status: "sent" });
+    expect(bodies().map((b) => b.email)).toEqual(["b@basilissa.gh"]);
+  });
+
+  it("sends nothing once everyone has it", async () => {
+    await sendEmail(keyed);
+    mockFetch.mockClear();
+    expect(await sendEmail(keyed)).toMatchObject({ status: "sent" });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("gives each copy a stable Message-ID and the subject a stable reference", async () => {
+    await sendEmail(keyed);
+    const [first, second] = bodies();
+    expect(first.messageId).toBe(messageIdFor(key, "a@basilissa.gh"));
+    expect(second.messageId).toBe(messageIdFor(key, "b@basilissa.gh"));
+    expect(first.messageId).not.toBe(second.messageId);
+    expect(first.messageId).toMatch(/^<[0-9a-f]{40}@basilissagh\.com>$/);
+    expect(first.subject).toBe(`New feedback · #${subjectReference(key)}`);
+    expect(subjectReference(key)).toBe(subjectReference("job:job123"));
+    expect(subjectReference(key)).not.toBe(subjectReference("job:job124"));
+    expect(first.skipIfSent).toBeUndefined();
+  });
+
+  it("sends to everyone rather than no one when the records cannot be read", async () => {
+    deliveries.rows.add(`${key}|a@basilissa.gh`);
+    deliveries.failRead = true;
+    expect(await sendEmail(keyed)).toMatchObject({ status: "sent" });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks the gateway to check the Sent folder only on a retry", async () => {
+    await sendEmail({ ...keyed, skipIfAlreadySent: true });
+    expect(bodies().every((b) => b.skipIfSent === true)).toBe(true);
+  });
+
+  it("derives job options from the job: key always, Sent check only when retrying", () => {
+    expect(emailOptionsForJob(undefined)).toEqual({});
+    expect(emailOptionsForJob({ jobId: "j1", retrying: false })).toEqual({ idempotencyKey: "job:j1" });
+    expect(emailOptionsForJob({ jobId: "j1", retrying: true })).toEqual({
+      idempotencyKey: "job:j1",
+      skipIfAlreadySent: true,
+    });
+  });
+
+  it("leaves messages without a key untouched", async () => {
+    await sendEmail(message);
+    expect(bodies()[0].messageId).toBeUndefined();
+    expect(bodies()[0].subject).toBe("New feedback");
+  });
+});
+
+describe("a gateway that does not answer", () => {
+  it("is abandoned after the timeout, as a retryable failure that says so", async () => {
+    vi.useFakeTimers();
+    try {
+      mockFetch.mockImplementationOnce(
+        (_url: string, init: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init.signal.addEventListener("abort", () => reject(new Error("This operation was aborted")));
+          }),
+      );
+      const pending = sendEmail(message);
+      await vi.advanceTimersByTimeAsync(EMAIL_GATEWAY_TIMEOUT_MS);
+      const result = await pending;
+      expect(result).toMatchObject({ status: "failed", retryable: true });
+      if (result.status === "failed") expect(String(result.error)).toContain("no response from the email gateway");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
