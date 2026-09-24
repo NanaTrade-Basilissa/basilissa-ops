@@ -13,6 +13,7 @@ import {
 import { purgeExpiredPasswordResets } from "@/lib/modules/identity/jobs";
 import { purgeSentInvitationJobs } from "@/lib/modules/assessments/jobs";
 import { autoSubmitExpiredAttempts, purgeSentInvitationJobs as purgeSentAptitudeInvitationJobs } from "@/lib/modules/aptitude/jobs";
+import { notifyJobDead, notifyWorkerError } from "@/lib/platform/slack";
 import { resolveHandler } from "./registry";
 
 /**
@@ -111,6 +112,17 @@ async function runOne(job: Awaited<ReturnType<typeof claim>>[number]): Promise<v
       // stack, which JSON.stringify would otherwise discard entirely.
       error,
     });
+
+    if (outcome === "dead") {
+      notifyJobDead({
+        id: job.id,
+        type: job.type,
+        attempts: job.attempts,
+        maxAttempts: job.maxAttempts,
+        error,
+        payload: job.payload,
+      }).catch(() => {});
+    }
   }
 }
 
@@ -286,6 +298,11 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
 
 main().catch(async (error) => {
   logger.error("worker crashed", { error });
+  await notifyWorkerError({
+    processName: "basilissa-worker",
+    action: "worker process fatal crash",
+    error,
+  }).catch(() => {});
   await prisma.$disconnect();
   process.exit(1);
 });

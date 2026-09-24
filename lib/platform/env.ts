@@ -95,6 +95,9 @@ const envSchema = z.object({
   SMS_GATEWAY_URL: optional(z.string().url("SMS_GATEWAY_URL must be a valid URL")),
   SMS_GATEWAY_AUTH_TOKEN: optional(z.string()),
   SMS_SENDER_ID: optional(z.string()),
+
+  // Optional: Slack incoming webhook URL for server error and operational notifications.
+  SLACK_WEBHOOK_URL: optional(z.string().url("SLACK_WEBHOOK_URL must be a valid URL")),
 });
 
 export type Env = z.infer<typeof envSchema>;

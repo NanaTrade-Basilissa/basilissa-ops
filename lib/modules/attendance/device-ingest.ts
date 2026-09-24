@@ -5,6 +5,7 @@ import { SYSTEM_ACTOR } from "@/lib/platform/audit";
 import { scoped } from "@/lib/platform/logger";
 import { zonedMinutesToUtc, zoneOffsetMinutes } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
+import { notifyTerminalQuarantine } from "@/lib/platform/slack";
 import { ingestEvent, type IngestCommand } from "./ingest";
 
 const log = scoped("attendance.device-ingest");
@@ -252,6 +253,18 @@ async function quarantine(serialNumber: string, reason: string, rawPayload: unkn
         rawPayload: rawPayload as Prisma.InputJsonValue,
       },
     });
+
+    const pin =
+      rawPayload && typeof rawPayload === "object" && "pin" in rawPayload
+        ? String((rawPayload as { pin: unknown }).pin)
+        : undefined;
+
+    notifyTerminalQuarantine({
+      serialNumber,
+      reason,
+      pin,
+      rawPayload,
+    }).catch(() => {});
   } catch (error) {
     log.error("failed to persist quarantined device event", { serialNumber, reason, error });
   }

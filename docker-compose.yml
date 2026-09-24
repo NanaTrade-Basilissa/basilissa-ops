@@ -33,7 +33,7 @@ services:
       # Same precedence the app and the Prisma CLI use: .env first, then
       # .env.local overriding it. Without the second entry `docker compose up`
       # injects whatever is in .env — which is the production file — into local
-      # containers, handing them the real SESSION_SECRET, RESEND_API_KEY and
+      # containers, handing them the real SESSION_SECRET, EMAIL_SERVER_URL and
       # SEED_ADMIN_PASSWORD.
       #
       # Both are optional so a deployment with no env files at all still starts
@@ -76,7 +76,7 @@ services:
       # Same precedence the app and the Prisma CLI use: .env first, then
       # .env.local overriding it. Without the second entry `docker compose up`
       # injects whatever is in .env — which is the production file — into local
-      # containers, handing them the real SESSION_SECRET, RESEND_API_KEY and
+      # containers, handing them the real SESSION_SECRET, EMAIL_SERVER_URL and
       # SEED_ADMIN_PASSWORD.
       #
       # Both are optional so a deployment with no env files at all still starts
@@ -127,7 +127,7 @@ services:
       # Same precedence the app and the Prisma CLI use: .env first, then
       # .env.local overriding it. Without the second entry `docker compose up`
       # injects whatever is in .env — which is the production file — into local
-      # containers, handing them the real SESSION_SECRET, RESEND_API_KEY and
+      # containers, handing them the real SESSION_SECRET, EMAIL_SERVER_URL and
       # SEED_ADMIN_PASSWORD.
       #
       # Both are optional so a deployment with no env files at all still starts

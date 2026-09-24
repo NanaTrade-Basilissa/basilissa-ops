@@ -271,22 +271,14 @@ Sign in at `/admin/login`.
 
 ---
 
-## Configuring Resend
+## Configuring Email Gateway
+The platform sends notifications, staff invitations, and assessment links via the Nodemailer Gateway API (`EMAIL_SERVER_URL`), with fallback to `https://nana-trade-server.vercel.app/email`.
 
-1. Create a free account at [resend.com](https://resend.com).
-2. Verify a sending domain (Resend → Domains), or use their shared testing
-   domain while developing.
-3. Create an API key (Resend → API Keys) and set it as `RESEND_API_KEY`.
-4. Set `RESEND_FROM_EMAIL` to an address on that verified domain (e.g.
-   `feedback@basilissa.gh`).
-5. Set `FEEDBACK_NOTIFICATION_EMAILS` to a comma-separated list of every
-   address that should receive a notification on each new submission.
+1. Set `EMAIL_SERVER_URL` in your environment (defaults to `https://nana-trade-server.vercel.app/email`).
+2. Sender display names are dynamic: customer feedback emails use the submitting branch name (`from: payload.branchName`), assessment links use `Basilissa HR`, and account setup uses `Basilissa Admin`.
+3. Notification recipients for customer feedback are resolved dynamically from branch management records (`branch_feedback_recipients` or active `BRANCH_MANAGER`/`AREA_MANAGER` for that branch), eliminating hardcoded email lists.
 
-Email delivery is **best-effort and non-blocking**: the feedback row is
-always committed to Postgres first; sending the notification happens after,
-inside a `try/catch` that only logs on failure
-([`lib/email.ts`](./lib/email.ts)) — a Resend outage or a bad API key never
-causes a customer's submission to fail.
+Email delivery is **best-effort and asynchronous**: customer submissions are committed to Postgres immediately; notifications are enqueued to the durable `jobs` table and processed in the background by the worker process ([`lib/platform/email.ts`](./lib/platform/email.ts)). Failure triggers retry with backoff and posts alerts to Slack.
 
 ## Generating branch QR codes
 

@@ -1,6 +1,7 @@
 import "server-only";
 import { getEnv, isSmsConfigured } from "@/lib/platform/env";
 import { scoped } from "@/lib/platform/logger";
+import { notifyOtpFailure } from "@/lib/platform/slack";
 
 const log = scoped("sms");
 
@@ -169,12 +170,14 @@ export async function dispatchOtpViaGateway(options: SendOtpOptions): Promise<Se
     if (!response.ok || data.success === false) {
       const errorMsg = data.error || data.message || `Gateway returned HTTP ${response.status}`;
       log.error("OTP gateway returned error", { status: response.status, tel, error: errorMsg });
+      notifyOtpFailure({ tel, name: options.name, error: errorMsg }).catch(() => {});
       return { ok: false, error: errorMsg };
     }
 
     const otp = data.otp !== undefined ? String(data.otp).trim() : "";
     if (!otp) {
       log.error("OTP gateway response missing OTP code", { data });
+      notifyOtpFailure({ tel, name: options.name, error: "Gateway response missing OTP code" }).catch(() => {});
       return { ok: false, error: "Gateway did not return an OTP code" };
     }
 
@@ -192,6 +195,7 @@ export async function dispatchOtpViaGateway(options: SendOtpOptions): Promise<Se
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     log.error("Failed to connect to OTP gateway", { tel, error: errorMsg });
+    notifyOtpFailure({ tel, name: options.name, error: errorMsg }).catch(() => {});
     return { ok: false, error: errorMsg };
   }
 }

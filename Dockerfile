@@ -49,7 +49,7 @@ FROM node:${NODE_VERSION} AS runner
 WORKDIR /app
 
 # openssl + ca-certificates: required by Prisma's query engine and by
-# outbound HTTPS calls (Resend). pnpm: only `docker compose exec app pnpm
+# outbound HTTPS calls (Email Gateway / Slack). pnpm: only `docker compose exec app pnpm
 # prisma db seed` needs it — the app itself runs via plain `node`.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \

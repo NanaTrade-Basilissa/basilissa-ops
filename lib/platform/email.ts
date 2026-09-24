@@ -1,6 +1,7 @@
 import "server-only";
 import { getEnv, isEmailConfigured, DEFAULT_EMAIL_SERVER_URL } from "@/lib/platform/env";
 import { scoped } from "@/lib/platform/logger";
+import { notifyEmailFailure } from "@/lib/platform/slack";
 
 const log = scoped("email");
 
@@ -114,6 +115,16 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
           retryable,
           ...context,
         });
+
+        // Fire-and-forget alert to Slack
+        notifyEmailFailure({
+          to: email,
+          subject,
+          from,
+          error: errorDetail,
+          retryable,
+        }).catch(() => {});
+
         return {
           status: "failed",
           retryable,
@@ -124,7 +135,19 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 
     return { status: "sent", id: `sent_${Date.now()}` };
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     log.error("failed to send email via gateway", { subject, error, ...context });
+
+    for (const email of to) {
+      notifyEmailFailure({
+        to: email,
+        subject,
+        from,
+        error: errorMsg,
+        retryable: true,
+      }).catch(() => {});
+    }
+
     return { status: "failed", retryable: true, error };
   }
 }
