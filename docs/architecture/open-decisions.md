@@ -106,6 +106,23 @@ production only when it is redeployed, after migrating.
 **What to do:** set the real public URL wherever production is hosted. Deploy
 the gateway change (E5) before this app's, or retries lose their Sent check.
 
+### 🟠 A6 — Play compliance pages: claims to re-check *(Google Play Data safety)*
+
+**Where:** `app/privacy/page.tsx`, `app/delete-account/page.tsx`; shared values
+in `lib/platform/play-listing.ts`
+
+`/privacy` and `/delete-account` are built, public, and fully filled in: app
+"Basilissa Staff" by NANATRADE, contact info@basilissagh.com, deletion within 15
+working days, SMS provider Hubtel, attendance records kept indefinitely for
+legal and audit reasons, location collected only while the app is in use.
+
+The policy's factual claims came from the user's description of the Android
+app and its `app.json`, not from this repo. **What to do:** confirm the merged
+release manifest contains `ACCESS_NETWORK_STATE` (the policy lists it) and no
+`ACCESS_BACKGROUND_LOCATION`. If an iOS build ships, the policy needs a revisit.
+`/delete-account` is excluded from Vercel Analytics
+(`components/site-analytics.tsx`).
+
 ---
 
 ## B. Deferred by design — with the trigger that reopens them
