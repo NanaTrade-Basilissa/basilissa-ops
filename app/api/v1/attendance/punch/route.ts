@@ -1,7 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { AttendanceDirection } from "@prisma/client";
-import { recordMobilePunch, verifyDeviceToken } from "@/lib/modules/attendance/server";
+import {
+  isReviewDemoPhone,
+  recordMobilePunch,
+  verifyDeviceToken,
+} from "@/lib/modules/attendance/server";
 import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
 import { scoped } from "@/lib/platform/logger";
 
@@ -101,6 +105,10 @@ export async function POST(request: NextRequest) {
 
   const effectiveDeviceId = deviceId || tokenVerification.payload.deviceId;
 
+  // The app-store review demo account may clock in repeatedly, on any day. Its
+  // geofence exemption comes from its dedicated branch, which has none.
+  const isReviewDemo = isReviewDemoPhone(tokenVerification.payload.phone);
+
   const result = await recordMobilePunch({
     employeeId: effectiveEmployeeId,
     branchId,
@@ -113,6 +121,7 @@ export async function POST(request: NextRequest) {
     },
     deviceId: effectiveDeviceId,
     idempotencyKey,
+    ...(isReviewDemo ? { skipScheduleCheck: true } : {}),
   });
 
   if (!result.ok) {

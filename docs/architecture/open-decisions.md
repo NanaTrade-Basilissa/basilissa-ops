@@ -9,7 +9,7 @@
 > policy, and that is worse than a hard-coded value because it looks
 > deliberate. This is the list that prevents that.
 >
-> **Last reviewed:** 2026-09-06 · against `develop`
+> **Last reviewed:** 2026-09-29 · against `develop`
 >
 > Related: [Architecture Assessment](./attendance-platform.md) ·
 > [Implementation Plan](./implementation-plan.md) ·
@@ -122,6 +122,37 @@ release manifest contains `ACCESS_NETWORK_STATE` (the policy lists it) and no
 `ACCESS_BACKGROUND_LOCATION`. If an iOS build ships, the policy needs a revisit.
 `/delete-account` is excluded from Vercel Analytics
 (`components/site-analytics.tsx`).
+
+### 🟠 A7 — App-store review demo account *(Google Play "App access")*
+
+**Where:** `lib/modules/attendance/review-demo.ts`, `mobile-auth.ts`,
+`app/api/v1/attendance/punch/route.ts`, `prisma/seed-review-demo.ts`; env
+`REVIEW_DEMO_PHONE` and `REVIEW_DEMO_OTP`
+
+Play reviewers cannot receive an SMS, may be far from any branch, and cannot ask
+us for help, so login is a dead end for them. One dedicated employee
+(`APPREVIEW`, "Demo Reviewer") signs in with a fixed 6-digit code that never
+expires. That phone is exempt from the one-device rules and is never bound to a
+device; it may clock in repeatedly (skips the "already completed" and "no
+scheduled shift" checks). Its geofence exemption is not code: its branch,
+`app-review-demo`, is inactive with no coordinates and the geofence off, so the
+server and the app both treat it as not applicable.
+
+It is opt-in. Unless both variables are set and the code is exactly 6 digits, the
+feature does nothing. It reads `process.env` directly, not `getEnv()`, so a bad
+value disables it instead of breaking every feature that reads the env. Every
+relaxation is scoped to that one phone; all other employees keep SMS, geofence
+and device binding.
+
+**Risk accepted:** anyone who learns the phone and code can sign in as that one
+employee and see only the demo branch. The phone is `+233000000001`, not a
+routable number, so no SMS can go to a real person.
+
+**What to do:** after Play approves the app, unset both variables in production
+to turn the login off, and set the demo employee to inactive (it shows in admin
+lists and may accrue attendance records). Turn it back on, and re-run
+`pnpm db:seed:review-demo`, for the next review. Rotate `REVIEW_DEMO_OTP` if it
+is ever shared beyond the store forms.
 
 ---
 

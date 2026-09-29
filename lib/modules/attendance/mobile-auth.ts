@@ -7,9 +7,15 @@ import {
   normalizePhoneNumber,
   dispatchOtpViaGateway,
   formatGhanaTel,
+  type SendOtpResult,
 } from "@/lib/platform/sms";
 import { recordAudit, SYSTEM_ACTOR } from "@/lib/platform/audit";
 import { scoped } from "@/lib/platform/logger";
+import {
+  getReviewDemoConfig,
+  isReviewDemoLogin,
+  isReviewDemoPhone,
+} from "./review-demo";
 
 const log = scoped("mobile-auth");
 
@@ -100,6 +106,35 @@ function hashCode(code: string): string {
 }
 
 /**
+ * For the app-store review demo account only: when the fixed demo code is
+ * submitted, mint a fresh challenge so it never expires. The normal checks
+ * (phone match, expiry, hash comparison) then run against it unchanged.
+ * Returns null for every other phone or code.
+ */
+async function reviewDemoChallengeToken(phone: string, code: string): Promise<string | null> {
+  if (!isReviewDemoLogin(phone, code)) return null;
+
+  const normalized = normalizePhoneNumber(phone);
+  const localGhana = normalized.startsWith("+233") ? `0${normalized.slice(4)}` : normalized;
+  const employee = await prisma.employee.findFirst({
+    where: {
+      status: "ACTIVE",
+      OR: [{ phone: phone.trim() }, { phone: normalized }, { phone: localGhana }],
+    },
+    select: { id: true },
+  });
+  if (!employee) return null;
+
+  const payload: OtpChallengePayload = {
+    employeeId: employee.id,
+    phone: normalized,
+    codeHash: hashCode(code),
+    expiresAt: Date.now() + 5 * 60 * 1000,
+  };
+  return seal(JSON.stringify(payload), "mobile-otp");
+}
+
+/**
  * Requests an SMS verification code for a staff member using their registered mobile phone number.
  * Dispatches the OTP via the Nana Trade Server notification gateway.
  */
@@ -146,13 +181,17 @@ export async function requestMobileOtp(
   const email = overrides?.email || employee.email || undefined;
   const clientCode = overrides?.code || employee.employeeCode || "MF7890";
 
-  // Dispatch the OTP via the Nana Trade Server gateway
-  const otpResult = await dispatchOtpViaGateway({
-    tel: formatGhanaTel(employee.phone || rawPhone),
-    name,
-    email,
-    code: clientCode,
-  });
+  // Dispatch the OTP via the Nana Trade Server gateway. The app-store review
+  // demo account skips the gateway: reviewers cannot receive an SMS.
+  const demoConfig = isReviewDemoPhone(normalized) ? getReviewDemoConfig() : null;
+  const otpResult: SendOtpResult = demoConfig
+    ? { ok: true, otp: demoConfig.otp, message: "Verification code sent to your mobile phone." }
+    : await dispatchOtpViaGateway({
+        tel: formatGhanaTel(employee.phone || rawPhone),
+        name,
+        email,
+        code: clientCode,
+      });
 
   if (!otpResult.ok || !otpResult.otp) {
     log.error("Failed to dispatch mobile OTP via gateway", {
@@ -203,7 +242,10 @@ export async function requestMobileOtp(
 export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpResult> {
   const { phone, code, deviceName } = input;
   const deviceId = input.deviceId || `device_mobile_${phone.replace(/\D/g, "")}`;
-  const effectiveChallengeToken = input.challengeToken || getRecentChallengeToken(phone);
+  const effectiveChallengeToken =
+    (await reviewDemoChallengeToken(phone, code)) ||
+    input.challengeToken ||
+    getRecentChallengeToken(phone);
 
   if (!effectiveChallengeToken) {
     log.warn("No challenge token provided and none cached for phone", { phone });
@@ -305,6 +347,10 @@ export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpR
   }
 
   // 5. Enforce strict 1:1 hardware device binding
+  // The app-store review demo account is exempt from both rules and is never
+  // bound, so a reviewer's device cannot collide with a real employee's.
+  const isReviewDemo = isReviewDemoPhone(payload.phone);
+
   // Rule 1: A physical phone can only belong to ONE active employee.
   const existingDeviceBinding = await prisma.employeeDeviceIdentity.findFirst({
     where: {
@@ -314,7 +360,7 @@ export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpR
     },
   });
 
-  if (existingDeviceBinding && existingDeviceBinding.employeeId !== employee.id) {
+  if (!isReviewDemo && existingDeviceBinding && existingDeviceBinding.employeeId !== employee.id) {
     log.warn("Hardware device conflict: device already bound to another staff member", {
       deviceId,
       currentEmployeeId: employee.id,
@@ -355,7 +401,7 @@ export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpR
     },
   });
 
-  if (existingEmployeeBinding && existingEmployeeBinding.externalId !== deviceId) {
+  if (!isReviewDemo && existingEmployeeBinding && existingEmployeeBinding.externalId !== deviceId) {
     log.warn("Employee multi-device attempt: employee already has active device binding", {
       employeeId: employee.id,
       attemptedDeviceId: deviceId,
@@ -388,7 +434,7 @@ export async function verifyMobileOtp(input: VerifyOtpInput): Promise<VerifyOtpR
   }
 
   // Register device if not yet bound
-  if (!existingEmployeeBinding) {
+  if (!isReviewDemo && !existingEmployeeBinding) {
     try {
       await prisma.employeeDeviceIdentity.create({
         data: {
