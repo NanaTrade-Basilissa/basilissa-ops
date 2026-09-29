@@ -13,6 +13,13 @@
  * That is also why days off are DAY_OFF exceptions, not just gaps: a gap would
  * fall through to the employee's older assignment for that weekday.
  *
+ * Before that it makes everyone schedulable: a PILOT_PLACEHOLDERS record is
+ * created if missing, and anyone without a current Dawhenya assignment gets a
+ * non-primary one from the Monday, keeping their existing branch. A dry run
+ * reports both without writing.
+ *
+ * A `null` day in the rota writes nothing, neither a shift nor a day off.
+ *
  * Safe to re-run: an identical assignment or an existing exception on the same
  * date is skipped and reported.
  */
@@ -21,6 +28,7 @@ import { loadEnvConfig } from "@next/env";
 import { shiftDateKey, zonedMinutesToUtc } from "../lib/platform/date";
 import {
   PILOT_BRANCH_SLUG,
+  PILOT_PLACEHOLDERS,
   PILOT_ROTA,
   PILOT_SHIFT_TEMPLATES,
   PILOT_WEEK,
@@ -55,36 +63,104 @@ async function main() {
     shiftIds[key] = shift.id;
   }
 
+  const totals = { created: 0, branched: 0, assignments: 0, daysOff: 0, skipped: 0 };
+
   // Resolve everyone before writing anything, so one bad row aborts the run.
+  // A placeholder that does not exist yet resolves to a stand-in in a dry run.
+  const placeholders = new Map(PILOT_PLACEHOLDERS.map((p) => [p.employeeCode, p]));
   const resolved = [];
   for (const row of PILOT_ROTA) {
     const employee = await prisma.employee.findUnique({
       where: { employeeCode: row.employeeCode },
-      include: { branchAssignments: { where: { branchId: branch.id, validTo: null } } },
+      include: { branchAssignments: { where: { validTo: null }, include: { branch: { select: { name: true } } } } },
     });
-    if (!employee) throw new Error(`${row.rotaName}: no employee ${row.employeeCode}.`);
-    if (!employee.firstName.toUpperCase().includes(row.expectFirstName)) {
-      throw new Error(`${row.rotaName}: ${row.employeeCode} is ${employee.firstName} ${employee.lastName}.`);
+    const placeholder = placeholders.get(row.employeeCode);
+    if (!employee && !placeholder) throw new Error(`${row.rotaName}: no employee ${row.employeeCode}.`);
+    if (employee) {
+      if (!employee.firstName.toUpperCase().includes(row.expectFirstName)) {
+        throw new Error(`${row.rotaName}: ${row.employeeCode} is ${employee.firstName} ${employee.lastName}.`);
+      }
+      if (employee.status !== "ACTIVE") throw new Error(`${row.rotaName}: ${row.employeeCode} is ${employee.status}.`);
     }
-    if (employee.status !== "ACTIVE") throw new Error(`${row.rotaName}: ${row.employeeCode} is ${employee.status}.`);
-    if (employee.branchAssignments.length === 0) {
-      throw new Error(`${row.rotaName}: ${row.employeeCode} is not currently assigned to ${branch.name}.`);
-    }
-    resolved.push({ row, employee });
+    resolved.push({ row, employee, placeholder });
   }
 
-  const totals = { assignments: 0, daysOff: 0, skipped: 0 };
+  const ready: { row: (typeof PILOT_ROTA)[number]; employee: { id: string; employeeCode: string } }[] = [];
+  for (const { row, employee, placeholder } of resolved) {
+    const label = `${row.rotaName.padEnd(24)} ${row.employeeCode}`;
 
-  for (const { row, employee } of resolved) {
-    const label = `${row.rotaName.padEnd(22)} ${employee.employeeCode}`;
+    if (!employee) {
+      console.log(`${label}  create   placeholder ${placeholder!.firstName} ${placeholder!.lastName}, at ${branch.name}`);
+      totals.created++;
+      if (!apply) {
+        ready.push({ row, employee: { id: `(new ${row.employeeCode})`, employeeCode: row.employeeCode } });
+        continue;
+      }
+      const created = await prisma.$transaction(async (tx) => {
+        const e = await tx.employee.create({
+          data: { employeeCode: placeholder!.employeeCode, firstName: placeholder!.firstName, lastName: placeholder!.lastName, jobTitle: placeholder!.jobTitle, status: "ACTIVE" },
+        });
+        await tx.auditLog.create({
+          data: { ...SYSTEM, action: "employee.created", entityType: "Employee", entityId: e.id, after: { employeeCode: e.employeeCode, firstName: e.firstName, lastName: e.lastName, jobTitle: e.jobTitle }, metadata: { source: SOURCE, placeholder: true } },
+        });
+        const a = await tx.employeeBranchAssignment.create({
+          data: { employeeId: e.id, branchId: branch.id, isPrimary: true, validFrom },
+        });
+        await tx.auditLog.create({
+          data: { ...SYSTEM, action: "employee.branch_assigned", entityType: "Employee", entityId: e.id, after: { branchId: branch.id, isPrimary: true, validFrom: validFrom.toISOString(), assignmentId: a.id }, metadata: { source: SOURCE } },
+        });
+        return e;
+      });
+      ready.push({ row, employee: created });
+      continue;
+    }
+
+    const atBranch = employee.branchAssignments.some((a) => a.branchId === branch.id);
+    if (!atBranch) {
+      const current = employee.branchAssignments.map((a) => a.branch.name).join(", ") || "no branch";
+      console.log(`${label}  branch   add ${branch.name} (keeps ${current})`);
+      totals.branched++;
+      if (apply) {
+        await prisma.$transaction(async (tx) => {
+          const a = await tx.employeeBranchAssignment.create({
+            data: { employeeId: employee.id, branchId: branch.id, isPrimary: false, validFrom },
+          });
+          await tx.auditLog.create({
+            data: { ...SYSTEM, action: "employee.branch_assigned", entityType: "Employee", entityId: employee.id, after: { branchId: branch.id, isPrimary: false, validFrom: validFrom.toISOString(), assignmentId: a.id }, metadata: { source: SOURCE } },
+          });
+        });
+      }
+    }
+    ready.push({ row, employee });
+  }
+
+  for (const { row, employee } of ready) {
+    const label = `${row.rotaName.padEnd(24)} ${employee.employeeCode}`;
 
     // ISO weekday (1 = Monday) per template.
     const byShift = new Map<PilotShiftKey, number[]>();
     const offDates: string[] = [];
+    const openDates: string[] = [];
     row.week.forEach((day, index) => {
-      if (day === "OFF") offDates.push(shiftDateKey(PILOT_WEEK.from, index));
+      if (day === null) openDates.push(shiftDateKey(PILOT_WEEK.from, index));
+      else if (day === "OFF") offDates.push(shiftDateKey(PILOT_WEEK.from, index));
       else byShift.set(day, [...(byShift.get(day) ?? []), index + 1]);
     });
+
+    if (openDates.length > 0) console.log(`${label}  open     ${openDates.join(", ")} (not decided, nothing written)`);
+
+    // A placeholder not created in a dry run has no rows to check against.
+    if (!apply && employee.id.startsWith("(new ")) {
+      for (const [key, daysOfWeek] of byShift) {
+        console.log(`${label}  assign   ${key} days ${daysOfWeek.join(",")}`);
+        totals.assignments++;
+      }
+      for (const dateKey of offDates) {
+        console.log(`${label}  day off  ${dateKey}`);
+        totals.daysOff++;
+      }
+      continue;
+    }
 
     await prisma.$transaction(async (tx) => {
       for (const [key, daysOfWeek] of byShift) {
@@ -149,7 +225,8 @@ async function main() {
   }
 
   console.log(
-    `\n${apply ? "Wrote" : "Would write"} ${totals.assignments} assignment(s), ${totals.daysOff} day(s) off; skipped ${totals.skipped}.`,
+    `\n${apply ? "Wrote" : "Would write"} ${totals.created} placeholder(s), ${totals.branched} Dawhenya branch assignment(s), ` +
+      `${totals.assignments} shift assignment(s), ${totals.daysOff} day(s) off; skipped ${totals.skipped}.`,
   );
 }
 
