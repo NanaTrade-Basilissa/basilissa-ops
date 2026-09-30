@@ -8,6 +8,8 @@ export type EmployeeListFilters = {
   status?: EmploymentStatus;
   /** Matched against name, employee code and email, case-insensitively. */
   search?: string;
+  /** Mobile-app device binding: `bound` has an active one, `unbound` has none. */
+  device?: "bound" | "unbound";
 };
 
 /**
@@ -27,6 +29,19 @@ function employeeListWhere(scope: BranchScope, filters: EmployeeListFilters): Pr
     clauses.push({ branchAssignments: { some: { branchId: filters.branchId, validTo: null } } });
   }
   if (filters.status) clauses.push({ status: filters.status });
+  if (filters.device) {
+    // Only MOBILE_APP identities count: a fingerprint enrolment is not a bound
+    // phone. Revoked identities are history, not a binding.
+    const activeMobileBinding: Prisma.EmployeeDeviceIdentityWhereInput = {
+      providerType: "MOBILE_APP",
+      revokedAt: null,
+    };
+    clauses.push(
+      filters.device === "bound"
+        ? { deviceIdentities: { some: activeMobileBinding } }
+        : { deviceIdentities: { none: activeMobileBinding } },
+    );
+  }
   if (filters.search?.trim()) {
     const q = filters.search.trim();
     clauses.push({
@@ -52,6 +67,11 @@ const EMPLOYEE_LIST_SELECT = {
   jobTitle: true,
   status: true,
   masterSource: true,
+  deviceIdentities: {
+    where: { providerType: "MOBILE_APP", revokedAt: null },
+    select: { id: true },
+    take: 1,
+  },
   branchAssignments: {
     where: { validTo: null },
     select: { isPrimary: true, branch: { select: { id: true, name: true } } },

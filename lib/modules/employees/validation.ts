@@ -17,6 +17,8 @@ export const employeeListFilterSchema = z.object({
   branchId: z.string().optional(),
   status: z.nativeEnum(EmploymentStatus).optional(),
   search: z.string().optional(),
+  /** Mobile-app device binding: `bound` has an active one, `unbound` has none. */
+  device: z.enum(["bound", "unbound"]).optional(),
   page: z.coerce.number().int().min(1).optional(),
 });
 

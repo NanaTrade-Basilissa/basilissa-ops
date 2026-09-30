@@ -10,11 +10,15 @@ import { FilterBar } from "@/components/admin/filter-bar";
 
 type FilterOption = { id: string; label: string };
 
-const FILTER_KEYS = ["branchId", "status", "search"];
+const FILTER_KEYS = ["branchId", "status", "device", "search"];
 const STATUS_OPTIONS = [
   { value: "ACTIVE", label: "Active" },
   { value: "SUSPENDED", label: "Suspended" },
   { value: "TERMINATED", label: "Terminated" },
+];
+const DEVICE_OPTIONS = [
+  { value: "bound", label: "Device bound" },
+  { value: "unbound", label: "No device bound" },
 ];
 
 export function EmployeeFilters({
@@ -95,6 +99,21 @@ export function EmployeeFilters({
             {STATUS_OPTIONS.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
+              </option>
+            ))}
+          </NativeSelect>
+
+          <NativeSelect
+            id="filter-device"
+            value={searchParams.get("device") ?? ""}
+            onChange={(e) => setParam("device", e.target.value)}
+            className="h-9 text-xs"
+            containerClassName="w-full sm:w-fit sm:min-w-[140px] sm:shrink-0"
+          >
+            <option value="">Any device</option>
+            {DEVICE_OPTIONS.map((d) => (
+              <option key={d.value} value={d.value}>
+                {d.label}
               </option>
             ))}
           </NativeSelect>

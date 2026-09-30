@@ -39,6 +39,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
     branchId: first(raw.branchId),
     status: first(raw.status),
     search: first(raw.search),
+    device: first(raw.device),
     page: first(raw.page),
   });
   const filters = parsed.success ? parsed.data : {};
@@ -61,6 +62,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
     if (filters.branchId) search.set("branchId", filters.branchId);
     if (filters.status) search.set("status", filters.status);
     if (filters.search) search.set("search", filters.search);
+    if (filters.device) search.set("device", filters.device);
     if (targetPage !== 1) search.set("page", String(targetPage));
     const qs = search.toString();
     return qs ? `/admin/employees?${qs}` : "/admin/employees";

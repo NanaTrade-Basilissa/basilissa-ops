@@ -14,6 +14,8 @@ export type EmployeeRow = {
   jobTitle: string | null;
   email: string | null;
   status: string;
+  /** Active mobile-app bindings; non-empty means a phone is bound. */
+  deviceIdentities: { id: string }[];
   branchAssignments: { isPrimary: boolean; branch: { name: string } }[];
 };
 
@@ -56,6 +58,16 @@ const columns = columnHelper.columns([
             .map((a) => `${a.branch.name}${a.isPrimary ? " (primary)" : ""}`)
             .join(", ")}
         </span>
+      ),
+  }),
+  columnHelper.display({
+    id: "device",
+    header: "Device",
+    cell: ({ row }) =>
+      row.original.deviceIdentities.length > 0 ? (
+        <Badge variant="secondary">Bound</Badge>
+      ) : (
+        <span className="text-sm text-muted-foreground">Not bound</span>
       ),
   }),
   columnHelper.accessor("status", {
