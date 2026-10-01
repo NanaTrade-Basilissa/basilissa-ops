@@ -92,6 +92,11 @@ export type SystemPermission =
   /// checks the specific permission it needs, so this decides whether the
   /// navigation is shown, never what may be done.
   | "admin:access"
+  // Announcements: messages from the dashboard to staff devices. Branch
+  // managers hold both for their own branches, so a manager can message their
+  // team and cannot reach anyone else's; "everyone" needs a GLOBAL grant.
+  | "announcement:read"
+  | "announcement:write"
   // Email Queue & Background Job Administration (Super Admin only)
   | "email_queue:read"
   | "email_queue:manage"
@@ -166,6 +171,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "schedule:read",
     "schedule:write",
     "device:read",
+    "announcement:read",
+    "announcement:write",
   ],
 
   // Same powers as a branch manager, across every branch they hold an
@@ -184,6 +191,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "schedule:write",
     "device:read",
     "device:write",
+    "announcement:read",
+    "announcement:write",
   ],
 
   // Owns people, not systems. No branch or question configuration.
@@ -205,6 +214,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "schedule:read",
     "schedule:write",
     "device:read",
+    "announcement:read",
+    "announcement:write",
   ],
 
   // Owns system configuration and user management (except Super Admin).
@@ -226,6 +237,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "schedule:write",
     "device:read",
     "device:write",
+    "announcement:read",
+    "announcement:write",
   ],
 
   // Everything, including granting roles. Should be one or two people.
@@ -257,6 +270,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "email_queue:read",
     "email_queue:manage",
     "jobs:read",
+    "announcement:read",
+    "announcement:write",
     "jobs:manage",
   ],
 };
@@ -298,6 +313,8 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "user:read": ["users:read", "roles:read"],
   "user:write": ["users:create", "users:update", "users:delete"],
   "role:assign": ["roles:assign", "users:assign", "roles:create", "roles:update"],
+  "announcement:read": ["announcements:read"],
+  "announcement:write": ["announcements:create"],
   "email_queue:read": ["email_queue:read"],
   "email_queue:manage": ["email_queue:manage"],
   "jobs:read": ["jobs:read"],
@@ -314,6 +331,7 @@ export const GRANULAR_TO_SYSTEM: Record<string, string> = {
   "schedules:read": "schedule:read",
   "assessments:read": "assessment:read",
   "aptitude:read": "aptitude:read",
+  "announcements:read": "announcement:read",
   "users:read": "user:read",
   "roles:read": "user:read",
   "jobs:read": "jobs:read",

@@ -10,4 +10,4 @@
  */
 export { autoCloseStaleDays } from "./auto-close";
 export { runDailySettlementSweep } from "./settle";
-export { dispatchUpcomingShiftReminders } from "./reminders";
+export { dispatchUpcomingShiftReminders, dispatchMissedClockInReminders } from "./reminders";

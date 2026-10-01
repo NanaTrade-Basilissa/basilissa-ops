@@ -79,6 +79,18 @@ Enum values are quoted from `prisma/schema.prisma`; read it for the full set.
 | **Aptitude test** | A *candidate* screening test. No `Candidate` table (register B11). Tokenised invitations or a public link. | `lib/modules/aptitude` |
 | **Invitation** | A single-use token to take an assessment or aptitude test, delivered by queued email. | `*Invitation` models |
 
+## Announcements and the inbox
+
+| Term | Meaning | Lives in |
+| --- | --- | --- |
+| **Announcement** | A message sent from the dashboard to staff. Immutable once sent. | `Announcement`, `lib/modules/announcements` |
+| **Audience** | Who it is for: `ALL`, `BRANCHES` or `PEOPLE`. Whether the sender may address it is decided by their branch scope. | `audience.ts` |
+| **Recipient** | An employee an announcement was resolved to at send time, with per-channel delivery status and acknowledgement. The list does not change when people move branches. | `AnnouncementRecipient` |
+| **Inbox** | The durable per-employee record of every notice (announcements, leave decisions, shift reminders), and what "unread" counts. Push is best effort; the inbox is the record. | `Notification`, `lib/platform/inbox.ts` |
+| **Fan-out** | The job that sends an announcement's push in chunks and records each outcome. | `announcements.fanout` |
+| **Urgent / banner** | `isUrgent` is permanent (it records what was sent); the banner is the separate, temporary state, at most one active, enforced by a partial unique index. Phase 4. | `Announcement`, migration `add_announcements` |
+| **Acknowledgement** | An explicit "I've read this", distinct from read. Set once, server-side, never cleared. Phase 4. | `AnnouncementRecipient.acknowledgedAt` |
+
 ## System terms
 
 | Term | Meaning | Lives in |

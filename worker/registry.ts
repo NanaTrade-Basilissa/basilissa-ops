@@ -13,6 +13,7 @@ import {
   APTITUDE_NOTIFY_HR,
   handleAptitudeNotifyHr,
 } from "@/lib/modules/aptitude/jobs";
+import { ANNOUNCEMENT_FANOUT, handleAnnouncementFanout } from "@/lib/modules/announcements/jobs";
 
 /**
  * Job type -> handler.
@@ -36,6 +37,7 @@ export const HANDLERS: Record<string, JobHandler> = {
   [ASSESSMENT_NOTIFY_HR]: handleAssessmentNotifyHr,
   [APTITUDE_INVITATION_SEND]: handleAptitudeInvitationSend,
   [APTITUDE_NOTIFY_HR]: handleAptitudeNotifyHr,
+  [ANNOUNCEMENT_FANOUT]: handleAnnouncementFanout,
 };
 
 export function resolveHandler(type: string): JobHandler | undefined {

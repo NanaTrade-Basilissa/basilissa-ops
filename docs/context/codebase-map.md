@@ -28,7 +28,7 @@ exist, see [conventions](./conventions.md) and [`lib/README.md`](../../lib/READM
 | --- | --- |
 | `app/admin/(dashboard)/<area>/` | Every authenticated admin screen. Each page calls its own `require*Permission`. The `layout.tsx` gates chrome only. |
 | `app/admin/{login,forgot-password,reset-password,no-access}` | Unauthenticated or outside-the-shell pages. `PUBLIC_ADMIN_PATHS` in `proxy.ts` lists the ones reachable without a session. |
-| `app/api/v1/` | Mobile app API: `auth/{login,logout,me,mobile/otp/{request,verify}}`, `attendance/{punch,punch/sync,status,history,leave-requests}`, `notifications/push-token`. Bearer `deviceToken` auth. |
+| `app/api/v1/` | Mobile app API: `auth/{login,logout,me,mobile/otp/{request,verify}}`, `attendance/{punch,punch/sync,status,history,leave-requests}`, `notifications` (inbox list, `unread-count`, `{id}/read`, `read-all`, `push-token`). Bearer `deviceToken` auth. |
 | `app/iclock/` | Fingerprint terminal protocol (`cdata`, `getrequest`). |
 | `app/api/cron/attendance` | Time-driven sweeps for platforms with cron and no worker. |
 | `app/api/admin/` | Admin-only downloads: attendance Excel export, QR images. |
@@ -39,7 +39,7 @@ exist, see [conventions](./conventions.md) and [`lib/README.md`](../../lib/READM
 | `app/api/health` | Liveness. |
 
 Admin areas under `(dashboard)`: `aptitude-tests`, `assessments`, `attendance`,
-`audit-trail`, `branches`, `devices`, `email-queue`, `employees`, `feedback`,
+`announcements`, `audit-trail`, `branches`, `devices`, `email-queue`, `employees`, `feedback`,
 `feedbacks`, `holidays`, `jobs`, `leave`, `payroll`, `questions`, `roles`,
 `security`, `settings`, `shifts`, `users`. Navigation is defined in
 `components/app-sidebar.tsx` and `components/admin/admin-nav.tsx`.
@@ -56,6 +56,7 @@ names live in `PUBLIC_ENTRIES` in `eslint.config.mjs`.
 | `employees` | Employee records, branch assignments, bulk import, schedule repository | `import.ts` is a pure public entry. |
 | `branches` | Branch actions and validation (geofence, hours, timezone) | Thin. |
 | `devices` | Fingerprint terminal registry actions and validation | **Not listed in `MODULES` in `eslint.config.mjs`, so its boundaries are not yet enforced.** |
+| `announcements` | Messages from the dashboard to staff: audience rules, send, history, push fan-out job | Pure rules in `audience`. Spec: [announcements](../specs/announcements.md). |
 | `feedback` | Public submission, analytics, scoping, recipients, notification job | |
 | `questions` | Feedback question admin | |
 | `assessments` | Internal staff assessments: authoring, invitations, taking, scoring, results | Answer key must never reach the browser (`taking.ts` header). |
@@ -83,6 +84,7 @@ names live in `PUBLIC_ENTRIES` in `eslint.config.mjs`.
 | `sms.ts` | Gateway client, OTP dispatch, phone normalisation. |
 | `push.ts` | `sendPushNotification`, `sendEmployeePushNotification`. FCM and Expo tokens. |
 | `slack.ts` | Operational alerts: email failures, dead jobs, worker crashes, quarantined punches, OTP failures. |
+| `inbox.ts` | The staff inbox: write, list, count unread, mark read. Domain-free, so every module may use it. |
 | `rate-limit.ts` | Postgres-backed counters. |
 | `secret-box.ts` | Encryption for stored secrets (key derived from `SESSION_SECRET`, register C6). |
 | `totp.ts` | RFC TOTP for MFA. |
@@ -105,6 +107,7 @@ names live in `PUBLIC_ENTRIES` in `eslint.config.mjs`.
 | Add a mobile endpoint | `app/api/v1/...`, update `lib/platform/openapi-spec.ts` and its test |
 | Add a background job | `lib/modules/<m>/jobs.ts`, then `worker/registry.ts` |
 | Send an email | `lib/email-templates/`, `lib/platform/email.ts`, usually through a job |
+| Send a message to staff | `lib/modules/announcements/` for broadcasts; `lib/platform/inbox.ts` plus `push.ts` for a single notice |
 | Add an admin screen | an `app/admin/(dashboard)/<area>/page.tsx` plus `components/admin/`, nav in `admin-nav.tsx` |
 | Add a table | `prisma/schema.prisma`, a migration, [data-model](./data-model.md) |
 | Find why a decision was made | [open-decisions](../architecture/open-decisions.md), then the [ADRs](../architecture/decisions/README.md) |

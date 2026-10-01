@@ -9,6 +9,7 @@ import {
   autoCloseStaleDays,
   runDailySettlementSweep,
   dispatchUpcomingShiftReminders,
+  dispatchMissedClockInReminders,
 } from "@/lib/modules/attendance/jobs";
 import { purgeExpiredPasswordResets } from "@/lib/modules/identity/jobs";
 import { purgeSentInvitationJobs } from "@/lib/modules/assessments/jobs";
@@ -159,6 +160,14 @@ async function runPeriodic(now: number): Promise<void> {
     logger.error("shift reminders sweep failed", { error });
   }
 
+  try {
+    const missedSummary = await dispatchMissedClockInReminders(new Date());
+    if (missedSummary.remindersDispatched > 0) {
+      logger.info("missed clock-in reminders sweep", missedSummary);
+    }
+  } catch (error) {
+    logger.error("missed clock-in reminders sweep failed", { error });
+  }
   try {
     const settlementSummary = await runDailySettlementSweep(new Date());
     if (settlementSummary.settled > 0) {

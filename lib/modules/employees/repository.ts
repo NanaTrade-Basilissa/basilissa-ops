@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma, EmploymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import type { BranchScope } from "@/lib/modules/identity/authorization";
+import { deviceNameFromLabel } from "@/lib/platform/push";
 
 export type EmployeeListFilters = {
   branchId?: string;
@@ -112,7 +113,7 @@ export async function countEmployees(scope: BranchScope, filters: EmployeeListFi
 export async function getEmployee(employeeId: string, scope: BranchScope) {
   if (scope.kind === "none") return null;
 
-  return prisma.employee.findFirst({
+  const employee = await prisma.employee.findFirst({
     where: {
       id: employeeId,
       ...(scope.kind === "branches"
@@ -156,6 +157,17 @@ export async function getEmployee(employeeId: string, scope: BranchScope) {
       },
     },
   });
+  if (!employee) return null;
+
+  // The stored label can hold a push token. Hand the page a display name only:
+  // the page, and the browser it renders into, never see the token.
+  return {
+    ...employee,
+    deviceIdentities: employee.deviceIdentities.map((identity) => ({
+      ...identity,
+      label: deviceNameFromLabel(identity.label),
+    })),
+  };
 }
 
 export async function listShiftAssignments(employeeId: string) {

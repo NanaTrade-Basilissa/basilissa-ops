@@ -368,6 +368,9 @@ model Employee {
   assessmentInvitations AssessmentInvitation[]
   leaveRequests LeaveRequest[]
 
+  announcementRecipients AnnouncementRecipient[]
+  notifications          Notification[]
+
   @@index([status])
   @@index([masterSource])
   @@map("employees")
@@ -1953,4 +1956,155 @@ model BranchFeedbackRecipient {
   @@unique([branchId, email])
   @@index([branchId, enabled])
   @@map("branch_feedback_recipients")
+}
+
+// ---------------------------------------------------------------------------
+// Announcements and the staff inbox
+//
+// See docs/specs/announcements.md for the reasoning behind all of this.
+// ---------------------------------------------------------------------------
+
+enum AnnouncementAudience {
+  /// Every active employee. Needs a GLOBAL grant to send.
+  ALL
+  /// Every active employee at the chosen branches.
+  BRANCHES
+  /// Chosen employees.
+  PEOPLE
+}
+
+/// One channel's outcome for one recipient. UNREACHABLE is a supported result,
+/// not a failure: the person has no phone, address or registered device.
+enum DeliveryStatus {
+  NOT_REQUESTED
+  PENDING
+  SENT
+  FAILED
+  UNREACHABLE
+}
+
+enum BannerClearReason {
+  EXPIRED
+  MANUAL
+  /// A newer urgent announcement took the banner.
+  SUPERSEDED
+}
+
+enum NotificationKind {
+  ANNOUNCEMENT
+  LEAVE_DECISION
+  SHIFT_REMINDER
+}
+
+/// A message sent from the dashboard to staff. Immutable once sent: there is no
+/// edit, because what staff were told must stay answerable. The only fields that
+/// change afterwards are the banner state.
+///
+/// URGENT IS A FLAG, NOT A TYPE. An urgent announcement is still an announcement
+/// and stays in history after its banner is gone, so `isUrgent` records what was
+/// sent and never changes; whether the banner is still up is the separate
+/// `bannerClearedAt`. At most one banner is active at a time, enforced by a
+/// partial unique index written by hand in the migration (Prisma cannot express
+/// it): `announcements_one_active_urgent`. A partial index cannot mention now(),
+/// so expiry is a state change made by a sweep, not a comparison; readers also
+/// treat `bannerExpiresAt` in the past as inactive so a late sweep never shows a
+/// stale banner.
+model Announcement {
+  id    String @id @default(cuid())
+  title String
+  body  String
+
+  isUrgent          Boolean            @default(false)
+  bannerExpiresAt   DateTime?
+  bannerClearedAt   DateTime?
+  /// The user who cleared it by hand. Plain string, no FK, like the audit log:
+  /// it must survive the user.
+  bannerClearedBy   String?
+  bannerClearReason BannerClearReason?
+
+  /// Staff must explicitly confirm they have read it. Not the same as opening it.
+  requiresAck Boolean @default(false)
+
+  audienceKind AnnouncementAudience
+  /// What the sender chose, as sent: `{ branchIds }` or `{ employeeIds }`. For
+  /// display only. WHO actually received it is `recipients`, resolved once at send
+  /// time, so "who was this sent to" cannot change when people move branches.
+  audienceSpec Json                 @default("{}")
+
+  /// The channels chosen. The in-app inbox is always on and is not a choice.
+  sendPush  Boolean @default(false)
+  sendSms   Boolean @default(false)
+  sendEmail Boolean @default(false)
+
+  /// Plain strings, no FK, like the audit log: they must survive the user.
+  createdBy     String?
+  createdByName String
+  createdAt     DateTime @default(now())
+
+  recipients    AnnouncementRecipient[]
+  notifications Notification[]
+
+  @@index([createdAt])
+  @@map("announcements")
+}
+
+/// One row per employee an announcement was sent to, written when it is sent.
+/// Holds what is specific to announcements: per-channel delivery and
+/// acknowledgement. Read state lives on the inbox `Notification`, because it
+/// applies to every kind of notice, not only this one.
+///
+/// `acknowledgedAt` is evidence, so it is set once, server-side, and never
+/// cleared or edited.
+model AnnouncementRecipient {
+  id             String @id @default(cuid())
+  announcementId String
+  employeeId     String
+
+  pushStatus DeliveryStatus @default(NOT_REQUESTED)
+  pushError  String?
+  pushSentAt DateTime?
+
+  smsStatus DeliveryStatus @default(NOT_REQUESTED)
+  smsError  String?
+  smsSentAt DateTime?
+
+  emailStatus DeliveryStatus @default(NOT_REQUESTED)
+  emailError  String?
+  emailSentAt DateTime?
+
+  acknowledgedAt DateTime?
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  employee     Employee     @relation(fields: [employeeId], references: [id])
+
+  @@unique([announcementId, employeeId])
+  @@index([employeeId])
+  @@map("announcement_recipients")
+}
+
+/// The staff inbox: one table for every kind of notice, so the mobile "All" tab
+/// is a single query and "Announcements" is a filter on `kind`.
+///
+/// `@@unique([employeeId, announcementId])` makes writing an announcement's
+/// inbox row idempotent. Postgres treats NULLs as distinct, so it does not
+/// constrain the system kinds, which have no announcement.
+model Notification {
+  id             String           @id @default(cuid())
+  employeeId     String
+  kind           NotificationKind
+  title          String
+  body           String
+  /// Where tapping it should go, as ids only: never personal content.
+  data           Json?
+  announcementId String?
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  employee     Employee      @relation(fields: [employeeId], references: [id])
+  announcement Announcement? @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, announcementId])
+  @@index([employeeId, createdAt(sort: Desc)])
+  @@index([employeeId, readAt])
+  @@map("notifications")
 }

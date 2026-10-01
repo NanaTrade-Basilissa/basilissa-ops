@@ -24,7 +24,7 @@ import nextTs from "eslint-config-next/typescript";
  * genuinely private is the other kind of file: services, repositories and
  * anything importing `server-only`, all reached through `server`.
  *
- * NOTE: this list has now grown three times, once per pure-rules file added.
+ * NOTE: this list has now grown four times, once per pure-rules file added.
  * If it keeps growing, invert the convention — mark private files by
  * convention (an `internal/` folder) rather than enumerating public ones.
  * Tracked in docs/architecture/open-decisions.md.
@@ -32,7 +32,7 @@ import nextTs from "eslint-config-next/typescript";
  * See lib/modules/feedback/server.ts for why modules use several entry files
  * rather than one `index.ts` barrel.
  */
-const MODULES = ["identity", "feedback", "branches", "questions", "attendance", "employees", "assessments", "aptitude"];
+const MODULES = ["identity", "feedback", "branches", "questions", "attendance", "employees", "assessments", "aptitude", "announcements"];
 const PUBLIC_ENTRIES = [
   "constants",
   "validation",
@@ -47,6 +47,9 @@ const PUBLIC_ENTRIES = [
   "projection",
   "manual",
   "corrections",
+  // Who an announcement goes to, and whether the sender may address them: the
+  // rule that keeps a branch manager out of other branches. Pure.
+  "audience",
   "queries",
   // Bulk-import row resolution (employees): pure given DB state as plain
   // data, so it's importable on its own for exhaustive testing too.

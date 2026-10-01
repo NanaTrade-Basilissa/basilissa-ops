@@ -31,7 +31,7 @@ platform must never depend on a module.
 
 Current job types: `FEEDBACK_NOTIFY`, `PASSWORD_RESET_SEND`,
 `ASSESSMENT_INVITATION_SEND`, `ASSESSMENT_NOTIFY_HR`,
-`APTITUDE_INVITATION_SEND`, `APTITUDE_NOTIFY_HR`. A queued job with no handler is
+`APTITUDE_INVITATION_SEND`, `APTITUDE_NOTIFY_HR`, `ANNOUNCEMENT_FANOUT`. A queued job with no handler is
 treated as a failure and retried, then dies. That is right for a job enqueued by
 a newer deploy than the running worker.
 
@@ -126,16 +126,27 @@ the same queue safely because claiming uses `SKIP LOCKED`.
   active `MOBILE_APP` `EmployeeDeviceIdentity` rows (`revokedAt` null), reads the
   push token out of each row's JSON `label` (`parseDeviceMetadata`), and sends.
 - Tokens are registered by the app at `POST /api/v1/notifications/push-token`.
+- **Sign-out** calls `DELETE /api/v1/notifications/push-token`, which removes only the
+  token. The device binding is untouched: signing out is not releasing the phone.
+- **The label holds the token.** After registration an identity's `label` is JSON
+  (`deviceName`, `pushToken`, `platform`, `registeredAt`). Never display, send to
+  the browser or audit the raw label; use `deviceNameFromLabel` (`push.ts`), as
+  `getEmployee` and the device-release audit entry do. The registration route
+  keeps the device name already on record, because the app always sends a generic
+  one.
 - **Simulated** (logged, not sent) under `NODE_ENV=test`, `EXPO_PUSH_DISABLED=true`
   or `PUSH_NOTIFICATIONS_DISABLED=true`. Tests spy on
   `sendEmployeePushNotification`.
 - FCM credentials come from `FIREBASE_SERVICE_ACCOUNT_KEY` (raw JSON or base64),
   falling back to application default credentials. Project id defaults to
   `basilissa-staff-app`.
-- Push is **best effort**: no inbox, no read state, nothing to re-read later. Who
-  receives a given push today is decided by the caller (leave decisions, shift
-  reminders). There is no broadcast or audience targeting yet, which is what
-  [the announcements spec](../specs/announcements.md) adds.
+- Push is **best effort**: a phone that was off or a dismissed banner loses it for
+  good. Anything staff must be able to find again writes an inbox row first
+  (`lib/platform/inbox.ts`) and the push points at it. Single-person notices
+  (leave decisions, shift reminders) call `sendEmployeePushNotification`;
+  broadcasts go through the announcements module's fan-out job, which batches
+  tokens and records each person's outcome. See the
+  [announcements spec](../specs/announcements.md).
 - Open item: invalid or expired tokens are reported in receipts but nothing
   prunes them (no code in `push.ts` clears a dead token).
 
@@ -154,8 +165,10 @@ containing personal data beyond what an operator needs.
 | Assessment or aptitude invitation | Email | `*_INVITATION_SEND` |
 | Test completed | Email to HR | `*_NOTIFY_HR` |
 | Staff login | SMS OTP | `mobile-auth.ts` |
-| Leave decision | Push | `attendance/leave.ts` |
-| Shift in 15 to 60 minutes | Push | `attendance/reminders.ts` |
+| Leave decision | Push, and an inbox row | `attendance/leave.ts` |
+| Shift in 15 to 60 minutes | Push, and an inbox row | `attendance/reminders.ts` |
+| Shift started 15 to 45 minutes ago and no clock-in | Push, and an inbox row | `attendance/reminders.ts` `dispatchMissedClockInReminders` |
+| Dashboard announcement | Inbox row always; push if chosen (email and SMS planned) | `announcements/service.ts`, `announcements/jobs.ts` |
 | Dead job, crash, quarantine | Slack | `slack.ts` |
 
 ## Guidelines for new notifications

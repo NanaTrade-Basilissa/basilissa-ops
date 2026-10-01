@@ -19,6 +19,7 @@ conversion (`new Date("2026-10-01T00:00:00.000Z")`); instants are `timestamptz`.
 | **Capture** | `AttendanceEvent`, `EventEvidence`, `QuarantinedEvent`, `Device`, `DeviceLog`, `EmployeeDeviceIdentity` |
 | **Derived and corrective** | `AttendanceDay`, `AttendanceCorrection`, `AttendancePolicy` |
 | **Platform** | `Job`, `EmailDelivery`, `AuditLog`, `RateLimitCounter` |
+| **Announcements** | `Announcement`, `AnnouncementRecipient`, `Notification` (the staff inbox) |
 | **Feedback** | `Question`, `FeedbackSubmission`, `FeedbackAnswer`, `BranchFeedbackRecipient` |
 | **Assessments** | `Assessment`, `AssessmentSection`, `AssessmentQuestion`, `AssessmentOption`, `AssessmentInvitation`, `AssessmentResponse`, `AssessmentAnswer` |
 | **Aptitude** | `AptitudeTest`, `AptitudeSection`, `AptitudeQuestion`, `AptitudeOption`, `AptitudeInvitation`, `AptitudeAttempt`, `AptitudeAnswer` |

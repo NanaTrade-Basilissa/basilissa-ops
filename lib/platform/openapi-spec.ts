@@ -555,6 +555,108 @@ Receives a ZKTeco ADMS table push. Body is tab-separated plain text, not JSON â€
       },
     },
 
+    "/api/v1/notifications": {
+      get: {
+        tags: ["Notifications"],
+        summary: "Staff Notification Inbox",
+        description:
+          "The authenticated employee's inbox, newest first. Every notice they were sent is here: announcements from the dashboard, leave decisions and shift reminders. Use kind=announcement for the Announcements tab. Push is best effort; this is the durable record. Pass nextCursor back as cursor for the next page.",
+        operationId: "listNotifications",
+        security: [{ DeviceTokenAuth: [] }],
+        parameters: [
+          { name: "kind", in: "query", schema: { type: "string", enum: ["all", "announcement"], default: "all" }, description: "all is the All tab; announcement is the Announcements tab." },
+          { name: "limit", in: "query", schema: { type: "integer", default: 30, minimum: 1, maximum: 100 } },
+          { name: "cursor", in: "query", schema: { type: "string" }, description: "The nextCursor from the previous page." },
+        ],
+        responses: {
+          "200": {
+            description: "One page of the inbox.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    items: { type: "array", items: { $ref: "#/components/schemas/InboxItem" } },
+                    nextCursor: { type: "string", nullable: true, description: "Null on the last page." },
+                  },
+                  required: ["ok", "items", "nextCursor"],
+                },
+              },
+            },
+          },
+          "400": { description: "Invalid kind.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "401": { description: "Unauthorized: Missing, invalid, or expired device token.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+        },
+      },
+    },
+
+    "/api/v1/notifications/unread-count": {
+      get: {
+        tags: ["Notifications"],
+        summary: "Unread Notification Count",
+        description: "The badge: unread notices overall, and unread announcements for the Announcements tab.",
+        operationId: "getUnreadNotificationCount",
+        security: [{ DeviceTokenAuth: [] }],
+        responses: {
+          "200": {
+            description: "Unread counts.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    total: { type: "integer", example: 3 },
+                    announcements: { type: "integer", example: 1 },
+                  },
+                  required: ["ok", "total", "announcements"],
+                },
+              },
+            },
+          },
+          "401": { description: "Unauthorized: Missing, invalid, or expired device token.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+        },
+      },
+    },
+
+    "/api/v1/notifications/{id}/read": {
+      post: {
+        tags: ["Notifications"],
+        summary: "Mark a Notification Read",
+        description: "Idempotent: reading twice keeps the first read time. An id that is not the caller's answers 404, the same as one that does not exist.",
+        operationId: "markNotificationRead",
+        security: [{ DeviceTokenAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "Marked read.", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean", example: true } } } } } },
+          "401": { description: "Unauthorized: Missing, invalid, or expired device token.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Notification not found.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+        },
+      },
+    },
+
+    "/api/v1/notifications/read-all": {
+      post: {
+        tags: ["Notifications"],
+        summary: "Mark All Notifications Read",
+        description: "Marks everything read, or only announcements when kind is announcement.",
+        operationId: "markAllNotificationsRead",
+        security: [{ DeviceTokenAuth: [] }],
+        requestBody: {
+          required: false,
+          content: { "application/json": { schema: { type: "object", properties: { kind: { type: "string", enum: ["all", "announcement"], default: "all" } } } } },
+        },
+        responses: {
+          "200": {
+            description: "How many notices changed.",
+            content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean", example: true }, updated: { type: "integer", example: 4 } } } } },
+          },
+          "401": { description: "Unauthorized: Missing, invalid, or expired device token.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+        },
+      },
+    },
+
     "/api/v1/notifications/push-token": {
       post: {
         tags: ["Notifications"],
@@ -1538,6 +1640,22 @@ Authenticates a user using their Basilissa email and password, returning a 7-day
           sessionId: { type: "string", example: "cm456def" },
         },
         required: ["ok", "user", "sessionId"],
+      },
+      InboxItem: {
+        type: "object",
+        description: "One notice in the staff inbox.",
+        properties: {
+          id: { type: "string" },
+          kind: { type: "string", enum: ["ANNOUNCEMENT", "LEAVE_DECISION", "SHIFT_REMINDER"] },
+          title: { type: "string", example: "Branch closed on Friday" },
+          body: { type: "string" },
+          data: { type: "object", nullable: true, description: "Where tapping it should go, as ids only (for example announcementId)." },
+          announcementId: { type: "string", nullable: true },
+          read: { type: "boolean" },
+          readAt: { type: "string", format: "date-time", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+        },
+        required: ["id", "kind", "title", "body", "read", "createdAt"],
       },
       ErrorResponse: {
         type: "object",

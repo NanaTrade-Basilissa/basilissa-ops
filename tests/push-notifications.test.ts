@@ -6,7 +6,7 @@ import {
   sendPushNotification,
   sendEmployeePushNotification,
 } from "@/lib/platform/push";
-import { POST as registerPushToken } from "@/lib/../app/api/v1/notifications/push-token/route";
+import { POST as registerPushToken, DELETE as clearPushToken } from "@/lib/../app/api/v1/notifications/push-token/route";
 import { createDeviceToken } from "@/lib/modules/attendance/server";
 import { prisma } from "@/lib/platform/prisma";
 import { ProviderType } from "@prisma/client";
@@ -149,6 +149,81 @@ describe("Mobile Push Notifications", () => {
           }),
         }),
       );
+    });
+
+    it("keeps the device name already on record instead of the app's generic one", async () => {
+      vi.spyOn(prisma.employeeDeviceIdentity, "findFirst").mockResolvedValueOnce({
+        id: "identity_existing",
+        employeeId: "emp_100",
+        providerType: ProviderType.MOBILE_APP,
+        externalId: "device_phone_1",
+        label: "TECNO KM5",
+      } as never);
+      const updateSpy = vi.spyOn(prisma.employeeDeviceIdentity, "update").mockResolvedValueOnce({} as never);
+
+      const res = await registerPushToken(
+        new NextRequest("http://localhost:3000/api/v1/notifications/push-token", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${validToken}` },
+          body: JSON.stringify({ pushToken: "fcm_token_abcdefghijk", platform: "android", deviceName: "Android Staff Device" }),
+        }),
+      );
+      expect(res.status).toBe(200);
+
+      const label = JSON.parse(updateSpy.mock.calls[0]![0]!.data!.label as string);
+      expect(label).toMatchObject({ deviceName: "TECNO KM5", pushToken: "fcm_token_abcdefghijk", platform: "android" });
+    });
+
+    it("keeps the name when the label is already structured, and re-registering replaces only the token", async () => {
+      vi.spyOn(prisma.employeeDeviceIdentity, "findFirst").mockResolvedValueOnce({
+        id: "identity_existing",
+        label: JSON.stringify({ deviceName: "SM-A042F", pushToken: "old_token_value" }),
+      } as never);
+      const updateSpy = vi.spyOn(prisma.employeeDeviceIdentity, "update").mockResolvedValueOnce({} as never);
+
+      await registerPushToken(
+        new NextRequest("http://localhost:3000/api/v1/notifications/push-token", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${validToken}` },
+          body: JSON.stringify({ pushToken: "new_token_value", deviceName: "Android Staff Device" }),
+        }),
+      );
+
+      const label = JSON.parse(updateSpy.mock.calls[0]![0]!.data!.label as string);
+      expect(label).toMatchObject({ deviceName: "SM-A042F", pushToken: "new_token_value" });
+    });
+
+    it("clears only the token on sign-out and leaves the binding and the name alone", async () => {
+      vi.spyOn(prisma.employeeDeviceIdentity, "findFirst").mockResolvedValueOnce({
+        id: "identity_existing",
+        label: JSON.stringify({ deviceName: "TECNO KM5", pushToken: "secret_token_value", platform: "android" }),
+      } as never);
+      const updateSpy = vi.spyOn(prisma.employeeDeviceIdentity, "update").mockResolvedValueOnce({} as never);
+
+      const res = await clearPushToken(
+        new NextRequest("http://localhost:3000/api/v1/notifications/push-token", {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${validToken}` },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const data = updateSpy.mock.calls[0]![0]!.data!;
+      expect(data).toEqual({ label: "TECNO KM5" });
+      expect(data).not.toHaveProperty("revokedAt");
+    });
+
+    it("sign-out is idempotent when there is no registered phone, and needs a valid token", async () => {
+      vi.spyOn(prisma.employeeDeviceIdentity, "findFirst").mockResolvedValueOnce(null as never);
+      const updateSpy = vi.spyOn(prisma.employeeDeviceIdentity, "update");
+      const ok = await clearPushToken(
+        new NextRequest("http://localhost:3000/api/v1/notifications/push-token", { method: "DELETE", headers: { Authorization: `Bearer ${validToken}` } }),
+      );
+      expect(ok.status).toBe(200);
+      expect(updateSpy).not.toHaveBeenCalled();
+
+      const denied = await clearPushToken(new NextRequest("http://localhost:3000/api/v1/notifications/push-token", { method: "DELETE" }));
+      expect(denied.status).toBe(401);
     });
 
     it("registers push token using expoPushToken fallback alias", async () => {

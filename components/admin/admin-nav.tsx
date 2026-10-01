@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Mail,
+  Megaphone,
   MessageSquareText,
   Shield,
   Store,
@@ -146,6 +147,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/admin/feedback", label: "Feedback Overview", icon: BarChart3, exact: true, permission: "feedback:read" },
       { href: "/admin/feedback/all", label: "All Submissions", icon: MessageSquareText, exact: false, permission: "feedback:read" },
       { href: "/admin/feedback/questions", label: "Questions", icon: ListChecks, exact: false, permission: "question:read" },
+      { href: "/admin/announcements", label: "Announcements", icon: Megaphone, exact: false, permission: "announcement:read" },
     ],
   },
   {

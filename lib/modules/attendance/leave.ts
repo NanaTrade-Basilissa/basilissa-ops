@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/platform/prisma";
 import { LeaveStatus, LeaveType, ScheduleExceptionType } from "@prisma/client";
 import { sendEmployeePushNotification } from "@/lib/platform/push";
+import { recordInboxNotification } from "@/lib/platform/inbox";
 import { scoped } from "@/lib/platform/logger";
 
 const log = scoped("attendance.leave");
@@ -215,6 +216,13 @@ export async function reviewLeaveRequest(input: ReviewLeaveRequestInput) {
         status: "APPROVED",
       },
     });
+    await recordInboxNotification({
+      employeeId: leave.employeeId,
+      kind: "LEAVE_DECISION",
+      title: "Leave Request Approved",
+      body: `Your leave request for ${startDateKey}${startDateKey !== endDateKey ? ` to ${endDateKey}` : ""} has been approved.`,
+      data: { type: "LEAVE_STATUS", leaveRequestId, status: "APPROVED" },
+    });
 
     return { ok: true, status: LeaveStatus.APPROVED };
   } else {
@@ -244,6 +252,13 @@ export async function reviewLeaveRequest(input: ReviewLeaveRequestInput) {
         leaveRequestId,
         status: "REJECTED",
       },
+    });
+    await recordInboxNotification({
+      employeeId: leave.employeeId,
+      kind: "LEAVE_DECISION",
+      title: "Leave Request Declined",
+      body: `Your leave request for ${startDateKey}${startDateKey !== endDateKey ? ` to ${endDateKey}` : ""} was not approved${notesSnippet}`,
+      data: { type: "LEAVE_STATUS", leaveRequestId, status: "REJECTED" },
     });
 
     return { ok: true, status: LeaveStatus.REJECTED };

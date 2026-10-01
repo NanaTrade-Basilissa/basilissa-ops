@@ -4,16 +4,16 @@ This document is the authoritative summary of the current engineering state, wha
 
 ## 0. The next task
 
-**Build Announcements**, specified in [`specs/announcements.md`](./specs/announcements.md): broadcast messages from the dashboard to staff devices, with an in-app inbox, one active urgent banner, optional acknowledgement, and push, SMS and email as per-send channel choices. The spec ends with the questions that need an answer from the business before the build starts and a phased build order. Phase 1 (schema, permission, audience resolution, inbox rows, and the mobile list and read endpoints) is the starting point.
+**Announcements phases 3 and 4**, specified in [`specs/announcements.md`](./specs/announcements.md). Phases 1 and 2 are built (1 October 2026, branch `feat/announcements`): compose, audience rules, history, the staff inbox with its mobile endpoints, and push through a fan-out job. Still to build: email and SMS channels (phase 3) and the urgent banner with acknowledgement (phase 4). The questions the spec lists for the business (who may send urgent, SMS budget, acknowledgement deadlines, retention) should be answered before phase 3 and 4. The mobile app also needs its Notifications screen, which is in a separate repository.
 
-Nothing else is in flight. Public holidays, cover shifts and rota patterns are built but **not yet migrated in production** (register D4, D5).
+**Built but not yet migrated in production:** public holidays and cover shifts (register D4), rota patterns (D5), and announcements (D6). Each register entry has its production steps; D6's includes redeploying the worker.
 
 ---
 
 ## 1. Current State & CI Status
 
 * **Git Remote**: `origin/main` is up to date (`NanaTrade-Basilissa/basilissa-ops.git`).
-* **Test Suite**: **73 test files, 876 tests passing** (`pnpm test`, verified 1 October 2026).
+* **Test Suite**: **77 test files, 942 tests passing** (`pnpm test`, verified 1 October 2026).
 * **Static Analysis**: `pnpm typecheck` and `pnpm lint` both exit 0 (verified 1 October 2026).
 * **Branches**: `develop` and `main` are identical at `4b860c3`.
 * **Worker & Container Deployment**:
@@ -70,6 +70,12 @@ Nothing else is in flight. Public holidays, cover shifts and rota patterns are b
 * **Exceptions Queue UI**: Dedicated screen (`components/admin/exceptions-table.tsx`) under the **Exceptions** tab (`?view=exceptions`) with one-click resolution modal (`components/admin/resolve-exception-dialog.tsx`) for missing clock-outs/ins, auto-closed shifts, and out-of-geofence punches.
 * **Interactive Attendance Correction UI**: Modal dialog (`components/admin/attendance-correction-dialog.tsx`) supporting typed operations (`ADJUST_TIME`, `VOID_EVENT`, `INSERT_EVENT`) with before-and-after timestamps, controlled reason codes, and manager sign-off.
 * **Automated Shift Reminders & Push Notifications**: Background sweep (`lib/modules/attendance/reminders.ts`) evaluates upcoming shifts 15–60 mins out and dispatches push notifications via `lib/platform/push.ts` (Firebase Cloud Messaging and Expo tokens). Mobile app registers push tokens via `/api/v1/notifications/push-token` and handles local alerts in `core/services/notifications.ts`. Leave decisions also push.
+
+### J. Announcements and the staff inbox (`lib/modules/announcements/`, `lib/platform/inbox.ts`)
+* **Dashboard**: `/admin/announcements` (history), `/admin/announcements/new` (compose with a live recipient count and a confirmation), `/admin/announcements/[id]` (who received it, who has read it, push status per person). Permissions `announcement:read` and `announcement:write`; branch-scoped roles can address only their own branches.
+* **Audience**: Everyone (company-wide grant only), Branches, or Specific people, resolved once at send time into a stored recipient list. Pure rules in `audience.ts`.
+* **Staff inbox**: one `notifications` table for every kind of notice. Leave decisions and shift reminders now write inbox rows too. Mobile endpoints under `/api/v1/notifications` (list with an Announcements filter, unread count, mark read, read all).
+* **Push**: the `announcements.fanout` job (registered in `worker/registry.ts`) sends in chunks, records each person's outcome, and is safe to retry.
 
 ### I. Scheduling, leave and devices
 * **Shifts, assignments and rota**: weekly grid, copy week, bulk assign, one-day overrides, rota patterns with a per-branch Auto rota switch (off by default), public holidays with the bundled Ghana calendar, cover shifts. See `lib/modules/attendance/{schedule,patterns,holidays,cover}.ts` and register D4, D5.

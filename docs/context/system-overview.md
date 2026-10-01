@@ -119,9 +119,9 @@ Boundaries are enforced by ESLint, not by convention.
 ## Current state in one paragraph
 
 Attendance, scheduling, the policy editor, aptitude tests, leave, holidays and
-rota patterns are built and live across environments. The last two schema
-changes (public holidays and cover shifts, rota patterns) are built but have
+rota patterns are built and live across environments. The last three schema
+changes (public holidays and cover shifts, rota patterns, announcements) are built but have
 **not yet been migrated in production**; the production migration is run by the
-user. Announcements and broadcast messaging are specified but not built
+user. Announcements (dashboard to staff devices, with an in-app inbox and push) are built through phase 2 and not yet migrated in production; email, SMS, the urgent banner and acknowledgement are specified
 ([spec](../specs/announcements.md)). For the authoritative list, read
 [HANDOVER](../HANDOVER.md) and [open-decisions](../architecture/open-decisions.md).

@@ -1,6 +1,7 @@
 # Spec: Announcements
 
-- **Status:** Specified, not built. Review the open questions at the end first.
+- **Status:** **Phases 1 and 2 are built** (schema, permissions, audience rules, compose, history, the staff inbox and its mobile API, and push through a fan-out job). Phases 3 (email, SMS) and 4 (urgent banner, acknowledgement) are not built; their columns are already in the schema. See [Build status](#build-status).
+- **Open questions:** the ones at the end are still open; Phase 1 and 2 used the defaults recorded under Build status.
 - **Owner:** to be assigned
 - **Register entry:** D6 in [open-decisions](../architecture/open-decisions.md)
 - **Touches:** a new `announcements` module, `lib/platform/push.ts`, `sms.ts`,
@@ -210,6 +211,8 @@ for status).
 
 ## Build order
 
+See [Build status](#build-status) for what has shipped.
+
 1. **Phase 1:** schema, `announcements:*` permissions, audience resolution, compose
    with in-app only, history, mobile list, read and unread-count endpoints.
    System notifications start writing inbox rows. Needs the mobile screen.
@@ -219,6 +222,30 @@ for status).
    stats and remind.
 
 Each phase ships on its own, and migrations are additive.
+
+## Build status
+
+| Phase | Status |
+| --- | --- |
+| 1. Schema, permissions, audience resolution, compose (in-app), history, mobile inbox endpoints, system notices write inbox rows | **Built** |
+| 2. Push channel, fan-out job, per-recipient delivery status | **Built** |
+| 3. Email and SMS channels, per-channel reachability counts, SMS cost guard | Not built |
+| 4. Urgent banner, acknowledgement, stats, remind | Not built |
+| Mobile app: the Notifications screen (All and Announcements tabs, badge) | Not built, separate repository |
+
+**What differs from the design above, and why**
+
+- **One migration for all four phases.** `20261001200000_add_announcements` creates every column and the one-urgent partial unique index now, because production migrations are run by hand and one step beats four. Phases 3 and 4 add code, not schema.
+- **Defaults chosen for open question 1** (who may send): `announcement:write` and `announcement:read` are held by `BRANCH_MANAGER`, `AREA_MANAGER`, `HR`, `ADMINISTRATOR` and `SUPER_ADMIN`. Branch and area managers are branch-scoped, so they can address only their own branches and never Everyone. Change it in `ROLE_PERMISSIONS` (`authorization.ts`). No separate permission for urgent yet.
+- **Visibility:** someone with a company-wide grant sees every announcement; a branch-scoped sender sees only what they sent themselves.
+- **The inbox is `lib/platform/inbox.ts`**, not part of the announcements module, so leave decisions and shift reminders (which now also write inbox rows) use it without importing a domain module. Those rows are best effort: a failed write is logged and never undoes the decision it describes.
+- **Mobile endpoints** are `GET /api/v1/notifications`, `GET /api/v1/notifications/unread-count`, `POST /api/v1/notifications/{id}/read` and `POST /api/v1/notifications/read-all`, all in `openapi-spec.ts`. `GET /announcements/urgent` and `POST /announcements/{id}/ack` arrive with Phase 4.
+- **Fan-out** is the `announcements.fanout` job. It handles only recipients still `PENDING`, so a retry resumes; a deleted announcement dies at once. Failed recipients stay `FAILED`; there is no retry button yet.
+- **Push payload** carries `{ type: "ANNOUNCEMENT", announcementId }` and a 140 character preview.
+- **Token pruning is still not done.** A dead push token shows as a failed recipient and stays registered.
+- **The audience preview** shows how many recipients have the app (an active mobile binding), not how many have a registered push token.
+
+**Verified** on a scratch Postgres database: the whole send is one transaction (a failing audit write rolls back the announcement, recipients, inbox rows and job); the second active urgent announcement is refused by the index; inbox rows are idempotent; the fan-out is safe to re-run; scope refusals write nothing. Verified in the browser with real sessions: the compose flow, the live count, the confirmation and the detail page; a branch manager sees only their branch, has no Everyone option and gets a 404 for an announcement they did not send. The mobile endpoints were exercised with a real device token.
 
 ## Open questions
 

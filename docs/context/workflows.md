@@ -135,7 +135,11 @@ something. A sweep must be safe to re-run (deterministic idempotency keys, as
 `sendEmployeePushNotification(employeeId, { title, body, data })` for one person.
 Put an **id** in `data`, never personal content; lock screens show the body. It is
 best effort and leaves no record. For anything staff must be able to find later,
-write an inbox record first and push a pointer to it. See
+write an inbox row too: `recordInboxNotification` from `lib/platform/inbox.ts` for a
+courtesy notice that must not undo what it describes (as leave decisions do), or
+`createInboxNotifications(rows, tx)` inside the transaction for something that is
+part of the change. To message many people, use the announcements module rather
+than looping over `sendEmployeePushNotification`. See
 [background-work](./background-work-and-notifications.md#push).
 
 ## Add a module

@@ -502,3 +502,57 @@ describe("branch manager operational permissions on detail pages", () => {
   });
 });
 
+
+describe("announcement permissions", () => {
+  it("lets HR and administrators send and read announcements company-wide", () => {
+    for (const role of [Role.HR, Role.ADMINISTRATOR]) {
+      const holder = actor([globalRole(role)]);
+      expect(can(holder, "announcement:write")).toBe(true);
+      expect(can(holder, "announcement:read")).toBe(true);
+      expect(branchScope(holder, "announcement:write")).toEqual({ kind: "all" });
+    }
+  });
+
+  it("scopes a branch manager's announcements to their own branch and never to everyone", () => {
+    const manager = actor([branchRole(Role.BRANCH_MANAGER, "branch_accra")]);
+    // requirePermission("announcement:write") demands GLOBAL, so it refuses them.
+    expect(can(manager, "announcement:write")).toBe(false);
+    expect(can(manager, "announcement:write", { branchId: "branch_accra" })).toBe(true);
+    expect(can(manager, "announcement:write", { branchId: "branch_tema" })).toBe(false);
+    expect(branchScope(manager, "announcement:write")).toEqual({ kind: "branches", branchIds: ["branch_accra"] });
+  });
+
+  it("scopes an area manager to the branches they hold", () => {
+    const area = actor([branchRole(Role.AREA_MANAGER, "branch_accra"), branchRole(Role.AREA_MANAGER, "branch_tema")]);
+    expect(branchScope(area, "announcement:write")).toEqual({
+      kind: "branches",
+      branchIds: ["branch_accra", "branch_tema"],
+    });
+  });
+
+  it("gives supervisors and plain employees no access", () => {
+    for (const role of [Role.SHIFT_SUPERVISOR, Role.EMPLOYEE]) {
+      const holder = actor([branchRole(role, "branch_accra")]);
+      expect(branchScope(holder, "announcement:write")).toEqual({ kind: "none" });
+      expect(branchScope(holder, "announcement:read")).toEqual({ kind: "none" });
+    }
+  });
+
+  it("honours the granular permission for a custom role", () => {
+    const custom: Actor = {
+      ...actor([]),
+      customRole: { id: "role_1", name: "Comms", permissions: ["announcements:create", "announcements:read"] },
+    };
+    expect(can(custom, "announcement:write")).toBe(true);
+    expect(can(custom, "announcement:read")).toBe(true);
+    const without: Actor = { ...actor([]), customRole: { id: "role_2", name: "Other", permissions: ["employees:read"] } };
+    expect(can(without, "announcement:write")).toBe(false);
+  });
+
+  it("shows the Announcements link to those who can read them", () => {
+    const hrefs = (a: Actor) => navHrefs(visibleNav(heldPermissions(a)));
+    expect(hrefs(actor([globalRole(Role.HR)]))).toContain("/admin/announcements");
+    expect(hrefs(actor([branchRole(Role.BRANCH_MANAGER, "branch_accra")]))).toContain("/admin/announcements");
+    expect(hrefs(actor([branchRole(Role.SHIFT_SUPERVISOR, "branch_accra")]))).not.toContain("/admin/announcements");
+  });
+});

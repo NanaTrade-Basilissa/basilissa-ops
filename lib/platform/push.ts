@@ -58,6 +58,19 @@ export function parseDeviceMetadata(rawLabel: string | null): StoredDeviceMetada
   return {};
 }
 
+/**
+ * The name to SHOW for a device, from its stored label.
+ *
+ * The label is not just a name: once the app registers for push it is JSON
+ * holding the push token. That token must never reach an admin screen, the
+ * browser, or the audit log (which can never be edited), so anything that
+ * displays or records a device goes through this and never prints the raw label.
+ */
+export function deviceNameFromLabel(rawLabel: string | null | undefined): string | null {
+  const name = parseDeviceMetadata(rawLabel ?? null).deviceName?.trim();
+  return name ? name : null;
+}
+
 let isFirebaseAdminInitialized = false;
 
 function getFirebaseMessaging(): Messaging | null {

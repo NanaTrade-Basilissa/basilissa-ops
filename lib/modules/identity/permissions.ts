@@ -149,6 +149,14 @@ export const PERMISSION_REGISTRY = {
       assign: { label: "Assign", description: "Assign roles to users" },
     },
   },
+  announcements: {
+    label: "Announcements",
+    description: "Messages sent from the dashboard to staff devices",
+    actions: {
+      create: { label: "Send", description: "Compose and send announcements to staff" },
+      read: { label: "View", description: "View sent announcements and who has received and read them" },
+    },
+  },
   email_queue: {
     label: "Email Queue",
     description: "Background notification and email delivery queue",

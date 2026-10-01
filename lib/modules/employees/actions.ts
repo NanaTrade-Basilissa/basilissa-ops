@@ -12,6 +12,7 @@ import {
   requirePermission,
 } from "@/lib/modules/identity/server";
 import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
+import { deviceNameFromLabel } from "@/lib/platform/push";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import {
   branchAssignmentSchema,
@@ -671,7 +672,9 @@ export async function revokeDeviceIdentity(
     action: "employee.device_revoked",
     entityType: "Employee",
     entityId: identity.employeeId,
-    before: { deviceId: identity.externalId, label: identity.label, providerType: identity.providerType },
+    // The device NAME, never the raw label: it can hold a push token, and the
+    // audit log is append-only, so whatever is written here stays.
+    before: { deviceId: identity.externalId, deviceName: deviceNameFromLabel(identity.label), providerType: identity.providerType },
     after: { revokedAt: new Date().toISOString() },
     metadata: { reason: "Admin/Manager released device for re-assignment" },
   });

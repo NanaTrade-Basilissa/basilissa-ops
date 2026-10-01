@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   autoCloseStaleDays,
+  dispatchMissedClockInReminders,
   dispatchUpcomingShiftReminders,
   runDailySettlementSweep,
 } from "@/lib/modules/attendance/jobs";
@@ -37,13 +38,17 @@ async function handleCron(request: NextRequest) {
   log.info("Starting attendance cron sweep", { now: now.toISOString() });
 
   try {
-    const [autoClose, reminders, settlement] = await Promise.all([
+    const [autoClose, reminders, missedClockIn, settlement] = await Promise.all([
       autoCloseStaleDays(now).catch((err) => {
         log.error("Auto-close sweep error", { err });
         return { error: String(err) };
       }),
       dispatchUpcomingShiftReminders(now).catch((err) => {
         log.error("Shift reminders sweep error", { err });
+        return { error: String(err) };
+      }),
+      dispatchMissedClockInReminders(now).catch((err) => {
+        log.error("Missed clock-in reminders sweep error", { err });
         return { error: String(err) };
       }),
       runDailySettlementSweep(now).catch((err) => {
@@ -55,6 +60,7 @@ async function handleCron(request: NextRequest) {
     log.info("Attendance cron sweep completed successfully", {
       autoClose,
       reminders,
+      missedClockIn,
       settlement,
     });
 
@@ -64,6 +70,7 @@ async function handleCron(request: NextRequest) {
       results: {
         autoClose,
         reminders,
+        missedClockIn,
         settlement,
       },
     });

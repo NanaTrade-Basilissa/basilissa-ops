@@ -465,8 +465,9 @@ Separately: the `devices` module is missing from `MODULES`, so its boundaries ar
 not enforced yet. Add it when next touching that file.
 
 Private-by-default with an allowlist of public entry-file names. It has been
-extended three times, once per pure-rules file added — `authorization`,
-`policy`, then `assurance` and `events` together. Each time the rule correctly
+extended four times, once per pure-rules file added — `authorization`,
+`policy`, then `assurance` and `events` together, then `audience` for
+announcements. Each time the rule correctly
 blocked a legitimate import and the fix was to widen the list.
 
 The list is enumerating the wrong side. What is genuinely private is a small,
@@ -684,16 +685,35 @@ off everywhere, so nothing changes until someone turns it on.
 
 ### 🟠 D6 — Announcements (broadcast to staff devices)
 
-**Status: specified, not built.** [specs/announcements.md](../specs/announcements.md).
+**Status: phases 1 and 2 built (1 Oct 2026), not yet migrated in production.**
+[specs/announcements.md](../specs/announcements.md) has the design and the build
+status. Built: dashboard compose to everyone, branches or chosen people; the
+always-on in-app inbox and its mobile endpoints; push through the
+`announcements.fanout` job; history and per-recipient read and push status.
+Leave decisions and shift reminders now also write inbox rows.
 
-Push exists only as a side effect of system events, with no inbox, no read state
-and no audience targeting. The spec adds dashboard-composed announcements to
-everyone, branches or chosen people, over push, SMS and email (in-app inbox
-always), one active urgent banner at a time, and optional acknowledgement.
+**Not built:** email and SMS channels (phase 3); the urgent banner and
+acknowledgement (phase 4); the mobile Notifications screen (separate repository);
+a retry for failed push recipients; pruning of dead push tokens.
 
-**Blocked on the business:** who may send and who may send urgent, SMS budget, how
-staff without the app are reached, acknowledgement deadlines and retention. The
-spec lists them. **Also needs** the mobile team for the Notifications screen.
+**Production steps, in this order:**
+
+1. Run the migration: `pnpm db:migrate:deploy:prod` applies
+   `20261001200000_add_announcements`. It is additive (three tables, four enums,
+   one hand-written partial unique index) and touches no existing table.
+2. Deploy the web app.
+3. **Redeploy the worker** (Railway and Cloud Run). Until it runs the new
+   registry it cannot handle `announcements.fanout`; such jobs retry and then
+   succeed once it catches up, so nothing is lost, but push is delayed.
+4. Confirm `FIREBASE_SERVICE_ACCOUNT_KEY` is set on the worker. Without it FCM
+   sends fail and recipients show as failed.
+
+**Defaults to confirm with the business:** who may send. Today
+`announcement:write` is held by branch manager, area manager, HR, administrator
+and super admin; branch-scoped roles can address only their own branches and never
+Everyone. There is no separate permission for urgent. **Also blocked on the
+business** for phases 3 and 4: SMS budget, how staff without the app are reached,
+acknowledgement deadlines and retention (the spec lists them).
 
 ---
 
