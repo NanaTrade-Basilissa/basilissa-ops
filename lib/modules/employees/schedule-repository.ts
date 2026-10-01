@@ -8,6 +8,7 @@ import {
   type ShiftTemplate,
   type ScheduleInputs,
 } from "@/lib/modules/attendance/schedule";
+import { loadLivePatterns } from "@/lib/modules/attendance/server";
 import { ScheduleExceptionType } from "@prisma/client";
 
 export type DayColumn = {
@@ -47,6 +48,8 @@ export type EmployeeScheduleRow = {
   /** Someone from another branch with a cover shift here this week. */
   isVisitor: boolean;
   homeBranchName: string | null;
+  /** The rota pattern this person is on at this branch during the week. */
+  patternName: string | null;
 };
 
 export type DailyCoverage = {
@@ -59,6 +62,8 @@ export type DailyCoverage = {
 export type WeeklyScheduleData = {
   branchId: string;
   branchName: string;
+  /** Patterns drive the schedule live; when false, weeks are generated. */
+  autoRota: boolean;
   weekStartKey: string;
   days: DayColumn[];
   shifts: {
@@ -89,7 +94,7 @@ export async function getWeeklyBranchSchedule(
 
   const branch = await prisma.branch.findUnique({
     where: { id: branchId },
-    select: { id: true, name: true, timezone: true },
+    select: { id: true, name: true, timezone: true, autoRota: true },
   });
   if (!branch) return null;
 
@@ -166,6 +171,20 @@ export async function getWeeklyBranchSchedule(
   const visitors = new Map(visitorRows.map((v) => [v.id, v]));
 
   const employeeIds = [...homeIds, ...visitors.keys()];
+  const livePatterns = await loadLivePatterns(employeeIds);
+
+  // Which pattern each person is on here this week, for the row label.
+  const weekPatternRows = await prisma.employeePatternAssignment.findMany({
+    where: {
+      branchId,
+      employeeId: { in: [...homeIds] },
+      validFrom: { lte: new Date(`${shiftDateKey(weekStartKey, 6)}T23:59:59.999Z`) },
+      OR: [{ validTo: null }, { validTo: { gt: new Date(`${weekStartKey}T00:00:00.000Z`) } }],
+    },
+    orderBy: { validFrom: "asc" },
+    select: { employeeId: true, pattern: { select: { name: true } } },
+  });
+  const patternNames = new Map(weekPatternRows.map((row) => [row.employeeId, row.pattern.name]));
 
   // Available shifts for this branch (branch-specific + global)
   const shifts = await prisma.shift.findMany({
@@ -244,6 +263,7 @@ export async function getWeeklyBranchSchedule(
         branchId: ex.branchId,
       })),
       holidays,
+      patterns: livePatterns.get(emp.id) ?? [],
     };
 
     const daySchedules: Record<string, EmployeeDaySchedule> = {};
@@ -312,6 +332,7 @@ export async function getWeeklyBranchSchedule(
       days: daySchedules,
       isVisitor,
       homeBranchName,
+      patternName: isVisitor ? null : (patternNames.get(emp.id) ?? null),
     };
   };
 
@@ -323,6 +344,7 @@ export async function getWeeklyBranchSchedule(
   return {
     branchId: branch.id,
     branchName: branch.name,
+    autoRota: branch.autoRota,
     weekStartKey,
     days,
     shifts,

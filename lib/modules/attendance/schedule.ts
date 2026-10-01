@@ -29,6 +29,19 @@ export type AssignmentLike = {
   validTo: Date | null;
 };
 
+/**
+ * A person on a rota pattern. Only patterns that apply live belong here: a
+ * branch on manual rota has its weeks generated into exceptions instead.
+ */
+export type PatternLike = {
+  /** Local date on which the person is on day 0 of the cycle. */
+  anchorDateKey: string;
+  /** The cycle, one entry per day: a shift id, or null for a day off. */
+  cycle: readonly (string | null)[];
+  validFrom: Date;
+  validTo: Date | null;
+};
+
 export type ExceptionLike = {
   /** Local calendar date, "YYYY-MM-DD". */
   dateKey: string;
@@ -49,6 +62,8 @@ export type ScheduleInputs = {
    * silently mark the office absent on every holiday.
    */
   holidays: ReadonlySet<string>;
+  /** Required for the same reason: a forgotten pattern silently becomes 8-5. */
+  patterns: readonly PatternLike[];
 };
 
 export type ResolvedSchedule = {
@@ -61,7 +76,7 @@ export type ResolvedSchedule = {
   unpaidBreakMinutes: number;
   /** True when the shift runs past local midnight. */
   crossesMidnight: boolean;
-  source: "exception" | "assignment";
+  source: "exception" | "pattern" | "assignment";
   /** Set when the day is a cover shift at another branch. */
   coverBranchId: string | null;
 };
@@ -81,7 +96,23 @@ function findShift(shifts: readonly ShiftTemplate[], shiftId: string | null): Sh
   return shiftId ? shifts.find((shift) => shift.id === shiftId) : undefined;
 }
 
-function isAssignmentInEffect(assignment: AssignmentLike, dayStart: Date): boolean {
+/** Whole days from one local date to another; negative when `to` is earlier. */
+function daysBetween(fromKey: string, toKey: string): number {
+  return Math.round((Date.parse(`${toKey}T00:00:00Z`) - Date.parse(`${fromKey}T00:00:00Z`)) / 86_400_000);
+}
+
+/**
+ * Where a person is in their cycle on a date: the shift id, or null for a day
+ * off. Wraps backwards too, though a pattern never applies before it starts.
+ */
+export function patternDayFor(dateKey: string, pattern: Pick<PatternLike, "anchorDateKey" | "cycle">): string | null {
+  const length = pattern.cycle.length;
+  if (length === 0) return null;
+  const index = ((daysBetween(pattern.anchorDateKey, dateKey) % length) + length) % length;
+  return pattern.cycle[index] ?? null;
+}
+
+function isAssignmentInEffect(assignment: Pick<AssignmentLike, "validFrom" | "validTo">, dayStart: Date): boolean {
   if (assignment.validFrom.getTime() > dayStart.getTime()) return false;
   return assignment.validTo === null || assignment.validTo.getTime() > dayStart.getTime();
 }
@@ -124,7 +155,12 @@ function build(
  *   3. nothing — attendance is still recorded, but flagged UNSCHEDULED and no
  *      lateness or overtime is computed, because there is nothing to compare to
  *
- * Public holidays only touch step 2, and only for shifts marked
+ * A rota pattern sits between 1 and 2 and, when in effect, decides the day
+ * outright: a day off in the cycle is a day off, never a fall-through to the
+ * recurring 8-5 underneath. That fall-through was the bug week-by-week rotas
+ * kept hitting.
+ *
+ * Public holidays only touch recurring schedules, and only for shifts marked
  * `offOnPublicHolidays`: the office's 8-5 stops, a branch's recurring rota does
  * not. An exception is someone's deliberate decision about that exact day, so
  * it applies on a holiday like any other day; that is how people are rostered
@@ -146,6 +182,21 @@ export function resolveScheduleForDate(
     // bad data, not a day off. Fall through so the assignment still applies
     // rather than silently unscheduling someone who is at work.
     if (shift) return build(shift, workDateKey, timeZone, "exception", exception.branchId ?? null);
+  }
+
+  const pattern = inputs.patterns
+    .filter((entry) => isAssignmentInEffect(entry, dayStart))
+    .sort((a, b) => b.validFrom.getTime() - a.validFrom.getTime())[0];
+  if (pattern) {
+    const shiftId = patternDayFor(workDateKey, pattern);
+    if (shiftId === null) return null;
+    const shift = findShift(shifts, shiftId);
+    if (shift) {
+      if (shift.offOnPublicHolidays && inputs.holidays.has(workDateKey)) return null;
+      return build(shift, workDateKey, timeZone, "pattern");
+    }
+    // A pattern naming a shift that no longer exists is bad data, not a day
+    // off: fall through so the person still has a schedule.
   }
 
   const weekday = isoWeekdayInZone(dayStart, timeZone);
@@ -254,4 +305,34 @@ export function punchFallsInCoverShift(
     t >= scheduled.scheduledStart.getTime() - ANCHOR_BEFORE_START_MINUTES * 60_000 &&
     t <= scheduled.scheduledEnd.getTime() + ANCHOR_AFTER_END_MINUTES * 60_000
   );
+}
+
+/** Less rest than this between two shifts is flagged when building a pattern. */
+export const MIN_REST_MINUTES = 10 * 60;
+
+/**
+ * Days in a cycle where the rest after the previous day's shift is short, e.g.
+ * an Evening ending 23:00 followed by a Morning at 07:00. The cycle wraps, so
+ * the last day is checked against the first. Advice for whoever builds the
+ * pattern, not a rule: some teams choose quick turnarounds.
+ */
+export function shortRestDays(
+  cycle: readonly (string | null)[],
+  shifts: readonly Pick<ShiftTemplate, "id" | "startMinute" | "endMinute">[],
+): { dayIndex: number; restMinutes: number }[] {
+  const byId = new Map(shifts.map((shift) => [shift.id, shift]));
+  const result: { dayIndex: number; restMinutes: number }[] = [];
+  if (cycle.length < 2) return result;
+
+  cycle.forEach((shiftId, dayIndex) => {
+    const previousId = cycle[(dayIndex - 1 + cycle.length) % cycle.length];
+    const today = shiftId ? byId.get(shiftId) : undefined;
+    const previous = previousId ? byId.get(previousId) : undefined;
+    if (!today || !previous) return;
+    // Minutes from the previous day's local midnight: its end, and today's start.
+    const previousEnd = previous.endMinute <= previous.startMinute ? previous.endMinute + 1440 : previous.endMinute;
+    const restMinutes = today.startMinute + 1440 - previousEnd;
+    if (restMinutes < MIN_REST_MINUTES) result.push({ dayIndex, restMinutes });
+  });
+  return result;
 }

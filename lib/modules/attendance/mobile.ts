@@ -15,6 +15,7 @@ import type { ProjectedDay } from "./projection";
 import { resolveScheduleForDate } from "./schedule";
 import { loadHolidayKeys } from "./holidays";
 import { isCoveringAt } from "./cover";
+import { loadLivePatternsFor } from "./patterns";
 
 export type RecordMobilePunchInput = {
   employeeId: string;
@@ -193,7 +194,7 @@ export async function recordMobilePunch(
     }
 
     // 4b. Reject if employee has no shift scheduled for today
-    const [shifts, shiftAssignments, exceptions, holidays] = await Promise.all([
+    const [shifts, shiftAssignments, exceptions, holidays, patterns] = await Promise.all([
       prisma.shift.findMany({
         where: { isActive: true },
         select: {
@@ -227,6 +228,7 @@ export async function recordMobilePunch(
         select: { date: true, shiftId: true, type: true, branchId: true },
       }),
       loadHolidayKeys(),
+      loadLivePatternsFor(employeeId),
     ]);
 
     const resolvedSchedule = resolveScheduleForDate(todayKey, {
@@ -240,6 +242,7 @@ export async function recordMobilePunch(
         branchId: ex.branchId,
       })),
       holidays,
+      patterns,
     });
 
     if (!resolvedSchedule) {

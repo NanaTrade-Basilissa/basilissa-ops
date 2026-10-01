@@ -11,6 +11,7 @@ describe("recordMobilePunch", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(prisma.publicHoliday, "findMany").mockResolvedValue([]);
+    vi.spyOn(prisma.employeePatternAssignment, "findMany").mockResolvedValue([]);
   });
 
   const validEmployee = {

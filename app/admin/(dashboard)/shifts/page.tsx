@@ -6,6 +6,8 @@ import { createShift } from "@/lib/modules/employees/actions";
 import { getWeeklyBranchSchedule, listEmployees, listShifts } from "@/lib/modules/employees/server";
 import type { CoverCandidate } from "@/components/admin/schedule-cover-dialog";
 import { ScheduleActionsMenu } from "@/components/admin/schedule-actions-menu";
+import { PatternsTable } from "@/components/admin/patterns-table";
+import { listPatterns } from "@/lib/modules/attendance/server";
 import { minutesToTime } from "@/lib/modules/employees/validation";
 import { prisma } from "@/lib/platform/prisma";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -28,7 +30,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
   const allowGlobal = can(actor, "schedule:write");
 
   const raw = await searchParams;
-  const activeTab = raw.tab === "templates" ? "templates" : "schedule";
+  const activeTab = raw.tab === "templates" ? "templates" : raw.tab === "patterns" ? "patterns" : "schedule";
 
   const branchFilter =
     scope.kind === "branches"
@@ -77,6 +79,21 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
     canWriteAny &&
     (allowGlobal || (selectedBranchId ? can(actor, "schedule:write", { branchId: selectedBranchId }) : false));
 
+  const patterns =
+    activeTab === "patterns" || (canManageBranch && activeTab === "schedule")
+      ? await listPatterns(scope.kind === "branches" ? scope.branchIds : "all")
+      : [];
+  // Every template, so a pattern still labels a day whose shift was retired;
+  // the editor itself only offers active ones.
+  const shiftOptions = shifts.map((shift) => ({
+    id: shift.id,
+    name: shift.name,
+    startMinute: shift.startMinute,
+    endMinute: shift.endMinute,
+    branchId: shift.branchId,
+    isActive: shift.isActive,
+  }));
+
   // Anyone whose schedule this person may change can be sent to cover here,
   // from this branch or any other. The action re-checks both sides.
   const coverCandidates: CoverCandidate[] =
@@ -117,6 +134,17 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
         >
           Shift Templates
         </Link>
+        <Link
+          href="/admin/shifts?tab=patterns"
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+            activeTab === "patterns"
+              ? "border-primary text-foreground font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Rota Patterns
+        </Link>
       </div>
 
       {activeTab === "schedule" ? (
@@ -151,6 +179,11 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
                 <div className="text-sm font-bold text-foreground">
                   {formattedWeek}
                 </div>
+                {weeklyData?.autoRota && (
+                  <span className="mr-2 inline-block rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-800 dark:bg-violet-950 dark:text-violet-200">
+                    Auto rota
+                  </span>
+                )}
                 {weekStartKey === currentWeekStart && (
                   <span className="inline-block text-[11px] font-medium text-primary">
                     Current week
@@ -186,6 +219,15 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
                   .filter((e) => !e.isVisitor)
                   .map((e) => ({ id: e.employeeId, name: e.name, employeeCode: e.employeeCode }))}
                 coverCandidates={coverCandidates}
+                autoRota={weeklyData.autoRota}
+                weekLabel={formattedWeek}
+                patterns={patterns
+                  .filter((p) => p.isActive && (p.branchId === null || p.branchId === selectedBranchId))
+                  .map((p) => ({ id: p.id, name: p.name, cycle: p.cycle.map((d) => d.shiftId) }))}
+                patternShifts={shiftOptions}
+                patternCandidates={weeklyData.employees
+                  .filter((e) => !e.isVisitor)
+                  .map((e) => ({ id: e.employeeId, name: e.name, employeeCode: e.employeeCode, patternName: e.patternName }))}
               />
             )}
           </div>
@@ -206,6 +248,25 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
             </Empty>
           )}
         </div>
+      ) : activeTab === "patterns" ? (
+        <PatternsTable
+          patterns={patterns.map((p) => ({
+            id: p.id,
+            name: p.name,
+            branchId: p.branchId,
+            branchName: p.branchName,
+            isActive: p.isActive,
+            cycle: p.cycle.map((d) => d.shiftId),
+            activeAssignments: p.activeAssignments,
+            canEdit:
+              canWriteAny &&
+              (p.branchId === null ? allowGlobal : can(actor, "schedule:write", { branchId: p.branchId })),
+          }))}
+          shifts={shiftOptions}
+          branches={assignableBranches}
+          allowGlobal={allowGlobal}
+          canCreate={canCreate}
+        />
       ) : shifts.length === 0 ? (
         <Empty className="border py-12">
           <EmptyMedia variant="icon">

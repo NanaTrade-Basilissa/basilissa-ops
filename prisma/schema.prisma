@@ -277,6 +277,10 @@ model Branch {
   maxAcceptableAccuracyMeters Int      @default(100)
   geofenceEnabled             Boolean  @default(false)
 
+  /// Rota patterns drive this branch's schedule live. When false, patterns are
+  /// only templates: a manager generates each week into one-day overrides.
+  autoRota Boolean @default(false)
+
   /// Per-branch rather than global, so the platform is not quietly
   /// single-country. Every branch is Africa/Accra today (U14).
   timezone    String   @default("Africa/Accra")
@@ -294,6 +298,8 @@ model Branch {
   feedbackRecipients BranchFeedbackRecipient[]
   devices     Device[]
   coverShifts ScheduleException[]
+  shiftPatterns ShiftPattern[]
+  patternAssignments EmployeePatternAssignment[]
 
   @@index([isActive])
   @@map("branches")
@@ -491,6 +497,7 @@ model Shift {
   updatedAt DateTime @updatedAt
 
   assignments EmployeeShiftAssignment[]
+  patternDays ShiftPatternDay[]
   exceptions  ScheduleException[]
 
   @@index([branchId, isActive])
@@ -525,6 +532,76 @@ model EmployeeShiftAssignment {
   @@index([employeeId, validFrom])
   @@index([shiftId])
   @@map("employee_shift_assignments")
+}
+
+/// A repeating rota: a cycle of days, each a shift or a day off.
+///
+/// "Kitchen 8-day: MMM EEE Off Off" is one pattern shared by many people; each
+/// person's assignment says where in the cycle they start, which is what
+/// staggers their days off. A cycle that is not seven days long is what makes
+/// someone's week differ from the last.
+model ShiftPattern {
+  id       String  @id @default(cuid())
+  name     String
+  /// Null makes the pattern available to every branch.
+  branchId String?
+  isActive Boolean @default(true)
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch      Branch?                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  days        ShiftPatternDay[]
+  assignments EmployeePatternAssignment[]
+
+  @@index([branchId, isActive])
+  @@map("shift_patterns")
+}
+
+/// One day of a pattern's cycle. A null shift is a day off.
+model ShiftPatternDay {
+  id        String  @id @default(cuid())
+  patternId String
+  /// 0-based position in the cycle.
+  dayIndex  Int
+  shiftId   String?
+
+  pattern ShiftPattern @relation(fields: [patternId], references: [id], onDelete: Cascade)
+  shift   Shift?       @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  @@unique([patternId, dayIndex])
+  @@map("shift_pattern_days")
+}
+
+/// Puts one person on a pattern at one branch, from a date.
+///
+/// Effective-dated and never mutated, like shift assignments: a change closes
+/// the open row and opens a new one, so past days still resolve against the
+/// rota that applied then.
+model EmployeePatternAssignment {
+  id         String @id @default(cuid())
+  employeeId String
+  patternId  String
+  /// The branch whose rota this is. Its `autoRota` decides whether the pattern
+  /// applies live or only through generated weeks.
+  branchId   String
+  /// The local date on which this person is on day 0 of the cycle.
+  anchorDate DateTime @db.Date
+
+  validFrom DateTime
+  validTo   DateTime?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  pattern ShiftPattern @relation(fields: [patternId], references: [id], onDelete: Restrict)
+  branch  Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, validFrom])
+  @@index([branchId, validFrom])
+  @@index([patternId])
+  @@map("employee_pattern_assignments")
 }
 
 enum ScheduleExceptionType {

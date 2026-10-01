@@ -637,9 +637,44 @@ manager take staff from anywhere.
 3. Public holidays → **Load 2026 Ghana holidays** (and 2027), confirm the Eid
    dates when announced, and decide on Republic Day.
 
-**Not built yet:** rota patterns (shared patterns with a per-person start, a
-per-branch *Auto rota* setting, Generate for branches with it off). Agreed
-design; next piece of work.
+Rota patterns, which build on this, are D5.
+
+---
+
+### 🟠 D5 — Rota patterns and Auto rota
+
+**Status: built, not yet in production.** Migration
+`20261001180000_add_rota_patterns`. Shifts → Rota Patterns to define them;
+Weekly Rota → Manage rota to assign, generate and switch Auto rota.
+
+- **A pattern** is a cycle of 1-28 days, each a shift template or a day off,
+  shared by many people (`shift_patterns`, `shift_pattern_days`). A cycle that
+  is not seven days long is what makes each week differ, which was the brief.
+- **Assigning** puts people on a pattern at one branch from a date
+  (`employee_pattern_assignments`, effective-dated like shift assignments).
+  Each successive person starts `stagger` days further into the cycle, so a
+  team's days off do not all fall together. Only people currently assigned to
+  that branch can be put on its pattern; cover shifts are the way to borrow.
+- **Auto rota is per branch** (`branches.autoRota`, default off). On: patterns
+  resolve live and need no weekly action. Off: patterns only take effect when
+  a manager presses Generate, which writes the week as one-day overrides and
+  keeps days already changed (an edit, approved leave, a cover) unless told
+  to replace them.
+- **Precedence:** one-day override, then pattern, then recurring assignment.
+  A pattern's day off is final: it never falls through to the 8-5 default
+  underneath. That fall-through is what week-by-week rotas kept hitting.
+- **Holidays:** a pattern day follows its template's `offOnPublicHolidays`,
+  so branch shifts keep running on a holiday.
+- **Short rest** (under ten hours, e.g. Evening then Morning) is flagged in
+  the pattern editor and not blocked: some teams choose quick turnarounds.
+
+**Deliberately not built:** minimum staffing per shift. Not needed until real
+numbers exist; the grid already counts people per shift per day, and a short
+shift is visible there. Revisit if a short-staffed day slips through with
+Auto rota on, where nobody reviews the week by default.
+
+**Open question for the business:** which branches run Auto rota. Default is
+off everywhere, so nothing changes until someone turns it on.
 
 ---
 

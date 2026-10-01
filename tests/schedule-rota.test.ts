@@ -33,6 +33,7 @@ describe("weekly schedule resolution logic", () => {
     const inputs: ScheduleInputs = {
       timeZone: "Africa/Accra",
       holidays: new Set(),
+    patterns: [],
       shifts,
       assignments: [
         {
@@ -68,6 +69,7 @@ describe("weekly schedule resolution logic", () => {
     const inputs: ScheduleInputs = {
       timeZone: "Africa/Accra",
       holidays: new Set(),
+    patterns: [],
       shifts,
       assignments: [
         {
@@ -101,6 +103,7 @@ describe("weekly schedule resolution logic", () => {
     const inputs: ScheduleInputs = {
       timeZone: "Africa/Accra",
       holidays: new Set(),
+    patterns: [],
       shifts,
       assignments: [
         {
@@ -132,6 +135,7 @@ describe("weekly schedule resolution logic", () => {
     const inputs: ScheduleInputs = {
       timeZone: "Africa/Accra",
       holidays: new Set(),
+    patterns: [],
       shifts,
       assignments: [
         {

@@ -6,6 +6,7 @@ import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { resolveScheduleForDate } from "./schedule";
 import { loadHolidayKeys } from "./holidays";
+import { loadLivePatterns, loadLivePatternsFor } from "./patterns";
 
 /**
  * Read models for the manager-facing attendance views.
@@ -356,6 +357,7 @@ export async function getAttendanceDay(
       shiftId: e.shiftId,
     })),
     holidays: await loadHolidayKeys(),
+    patterns: await loadLivePatternsFor(employeeId),
   });
 
   const day = {
@@ -816,6 +818,7 @@ export async function getLiveFloorStatus(
 
   const dayMap = new Map(todayDays.map((d) => [d.employeeId, d]));
   const holidays = await loadHolidayKeys();
+  const livePatterns = await loadLivePatterns(staff.map((e) => e.id));
 
   const staffList: LiveFloorStaff[] = [];
 
@@ -836,6 +839,7 @@ export async function getLiveFloorStatus(
       assignments: empAssignments,
       exceptions: empExceptions,
       holidays,
+      patterns: livePatterns.get(emp.id) ?? [],
     });
 
     const scheduledStart = day?.scheduledStart ?? resolved?.scheduledStart ?? null;

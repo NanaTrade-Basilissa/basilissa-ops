@@ -66,3 +66,27 @@ export const coverShiftSchema = z.object({
 });
 
 export type CoverShiftInput = z.infer<typeof coverShiftSchema>;
+
+export const patternSchema = z
+  .object({
+    name: z.string().trim().min(2, "Name the pattern").max(60),
+    branchId: z.string().nullable(),
+    cycle: z.array(z.string().min(1).nullable()).min(1, "Add at least one day").max(28, "At most 28 days"),
+  })
+  .refine((data) => data.cycle.some((day) => day !== null), {
+    message: "A pattern needs at least one working day",
+    path: ["cycle"],
+  });
+
+export type PatternFormInput = z.infer<typeof patternSchema>;
+
+export const assignPatternSchema = z.object({
+  branchId: z.string().min(1),
+  /** Null ends the pattern for these people. */
+  patternId: z.string().min(1).nullable(),
+  employeeIds: z.array(z.string().min(1)).min(1, "Choose at least one person").max(300),
+  startDateKey: dateKey,
+  staggerDays: z.coerce.number().int().min(0).max(27),
+});
+
+export type AssignPatternFormInput = z.infer<typeof assignPatternSchema>;

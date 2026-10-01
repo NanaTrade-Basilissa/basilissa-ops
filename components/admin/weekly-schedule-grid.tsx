@@ -9,6 +9,9 @@ import { minutesToTime } from "@/lib/modules/employees/validation";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { dateKeyInZone } from "@/lib/platform/date";
 
+/** Reason text on days written by "Generate week"; see generatePatternWeek. */
+const GENERATED_PREFIX = "Generated from rota pattern";
+
 export type DayColumn = {
   dateKey: string;
   dayName: string;
@@ -39,6 +42,7 @@ export type EmployeeScheduleRow = {
   days: Record<string, EmployeeDaySchedule>;
   isVisitor: boolean;
   homeBranchName: string | null;
+  patternName: string | null;
 };
 
 export type DailyCoverage = {
@@ -51,6 +55,7 @@ export type DailyCoverage = {
 export type WeeklyScheduleData = {
   branchId: string;
   branchName: string;
+  autoRota: boolean;
   weekStartKey: string;
   days: DayColumn[];
   shifts: {
@@ -170,6 +175,11 @@ export function WeeklyScheduleGrid({
                       )}
                       {emp.jobTitle && <span>· {emp.jobTitle}</span>}
                     </div>
+                    {emp.patternName && (
+                      <span className="mt-1 inline-block rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-950 dark:text-violet-200">
+                        {emp.patternName}
+                      </span>
+                    )}
                     {emp.isVisitor && (
                       <span className="mt-1 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-200">
                         Covering from {emp.homeBranchName ?? "another branch"}
@@ -209,7 +219,7 @@ export function WeeklyScheduleGrid({
                             className={`inline-flex flex-col items-center justify-center rounded-lg px-2 py-1 text-xs transition-all w-full min-h-12 ${
                               sched.coverBranchName
                                 ? "border border-sky-500/40 bg-sky-500/10 text-sky-900 dark:text-sky-200"
-                                : sched.isException
+                                : sched.isException && !sched.exceptionReason?.startsWith(GENERATED_PREFIX)
                                 ? "border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
                                 : "border border-border/80 bg-background text-foreground shadow-2xs"
                             }`}
@@ -226,6 +236,10 @@ export function WeeklyScheduleGrid({
                               <span className="text-[9px] uppercase font-bold text-sky-600 dark:text-sky-400 mt-0.5">
                                 cover
                               </span>
+                            ) : sched.isException && sched.exceptionReason?.startsWith(GENERATED_PREFIX) ? (
+                              <span className="text-[9px] uppercase font-bold text-violet-600 dark:text-violet-400 mt-0.5">
+                                pattern
+                              </span>
                             ) : sched.isException ? (
                               <span className="text-[9px] uppercase font-bold text-amber-600 dark:text-amber-400 mt-0.5">
                                 override
@@ -235,9 +249,15 @@ export function WeeklyScheduleGrid({
                         ) : sched.exceptionType === ScheduleExceptionType.DAY_OFF ? (
                           <div className="inline-flex flex-col items-center justify-center rounded-lg px-2 py-1 text-xs border border-muted bg-muted/30 text-muted-foreground w-full min-h-12">
                             <span className="font-medium text-xs">Day off</span>
-                            <span className="text-[9px] uppercase font-bold text-amber-600 dark:text-amber-400">
-                              override
-                            </span>
+                            {sched.exceptionReason?.startsWith(GENERATED_PREFIX) ? (
+                              <span className="text-[9px] uppercase font-bold text-violet-600 dark:text-violet-400">
+                                pattern
+                              </span>
+                            ) : (
+                              <span className="text-[9px] uppercase font-bold text-amber-600 dark:text-amber-400">
+                                override
+                              </span>
+                            )}
                           </div>
                         ) : day.holidayName && !emp.isVisitor ? (
                           <div className="flex items-center justify-center min-h-12 text-rose-700/70 dark:text-rose-300/70 text-xs font-medium">

@@ -1,19 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft, ChevronDown, Copy, Settings2, Users } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, Copy, Repeat, Settings2, Sparkles, Users, Zap, ZapOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ScheduleAssignPatternDialog,
+  type AssignablePattern,
+  type PatternCandidate,
+} from "@/components/admin/schedule-assign-pattern-dialog";
+import { AutoRotaDialog, GenerateWeekDialog } from "@/components/admin/schedule-pattern-mode-dialogs";
+import type { CycleShift } from "@/components/admin/pattern-cycle";
 import { ScheduleCopyWeekDialog } from "@/components/admin/schedule-copy-week-dialog";
 import { ScheduleCoverDialog, type CoverCandidate } from "@/components/admin/schedule-cover-dialog";
 import { ScheduleBulkAssignDialog } from "@/components/admin/schedule-bulk-assign-dialog";
 
-type Dialog = "copy" | "cover" | "bulk" | null;
+type Dialog = "copy" | "cover" | "bulk" | "pattern" | "generate" | "auto" | null;
 
 /**
  * Every rota-changing action behind one button, so the controls card stays
@@ -28,6 +36,11 @@ export function ScheduleActionsMenu({
   shifts,
   branchEmployees,
   coverCandidates,
+  autoRota,
+  weekLabel,
+  patterns,
+  patternShifts,
+  patternCandidates,
 }: {
   branchId: string;
   branchName: string;
@@ -36,6 +49,11 @@ export function ScheduleActionsMenu({
   shifts: { id: string; name: string; startMinute: number; endMinute: number }[];
   branchEmployees: { id: string; name: string; employeeCode: string | null }[];
   coverCandidates: CoverCandidate[];
+  autoRota: boolean;
+  weekLabel: string;
+  patterns: AssignablePattern[];
+  patternShifts: CycleShift[];
+  patternCandidates: PatternCandidate[];
 }) {
   const [open, setOpen] = useState<Dialog>(null);
   const onOpenChange = (which: Exclude<Dialog, null>) => (next: boolean) => setOpen(next ? which : null);
@@ -65,6 +83,21 @@ export function ScheduleActionsMenu({
             <Users className="size-4" />
             Bulk assign
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setOpen("pattern")}>
+            <Repeat className="size-4" />
+            Assign rota pattern
+          </DropdownMenuItem>
+          {!autoRota && (
+            <DropdownMenuItem onClick={() => setOpen("generate")}>
+              <Sparkles className="size-4" />
+              Generate week from patterns
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onClick={() => setOpen("auto")}>
+            {autoRota ? <ZapOff className="size-4" /> : <Zap className="size-4" />}
+            {autoRota ? "Turn Auto rota off" : "Turn Auto rota on"}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -92,6 +125,33 @@ export function ScheduleActionsMenu({
         activeWeekStart={weekStartKey}
         open={open === "bulk"}
         onOpenChange={onOpenChange("bulk")}
+      />
+      {open === "pattern" && (
+        <ScheduleAssignPatternDialog
+          branchId={branchId}
+          branchName={branchName}
+          weekStartKey={weekStartKey}
+          patterns={patterns}
+          shifts={patternShifts}
+          employees={patternCandidates}
+          open
+          onOpenChange={onOpenChange("pattern")}
+        />
+      )}
+      <GenerateWeekDialog
+        branchId={branchId}
+        branchName={branchName}
+        weekStartKey={weekStartKey}
+        weekLabel={weekLabel}
+        open={open === "generate"}
+        onOpenChange={onOpenChange("generate")}
+      />
+      <AutoRotaDialog
+        branchId={branchId}
+        branchName={branchName}
+        autoRota={autoRota}
+        open={open === "auto"}
+        onOpenChange={onOpenChange("auto")}
       />
     </>
   );

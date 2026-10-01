@@ -59,6 +59,7 @@ function inputs(shiftId: string, overrides: Partial<ScheduleInputs> = {}): Sched
     assignments: [{ shiftId, daysOfWeek: ALL_WEEK, validFrom: FROM, validTo: null }],
     exceptions: [],
     holidays: new Set([HOLIDAY]),
+    patterns: [],
     ...overrides,
   };
 }

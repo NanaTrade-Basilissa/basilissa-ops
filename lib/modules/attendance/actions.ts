@@ -19,12 +19,30 @@ import { checkManualEntry } from "./manual";
 import { resolvePolicy } from "./policy-repository";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { supersedePolicy } from "./policy-repository";
-import { attendancePolicySchema, coverShiftSchema, holidaySchema, type CoverShiftInput } from "./validation";
+import {
+  assignPatternSchema,
+  attendancePolicySchema,
+  coverShiftSchema,
+  holidaySchema,
+  patternSchema,
+  type AssignPatternFormInput,
+  type CoverShiftInput,
+  type PatternFormInput,
+} from "./validation";
 import { canAuthorizeOvertime } from "./overtime-auth";
 import { autoCloseStaleDays, type AutoCloseSummary } from "./auto-close";
 import { shiftDateKey } from "@/lib/platform/date";
 import { reviewLeaveRequest } from "./leave";
 import { DuplicateHolidayError, deleteHoliday, importCalendarHolidays, resettleDates, saveHoliday } from "./holidays";
+import {
+  PatternInUseError,
+  assignPattern,
+  deletePattern,
+  generatePatternWeek,
+  savePattern,
+  setAutoRota,
+  setPatternActive,
+} from "./patterns";
 
 // `FormState` already includes undefined, so intersecting with it would make
 // the whole type non-optional. Extend the non-null half and re-add undefined.
@@ -934,4 +952,152 @@ export async function assignCoverShiftAction(input: CoverShiftInput): Promise<Co
   revalidatePath("/admin/shifts");
   revalidatePath("/admin/attendance");
   return { ok: true, assigned, skipped };
+}
+
+
+// ---------------------------------------------------------------------------
+// Rota patterns
+//
+// A pattern for one branch needs schedule:write there; a pattern for every
+// branch needs it everywhere. Editing checks the branch the pattern is on now
+// as well as the one it is moving to, so nobody can take over another
+// branch's pattern by re-scoping it.
+// ---------------------------------------------------------------------------
+
+type ActionResult = { ok: boolean; error?: string };
+
+async function requirePatternWrite(branchId: string | null) {
+  return branchId ? requirePermission("schedule:write", { branchId }) : requirePermission("schedule:write");
+}
+
+function revalidateRota() {
+  revalidatePath("/admin/shifts");
+  revalidatePath("/admin/attendance");
+}
+
+export async function savePatternAction(
+  id: string | null,
+  input: PatternFormInput,
+): Promise<ActionResult & { fieldErrors?: Record<string, string> }> {
+  const parsed = patternSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message, fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+  const { name, branchId, cycle } = parsed.data;
+
+  const actor = await requirePatternWrite(branchId);
+  if (id) {
+    const existing = await prisma.shiftPattern.findUnique({ where: { id }, select: { branchId: true } });
+    if (!existing) return { ok: false, error: "That pattern no longer exists." };
+    await requirePatternWrite(existing.branchId);
+  }
+
+  // Every shift in the cycle must be one this branch can use.
+  const shiftIds = [...new Set(cycle.filter((day): day is string => day !== null))];
+  const usable = await prisma.shift.count({
+    where: {
+      id: { in: shiftIds },
+      isActive: true,
+      OR: branchId ? [{ branchId: null }, { branchId }] : [{ branchId: null }],
+    },
+  });
+  if (usable !== shiftIds.length) {
+    return { ok: false, error: "One of the shifts is inactive or belongs to another branch." };
+  }
+
+  await savePattern(id, { name, branchId, cycle }, auditActorFrom(actor));
+  revalidateRota();
+  return { ok: true };
+}
+
+export async function setPatternActiveAction(id: string, isActive: boolean): Promise<ActionResult> {
+  const pattern = await prisma.shiftPattern.findUnique({ where: { id }, select: { branchId: true } });
+  if (!pattern) return { ok: false, error: "That pattern no longer exists." };
+  const actor = await requirePatternWrite(pattern.branchId);
+  await setPatternActive(id, isActive, auditActorFrom(actor));
+  revalidateRota();
+  return { ok: true };
+}
+
+export async function deletePatternAction(id: string): Promise<ActionResult> {
+  const pattern = await prisma.shiftPattern.findUnique({ where: { id }, select: { branchId: true } });
+  if (!pattern) return { ok: false, error: "That pattern no longer exists." };
+  const actor = await requirePatternWrite(pattern.branchId);
+  try {
+    await deletePattern(id, auditActorFrom(actor));
+  } catch (error) {
+    if (error instanceof PatternInUseError) return { ok: false, error: error.message };
+    throw error;
+  }
+  revalidateRota();
+  return { ok: true };
+}
+
+/**
+ * Puts people on a pattern at a branch, or ends it (patternId null). Only
+ * people currently assigned to that branch: a branch's rota is not a way to
+ * schedule someone else's staff. Cover shifts are for that.
+ */
+export async function assignPatternAction(
+  input: AssignPatternFormInput,
+): Promise<ActionResult & { assigned?: number }> {
+  const parsed = assignPatternSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  const { branchId, patternId, employeeIds, startDateKey, staggerDays } = parsed.data;
+
+  const actor = await requirePermission("schedule:write", { branchId });
+
+  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { timezone: true } });
+  if (!branch) return { ok: false, error: "That branch no longer exists." };
+
+  if (patternId) {
+    const pattern = await prisma.shiftPattern.findFirst({
+      where: { id: patternId, isActive: true, OR: [{ branchId: null }, { branchId }] },
+      select: { id: true },
+    });
+    if (!pattern) return { ok: false, error: "That pattern is inactive or belongs to another branch." };
+  }
+
+  const here = await prisma.employeeBranchAssignment.findMany({
+    where: { branchId, validTo: null, employeeId: { in: employeeIds }, employee: { status: "ACTIVE" } },
+    select: { employeeId: true },
+  });
+  const hereIds = new Set(here.map((row) => row.employeeId));
+  if (employeeIds.some((id) => !hereIds.has(id))) {
+    return { ok: false, error: "Some of the people chosen are not active staff at this branch." };
+  }
+
+  const result = await assignPattern(
+    { branchId, patternId, employeeIds, startDateKey, staggerDays, timeZone: branch.timezone },
+    auditActorFrom(actor),
+  );
+  revalidateRota();
+  return { ok: true, assigned: result.assigned };
+}
+
+export async function setAutoRotaAction(branchId: string, autoRota: boolean): Promise<ActionResult> {
+  if (!branchId) return { ok: false, error: "Choose a branch." };
+  const actor = await requirePermission("schedule:write", { branchId });
+  await setAutoRota(branchId, autoRota, auditActorFrom(actor));
+  revalidateRota();
+  return { ok: true };
+}
+
+export async function generatePatternWeekAction(
+  branchId: string,
+  weekStartKey: string,
+  overwrite: boolean,
+): Promise<ActionResult & { written?: number; skipped?: number; people?: number }> {
+  if (!branchId || !/^\d{4}-\d{2}-\d{2}$/.test(weekStartKey)) return { ok: false, error: "Choose a branch and week." };
+  const actor = await requirePermission("schedule:write", { branchId });
+
+  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { autoRota: true } });
+  if (!branch) return { ok: false, error: "That branch no longer exists." };
+  // With Auto rota on, patterns already apply live; writing them out as
+  // overrides would freeze this week against later pattern changes.
+  if (branch.autoRota) return { ok: false, error: "This branch runs on Auto rota, so there is nothing to generate." };
+
+  const result = await generatePatternWeek(branchId, weekStartKey, overwrite, auditActorFrom(actor));
+  revalidateRota();
+  return { ok: true, ...result };
 }

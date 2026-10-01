@@ -55,6 +55,7 @@ function inputs(overrides: Partial<ScheduleInputs> = {}): ScheduleInputs {
     assignments: [{ shiftId: "day", daysOfWeek: ALL_WEEK, validFrom: FROM_2026, validTo: null }],
     exceptions: [],
     holidays: new Set(),
+    patterns: [],
     ...overrides,
   };
 }

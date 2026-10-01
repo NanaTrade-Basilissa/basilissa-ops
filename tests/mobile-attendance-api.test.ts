@@ -10,6 +10,7 @@ describe("Mobile Attendance APIs", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(prisma.publicHoliday, "findMany").mockResolvedValue([]);
+    vi.spyOn(prisma.employeePatternAssignment, "findMany").mockResolvedValue([]);
   });
 
   const validToken = createDeviceToken({

@@ -25,3 +25,4 @@ export * from "./leave";
 export * from "./reminders";
 export * from "./holidays";
 export * from "./cover";
+export * from "./patterns";

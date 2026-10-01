@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { AttendanceDirection } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
-import { verifyDeviceToken, classifyLiveFloorStatus } from "@/lib/modules/attendance/server";
+import { verifyDeviceToken, classifyLiveFloorStatus, loadLivePatternsFor } from "@/lib/modules/attendance/server";
 import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
@@ -170,6 +170,7 @@ export async function GET(request: NextRequest) {
 
   const holidayNames = new Map(holidayRows.map((h) => [h.date.toISOString().slice(0, 10), h.name]));
   const holidays = new Set(holidayNames.keys());
+  const patterns = await loadLivePatternsFor(employeeId);
 
   const voidedIds = new Set(
     corrections.map((c) => c.targetEventId).filter(Boolean) as string[],
@@ -191,6 +192,7 @@ export async function GET(request: NextRequest) {
       branchId: ex.branchId,
     })),
     holidays,
+    patterns,
   });
 
   // 4b. Resolve upcoming schedule for the next 7 days
@@ -244,6 +246,7 @@ export async function GET(request: NextRequest) {
         branchId: ex.branchId,
       })),
       holidays,
+      patterns,
     });
 
     const shift = resolved ? shifts.find((s) => s.id === resolved.shiftId) : null;

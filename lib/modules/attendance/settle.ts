@@ -9,6 +9,7 @@ import { projectDay, type ProjectedDay, type ProjectionEvent } from "./projectio
 import { resolvePolicy } from "./policy-repository";
 import { anchorWorkDate, resolveScheduleForDate, type ScheduleInputs } from "./schedule";
 import { loadHolidayKeys } from "./holidays";
+import { loadLivePatternsFor } from "./patterns";
 
 /**
  * Turning the pure projection into a stored day.
@@ -27,7 +28,7 @@ export async function loadScheduleInputs(
   branchId: string,
   tx: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<ScheduleInputs> {
-  const [branch, assignments, exceptions, shifts, holidays] = await Promise.all([
+  const [branch, assignments, exceptions, shifts, holidays, patterns] = await Promise.all([
     tx.branch.findUnique({ where: { id: branchId }, select: { timezone: true } }),
     tx.employeeShiftAssignment.findMany({
       where: { employeeId },
@@ -42,6 +43,7 @@ export async function loadScheduleInputs(
       select: { id: true, name: true, startMinute: true, endMinute: true, unpaidBreakMinutes: true, offOnPublicHolidays: true },
     }),
     loadHolidayKeys(tx),
+    loadLivePatternsFor(employeeId, tx),
   ]);
 
   return {
@@ -57,6 +59,7 @@ export async function loadScheduleInputs(
       branchId: entry.branchId,
     })),
     holidays,
+    patterns,
   };
 }
 

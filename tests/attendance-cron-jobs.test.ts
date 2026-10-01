@@ -39,7 +39,9 @@ describe("Attendance Background Jobs & Cron", () => {
 
       const mockLoader = vi.fn().mockResolvedValue({
         timeZone: "Africa/Accra",
-        shifts: [{ id: "shift_m", name: "Morning", startMinute: 480, endMinute: 960, unpaidBreakMinutes: 60 }],
+        shifts: [{ id: "shift_m", name: "Morning", startMinute: 480, endMinute: 960, unpaidBreakMinutes: 60, offOnPublicHolidays: false }],
+        holidays: new Set(),
+        patterns: [],
         assignments: [
           {
             shiftId: "shift_m",
@@ -95,7 +97,9 @@ describe("Attendance Background Jobs & Cron", () => {
 
       const mockLoader = vi.fn().mockResolvedValue({
         timeZone: "Africa/Accra",
-        shifts: [{ id: "shift_m", name: "Morning", startMinute: 480, endMinute: 960, unpaidBreakMinutes: 60 }],
+        shifts: [{ id: "shift_m", name: "Morning", startMinute: 480, endMinute: 960, unpaidBreakMinutes: 60, offOnPublicHolidays: false }],
+        holidays: new Set(),
+        patterns: [],
         assignments: [
           {
             shiftId: "shift_m",
