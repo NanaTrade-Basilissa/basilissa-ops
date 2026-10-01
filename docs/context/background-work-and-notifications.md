@@ -85,7 +85,7 @@ the same queue safely because claiming uses `SKIP LOCKED`.
 | Channel | Code | Provider | Reaches |
 | --- | --- | --- | --- |
 | **Email** | `lib/platform/email.ts`, templates in `lib/email-templates/` | HTTP gateway at `EMAIL_SERVER_URL` (Nodemailer service) | Anyone with an address |
-| **SMS** | `lib/platform/sms.ts` | HTTP gateway at `SMS_GATEWAY_URL` (Hubtel) | Anyone with a phone number. Currently used for **login OTPs only**. |
+| **SMS** | `lib/platform/sms.ts` | Nana Trade Server gateway: `/notify/otp` for login codes, `/sms/charge` for announcements | Anyone with a phone number: login OTPs and announcements |
 | **Push** | `lib/platform/push.ts` | FCM via `firebase-admin`, and Expo tokens | Employees with the mobile app installed and a registered token |
 | **Slack** | `lib/platform/slack.ts` | Incoming webhook | The ops team, not staff |
 
@@ -111,13 +111,18 @@ the same queue safely because claiming uses `SKIP LOCKED`.
 - `normalizePhoneNumber` canonicalises to `+233...`. `formatGhanaTel` formats for
   the gateway. `dispatchOtpViaGateway` sends an OTP and reports to Slack on
   failure (`notifyOtpFailure`).
-- `isSmsConfigured` gates it. Simulated when unconfigured.
 - **Cost per message is real.** Anything that fans out SMS needs an explicit
   opt-in and a count shown first.
-- `sendSms({ recipient, message, sender? })` is the general sender (returns
-  `SendSmsResult`: `ok`, `simulated`, `messageId`, `error`). OTP login uses
-  `dispatchOtpViaGateway`. Anything that sends SMS to staff should use `sendSms`,
-  not a second gateway client.
+- `sendSms({ recipient, message, name?, subject?, sender? })` posts one recipient to
+  `/sms/charge` as `{ recipients: [{ recipient_number, name, message, subject, from }] }`
+  (endpoint `SMS_CHARGE_URL`, default the production gateway; same optional Bearer
+  token as the OTP). It returns `SendSmsResult` (`ok`, `simulated`, `messageId`,
+  `error`) and treats a bad status or a `success: false` body as a rejection. OTP
+  login uses `dispatchOtpViaGateway`. Anything that sends SMS to staff should use
+  `sendSms`, not a second gateway client.
+- **It really sends and costs money.** There is no "unconfigured means simulated"
+  for SMS, as there is none for the OTP. Set `SIMULATE_SMS=true` to log instead.
+  Tests simulate under `NODE_ENV=test`.
 
 ### Push
 

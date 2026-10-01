@@ -22,8 +22,8 @@ describe("pure delivery rules", () => {
     for (const bad of [null, undefined, "", "12345", "abc", "024123"]) expect(isUsablePhone(bad)).toBe(false);
   });
 
-  it("builds a text that names the sender, flattens whitespace and never exceeds the limit", () => {
-    expect(smsText("Closed Friday", "See your\n\nmanager.")).toBe("Basilissa: Closed Friday. See your manager.");
+  it("builds a text from the title and body, flattens whitespace and never exceeds the limit", () => {
+    expect(smsText("Closed Friday", "See your\n\nmanager.")).toBe("Closed Friday. See your manager.");
     expect(smsText("T", "word ".repeat(200)).length).toBeLessThanOrEqual(320);
   });
 
@@ -59,9 +59,9 @@ describe("SMS fan-out", () => {
 
   it("texts people with a usable number, skips the rest as unreachable, and records each outcome", async () => {
     pending([
-      { id: "r1", employee: { phone: "0241234567" } },
-      { id: "r2", employee: { phone: null } },
-      { id: "r3", employee: { phone: "0241234568" } },
+      { id: "r1", employee: { phone: "0241234567", firstName: "Ama" } },
+      { id: "r2", employee: { phone: null, firstName: "Kofi" } },
+      { id: "r3", employee: { phone: "0241234568", firstName: "Esi" } },
     ]);
     const send = vi
       .spyOn(smsModule, "sendSms")
@@ -71,7 +71,7 @@ describe("SMS fan-out", () => {
 
     expect(await fanoutAnnouncementSms({ announcementId: "a1" })).toEqual({ sent: 1, failed: 1, unreachable: 1 });
     expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls[0]![0]).toMatchObject({ recipient: "0241234567", message: "Basilissa: Hi. There" });
+    expect(send.mock.calls[0]![0]).toMatchObject({ recipient: "0241234567", message: "Hi. There", name: "Ama", subject: "Hi" });
     const by = (id: string) => update.mock.calls.find((c) => c[0].where.id === id)![0].data;
     expect(by("r1")).toMatchObject({ smsStatus: "SENT" });
     expect(by("r2")).toEqual({ smsStatus: "UNREACHABLE" });

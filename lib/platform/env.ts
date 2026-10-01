@@ -93,6 +93,8 @@ const envSchema = z.object({
   // Defaults to https://nana-trade-server.vercel.app/notify/otp
   OTP_GATEWAY_URL: optional(z.string().url("OTP_GATEWAY_URL must be a valid URL")),
   SMS_GATEWAY_URL: optional(z.string().url("SMS_GATEWAY_URL must be a valid URL")),
+  // Where announcement SMS goes. Defaults to the Nana Trade Server /sms/charge gateway.
+  SMS_CHARGE_URL: optional(z.string().url("SMS_CHARGE_URL must be a valid URL")),
   SMS_GATEWAY_AUTH_TOKEN: optional(z.string()),
   SMS_SENDER_ID: optional(z.string()),
 

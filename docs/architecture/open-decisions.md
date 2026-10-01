@@ -710,10 +710,11 @@ this") is built on `feat/notifications-inbox` in the app repo.
    registry it cannot handle `announcements.fanout`; such jobs retry and then
    succeed once it catches up, so nothing is lost, but push is delayed.
 4. Confirm `FIREBASE_SERVICE_ACCOUNT_KEY` is set on the worker (otherwise FCM sends
-   fail), and `SMS_GATEWAY_URL` / `SMS_GATEWAY_AUTH_TOKEN` and `EMAIL_SERVER_URL` if
-   SMS and email should really send. **SMS is simulated when the gateway URL is
-   unset, but email is not: with no `EMAIL_SERVER_URL` it falls back to the
-   production gateway.**
+   fail), and `EMAIL_SERVER_URL`. Announcement SMS goes to
+   `https://nana-trade-server.vercel.app/sms/charge` unless `SMS_CHARGE_URL` says
+   otherwise (optional `SMS_GATEWAY_AUTH_TOKEN`). **Neither SMS nor email is
+   simulated when unset: both fall back to the production gateway and really
+   send.** Set `SIMULATE_SMS=true` on any environment that must not text people.
 
 **Defaults to confirm with the business:** who may send. Today
 `announcement:write` is held by branch manager, area manager, HR, administrator

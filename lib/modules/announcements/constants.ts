@@ -53,9 +53,9 @@ export function isUsablePhone(phone: string | null | undefined): boolean {
   return /^(\+?233|0)\d{9}$/.test(compact) || /^\+\d{10,15}$/.test(compact);
 }
 
-/** The text message for an announcement: short, with the sender named, never over the limit. */
+/** The text message for an announcement: title then body, never over the limit. The gateway adds the sender name. */
 export function smsText(title: string, body: string): string {
-  const text = `Basilissa: ${title.trim()}. ${body.replace(/\s+/g, " ").trim()}`;
+  const text = `${title.trim()}. ${body.replace(/\s+/g, " ").trim()}`;
   return text.length <= SMS_MESSAGE_MAX ? text : `${text.slice(0, SMS_MESSAGE_MAX - 1).trimEnd()}…`;
 }
 

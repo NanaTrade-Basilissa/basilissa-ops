@@ -8,6 +8,10 @@ const log = scoped("sms");
 export interface SendSmsOptions {
   recipient: string;
   message: string;
+  /** The recipient's first name. */
+  name?: string;
+  /** Shown by gateways that also email; an announcement's title. */
+  subject?: string;
   sender?: string;
 }
 
@@ -201,78 +205,87 @@ export async function dispatchOtpViaGateway(options: SendOtpOptions): Promise<Se
 }
 
 
+const DEFAULT_SMS_CHARGE_URL = "https://nana-trade-server.vercel.app/sms/charge";
+
 /**
- * Dispatches an SMS via the configured HTTP REST gateway.
+ * Sends one SMS through the Nana Trade Server gateway (`/sms/charge`), the same
+ * service the OTP goes through. It takes a list of recipients; we send one at a
+ * time so each person's outcome is known.
  *
- * If `SMS_GATEWAY_URL` is unset, logs the message to stdout and returns simulated success,
- * enabling local development and automated testing without real network dispatch.
+ * Payload:
+ * {
+ *   recipients: [{
+ *     recipient_number: "0542958451",
+ *     name: "Augustine",
+ *     message: "...",
+ *     subject: "Basilissa Test Message",
+ *     from: "Basilissa"
+ *   }]
+ * }
  *
- * If `SMS_GATEWAY_AUTH_TOKEN` is present, attaches an Authorization: Bearer header;
- * if empty or omitted, dispatches without authorization headers as requested.
+ * SMS costs money per message. It is only sent for something a person chose to
+ * send (an announcement with the SMS switch on, which also has a recipient cap).
+ * Set `SIMULATE_SMS=true` to log instead of send. The endpoint is
+ * `SMS_CHARGE_URL`, defaulting to the production gateway, like the OTP's.
  */
 export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
-  const normalizedPhone = normalizePhoneNumber(options.recipient);
+  const recipientNumber = formatGhanaTel(options.recipient);
   const env = getEnv();
 
-  if (!isSmsConfigured() || !env.SMS_GATEWAY_URL) {
-    log.info("SMS simulation [gateway unconfigured]", {
-      recipient: normalizedPhone,
-      message: options.message,
-    });
+  if (process.env.NODE_ENV === "test" || process.env.SIMULATE_SMS === "true") {
+    log.info("SMS simulation [test/simulated mode]", { recipient: recipientNumber, message: options.message });
     return { ok: true, simulated: true };
   }
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  // Attach authorization token only if configured
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (env.SMS_GATEWAY_AUTH_TOKEN && env.SMS_GATEWAY_AUTH_TOKEN.trim() !== "") {
     headers["Authorization"] = `Bearer ${env.SMS_GATEWAY_AUTH_TOKEN.trim()}`;
   }
 
   const payload = {
-    recipient: normalizedPhone,
-    message: options.message,
-    sender: options.sender || env.SMS_SENDER_ID || "Basilissa",
+    recipients: [
+      {
+        recipient_number: recipientNumber,
+        name: options.name || "Staff",
+        message: options.message,
+        subject: options.subject || "Basilissa",
+        from: options.sender || env.SMS_SENDER_ID || "Basilissa",
+      },
+    ],
   };
 
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch(env.SMS_GATEWAY_URL, {
+    const response = await fetch(env.SMS_CHARGE_URL || DEFAULT_SMS_CHARGE_URL, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
-
     clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      log.error("SMS gateway returned HTTP error", {
-        status: response.status,
-        recipient: normalizedPhone,
-        error: errorText,
-      });
-      return { ok: false, error: `Gateway error HTTP ${response.status}: ${errorText}` };
+    const data = (await response.json().catch(() => ({}))) as {
+      success?: boolean;
+      message?: string;
+      error?: string;
+      messageId?: string;
+      id?: string;
+    };
+
+    // Not accepted: a bad status, or a body that says so.
+    if (!response.ok || data.success === false) {
+      const error = data.error || data.message || `Gateway returned HTTP ${response.status}`;
+      log.error("SMS gateway rejected the message", { status: response.status, recipient: recipientNumber, error });
+      return { ok: false, error };
     }
 
-    const data = await response.json().catch(() => ({}));
-    log.info("SMS delivered successfully to gateway", {
-      recipient: normalizedPhone,
-      messageId: data.messageId || data.id,
-    });
-
+    log.info("SMS accepted by the gateway", { recipient: recipientNumber, messageId: data.messageId || data.id });
     return { ok: true, messageId: data.messageId || data.id };
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    log.error("Failed to connect to SMS gateway", {
-      recipient: normalizedPhone,
-      error: errorMsg,
-    });
-    return { ok: false, error: errorMsg };
+    const error = err instanceof Error ? err.message : String(err);
+    log.error("Failed to reach the SMS gateway", { recipient: recipientNumber, error });
+    return { ok: false, error };
   }
 }

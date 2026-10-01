@@ -163,7 +163,7 @@ export async function fanoutAnnouncementSms(payload: unknown): Promise<ChannelSu
       where: { announcementId, smsStatus: "PENDING" },
       orderBy: { employeeId: "asc" },
       take: SIMPLE_CHUNK,
-      select: { id: true, employee: { select: { phone: true } } },
+      select: { id: true, employee: { select: { phone: true, firstName: true } } },
     });
     if (pending.length === 0) break;
 
@@ -175,7 +175,12 @@ export async function fanoutAnnouncementSms(payload: unknown): Promise<ChannelSu
       }
       let outcome: { ok: boolean; error?: string };
       try {
-        outcome = await sendSms({ recipient: row.employee.phone!, message });
+        outcome = await sendSms({
+          recipient: row.employee.phone!,
+          message,
+          name: row.employee.firstName,
+          subject: announcement.title,
+        });
       } catch (error) {
         outcome = { ok: false, error: error instanceof Error ? error.message : "SMS_ERROR" };
       }

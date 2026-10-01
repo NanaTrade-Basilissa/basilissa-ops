@@ -31,7 +31,7 @@ list.
 | Variable | Purpose | Unset means |
 | --- | --- | --- |
 | `EMAIL_SERVER_URL` | Email gateway endpoint | Email is `skipped`, not failed |
-| `SMS_GATEWAY_URL`, `SMS_GATEWAY_AUTH_TOKEN`, `SMS_SENDER_ID` | SMS gateway | SMS simulated |
+| `SMS_CHARGE_URL`, `SMS_GATEWAY_AUTH_TOKEN`, `SMS_SENDER_ID` | Announcement SMS endpoint (default `https://nana-trade-server.vercel.app/sms/charge`), optional Bearer token, sender name (default `Basilissa`) | **SMS really sends** to the default gateway. Set `SIMULATE_SMS=true` to log instead |
 | `OTP_GATEWAY_URL` | OTP dispatch endpoint | built-in default |
 | `SLACK_WEBHOOK_URL` | Ops alerts | no alerts |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` | FCM credentials (raw JSON or base64); falls back to `GOOGLE_APPLICATION_CREDENTIALS` | FCM sends fail or fall back to default credentials |
@@ -42,7 +42,7 @@ list.
 | Variable | Effect |
 | --- | --- |
 | `PUSH_NOTIFICATIONS_DISABLED`, `EXPO_PUSH_DISABLED` | `true` simulates push (logged, not sent) |
-| `SIMULATE_SMS`, `SIMULATE_OTP` | Simulate SMS and OTP delivery |
+| `SIMULATE_SMS`, `SIMULATE_OTP` | Log instead of sending SMS (announcements and OTP) |
 | `LOG_LEVEL` | Logger verbosity |
 | `PROCESS_ROLE` | `worker` makes the container run the worker; anything else migrates then serves |
 
