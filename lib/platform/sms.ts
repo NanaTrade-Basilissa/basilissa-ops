@@ -223,6 +223,11 @@ const DEFAULT_SMS_CHARGE_URL = "https://nana-trade-server.vercel.app/sms/charge"
  *   }]
  * }
  *
+ * Response (confirmed against the live gateway, 1 Oct 2026): HTTP 200 with
+ * `{ "success": true, "message": "Messages sent successfully" }`. No message id and
+ * no per-recipient detail, and no auth was needed. That means accepted, not
+ * delivered: the gateway gives us nothing to track delivery with.
+ *
  * SMS costs money per message. It is only sent for something a person chose to
  * send (an announcement with the SMS switch on, which also has a recipient cap).
  * Set `SIMULATE_SMS=true` to log instead of send. The endpoint is

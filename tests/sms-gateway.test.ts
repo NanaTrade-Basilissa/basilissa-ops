@@ -22,7 +22,7 @@ describe("sendSms", () => {
   const reply = (body: unknown, status = 200) => fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body), { status }));
 
   it("posts one recipient to /sms/charge in the gateway's shape", async () => {
-    reply({ success: true });
+    reply({ success: true, message: "Messages sent successfully" }); // the live gateway's reply
     const result = await sendSms({ recipient: "+233542958451", message: "Hello", name: "Augustine", subject: "Test" });
 
     expect(result.ok).toBe(true);

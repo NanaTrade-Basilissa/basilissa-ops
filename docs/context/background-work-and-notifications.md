@@ -120,6 +120,10 @@ the same queue safely because claiming uses `SKIP LOCKED`.
   `error`) and treats a bad status or a `success: false` body as a rejection. OTP
   login uses `dispatchOtpViaGateway`. Anything that sends SMS to staff should use
   `sendSms`, not a second gateway client.
+- **Confirmed against the live gateway:** HTTP 200 `{ "success": true, "message":
+  "Messages sent successfully" }`, no auth needed. No message id and no
+  per-recipient detail, so `SENT` means the gateway accepted it, not that the phone
+  received it, and a failure inside a 200 reply cannot be told apart.
 - **It really sends and costs money.** There is no "unconfigured means simulated"
   for SMS, as there is none for the OTP. Set `SIMULATE_SMS=true` to log instead.
   Tests simulate under `NODE_ENV=test`.
