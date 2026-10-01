@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import { heldPermissions, requireAdminShell } from "@/lib/modules/identity/server";
+import { branchScope, heldPermissions, requireAdminShell } from "@/lib/modules/identity/server";
+import { prisma } from "@/lib/platform/prisma";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -10,6 +11,20 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
   // itself. Each page below applies its own permission and MFA check.
   const session = await requireAdminShell();
   const userPermissions = heldPermissions(session);
+
+  // Sidebar badge only, not access: the leave page applies its own gate. The
+  // count is limited to the branches this person can see, so a branch manager
+  // is not shown other branches' requests.
+  const leaveScope = branchScope(session, "attendance:read");
+  const pendingLeave =
+    leaveScope.kind === "none"
+      ? 0
+      : await prisma.leaveRequest.count({
+          where: {
+            status: "PENDING",
+            ...(leaveScope.kind === "branches" ? { branchId: { in: leaveScope.branchIds } } : {}),
+          },
+        });
 
   // Sidebar collapsed/expanded state persists across reloads via a cookie
   // the Sidebar primitive itself writes (see components/ui/sidebar.tsx);
@@ -29,6 +44,7 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
       <AppSidebar
         user={{ name: session.name, email: session.email }}
         permissions={userPermissions}
+        badges={{ pendingLeave }}
       />
       <SidebarInset>
         <SiteHeader />

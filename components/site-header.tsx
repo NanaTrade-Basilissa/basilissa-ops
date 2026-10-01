@@ -23,6 +23,8 @@ const ROUTE_LABELS: Record<string, string> = {
   attendance: "Attendance",
   shifts: "Shifts",
   policy: "Attendance Policy",
+  payroll: "Payroll",
+  leave: "Leave",
   assessments: "Assessments",
   "aptitude-tests": "Aptitude Tests",
   feedback: "Customer Feedbacks",

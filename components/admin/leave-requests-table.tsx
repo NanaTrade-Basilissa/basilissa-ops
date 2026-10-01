@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { createColumnHelper } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { LeaveReviewDialog } from "@/components/admin/leave-review-dialog";
 import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
 import { TableRowActions } from "@/components/admin/table-row-actions";
-import { CalendarCheck, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, XCircle } from "lucide-react";
 
 export interface SerializedLeaveRequest {
   id: string;
@@ -77,6 +78,8 @@ function getStatusBadge(status: SerializedLeaveRequest["status"]) {
   }
 }
 
+const columnHelper = createColumnHelper<typeof dataTableFeatures, SerializedLeaveRequest>();
+
 export function LeaveRequestsTable({
   requests,
   canReview = false,
@@ -86,127 +89,122 @@ export function LeaveRequestsTable({
 }) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
-  if (requests.length === 0) {
-    return (
-      <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center">
-        <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-          <CalendarCheck className="size-5" />
+  const columns = columnHelper.columns([
+    columnHelper.accessor("employeeName", {
+      header: "Employee",
+      cell: ({ row }) => (
+        <div className="space-y-0.5">
+          <span className="font-medium text-foreground">{row.original.employeeName}</span>
+          <span className="block font-mono text-xs text-muted-foreground">
+            {row.original.employeeCode}
+            {row.original.jobTitle ? <span className="font-sans"> &middot; {row.original.jobTitle}</span> : null}
+          </span>
         </div>
-        <h3 className="mt-3 text-sm font-semibold text-foreground">No leave requests</h3>
-        <p className="mt-1 text-xs text-muted-foreground max-w-sm">
-          No employee leave or day-off requests have been submitted for the selected filter.
+      ),
+    }),
+    columnHelper.accessor("branchName", {
+      header: "Branch",
+      cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue() || "-"}</span>,
+    }),
+    columnHelper.accessor("type", {
+      header: "Type",
+      cell: (info) => getLeaveTypeBadge(info.getValue()),
+    }),
+    columnHelper.display({
+      id: "dates",
+      header: "Requested Dates",
+      cell: ({ row }) => (
+        <div className="space-y-0.5">
+          <span className="font-medium text-foreground">
+            {row.original.startDate}
+            {row.original.startDate !== row.original.endDate ? ` to ${row.original.endDate}` : ""}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {row.original.daysCount} {row.original.daysCount === 1 ? "day" : "days"}
+          </span>
+        </div>
+      ),
+    }),
+    columnHelper.accessor("reason", {
+      header: "Reason",
+      cell: (info) => (
+        <p className="max-w-[280px] truncate" title={info.getValue()}>
+          {info.getValue()}
         </p>
-      </div>
-    );
-  }
+      ),
+    }),
+    columnHelper.accessor("status", {
+      header: "Status",
+      cell: (info) => getStatusBadge(info.getValue()),
+    }),
+    columnHelper.display({
+      id: "review",
+      header: "Review Details",
+      cell: ({ row }) =>
+        row.original.reviewedBy ? (
+          <div className="space-y-0.5">
+            <span className="font-medium text-foreground">{row.original.reviewedBy}</span>
+            {row.original.managerNotes && (
+              <span className="block max-w-[180px] truncate text-xs text-muted-foreground" title={row.original.managerNotes}>
+                &ldquo;{row.original.managerNotes}&rdquo;
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    }),
+    ...(canReview
+      ? [
+          columnHelper.display({
+            id: "actions",
+            header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
+            cell: ({ row }) => {
+              const r = row.original;
+              return (
+                <div className="flex justify-end">
+                  {r.status === "PENDING" ? (
+                    <TableRowActions
+                      actions={[
+                        {
+                          label: "Review request",
+                          icon: Clock,
+                          dialog: (props) => (
+                            <LeaveReviewDialog
+                              {...props}
+                              leaveRequestId={r.id}
+                              employeeName={r.employeeName}
+                              employeeCode={r.employeeCode}
+                              leaveType={r.type}
+                              startDate={r.startDate}
+                              endDate={r.endDate}
+                              daysCount={r.daysCount}
+                              reason={r.reason}
+                              branchName={r.branchName}
+                            />
+                          ),
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Settled</span>
+                  )}
+                </div>
+              );
+            },
+          }),
+        ]
+      : []),
+  ]);
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="w-[200px] text-xs font-semibold">Employee</TableHead>
-              <TableHead className="text-xs font-semibold">Branch</TableHead>
-              <TableHead className="text-xs font-semibold">Type</TableHead>
-              <TableHead className="text-xs font-semibold">Requested Dates</TableHead>
-              <TableHead className="min-w-[200px] text-xs font-semibold">Reason</TableHead>
-              <TableHead className="text-xs font-semibold">Status</TableHead>
-              <TableHead className="text-xs font-semibold">Review Details</TableHead>
-              {canReview && <TableHead className="text-right text-xs font-semibold">Action</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {requests.map((r) => (
-              <TableRow key={r.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedEmployeeId(r.employeeId)}
-                    className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
-                  >
-                    {r.employeeName}
-                  </button>
-                  <div className="text-[11px] text-muted-foreground">{r.employeeCode} {r.jobTitle ? `• ${r.jobTitle}` : ""}</div>
-                </TableCell>
-
-                <TableCell className="text-xs text-muted-foreground">
-                  {r.branchName || "—"}
-                </TableCell>
-
-                <TableCell className="text-xs">
-                  {getLeaveTypeBadge(r.type)}
-                </TableCell>
-
-                <TableCell className="text-xs">
-                  <div className="font-medium text-foreground">
-                    {r.startDate} {r.startDate !== r.endDate ? `to ${r.endDate}` : ""}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {r.daysCount} {r.daysCount === 1 ? "day" : "days"}
-                  </div>
-                </TableCell>
-
-                <TableCell className="text-xs text-foreground max-w-[280px]">
-                  <p className="truncate" title={r.reason}>
-                    {r.reason}
-                  </p>
-                </TableCell>
-
-                <TableCell className="text-xs">
-                  {getStatusBadge(r.status)}
-                </TableCell>
-
-                <TableCell className="text-xs text-muted-foreground">
-                  {r.reviewedBy ? (
-                    <div>
-                      <span className="font-medium text-foreground">{r.reviewedBy}</span>
-                      {r.managerNotes && (
-                        <div className="text-[11px] text-muted-foreground truncate max-w-[180px]" title={r.managerNotes}>
-                          &ldquo;{r.managerNotes}&rdquo;
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
-
-                {canReview && (
-                  <TableCell className="text-right text-xs">
-                    {r.status === "PENDING" ? (
-                      <TableRowActions
-                        actions={[
-                          {
-                            label: "Review request",
-                            icon: Clock,
-                            dialog: (props) => (
-                              <LeaveReviewDialog
-                                {...props}
-                                leaveRequestId={r.id}
-                                employeeName={r.employeeName}
-                                employeeCode={r.employeeCode}
-                                leaveType={r.type}
-                                startDate={r.startDate}
-                                endDate={r.endDate}
-                                daysCount={r.daysCount}
-                                reason={r.reason}
-                                branchName={r.branchName}
-                              />
-                            ),
-                          },
-                        ]}
-                      />
-                    ) : (
-                      <span className="text-[11px] text-muted-foreground">Settled</span>
-                    )}
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        columns={columns}
+        data={requests}
+        emptyMessage="No leave or day-off requests have been submitted."
+        onRowClick={(row) => setSelectedEmployeeId(row.employeeId)}
+      />
       <EmployeeDetailSheet
         employeeId={selectedEmployeeId}
         open={selectedEmployeeId !== null}

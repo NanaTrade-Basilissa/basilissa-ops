@@ -726,8 +726,10 @@ export async function reviewLeaveRequestAction(
       managerNotes,
     });
 
-    revalidatePath("/admin/attendance");
+    revalidatePath("/admin/leave");
     revalidatePath("/admin/shifts");
+    // The pending count badge lives in the admin layout.
+    revalidatePath("/admin", "layout");
 
     return {
       ok: true,

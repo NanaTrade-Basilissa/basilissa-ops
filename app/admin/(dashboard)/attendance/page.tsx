@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, CalendarCheck, Clock, TriangleAlert, Users } from "lucide-react";
+import { redirect } from "next/navigation";
+import { AlertTriangle, Clock, TriangleAlert, Users } from "lucide-react";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import {
   employeeLookup,
   listAttendanceDays,
   summariseDay,
-  getTimesheetSummary,
   getLiveFloorStatus,
   listPendingExceptions,
 } from "@/lib/modules/attendance/server";
@@ -21,11 +21,8 @@ import type { EmployeeOption } from "@/components/admin/manual-punch-dialog";
 import { AttendanceFilters } from "@/components/admin/attendance-filters";
 import { AttendanceTable } from "@/components/admin/attendance-table";
 import { LiveFloorBoard } from "@/components/admin/live-floor-board";
-import { TimesheetFilters } from "@/components/admin/timesheet-filters";
-import { TimesheetsTable } from "@/components/admin/timesheets-table";
 import { ExceptionsFilters } from "@/components/admin/exceptions-filters";
 import { ExceptionsTable } from "@/components/admin/exceptions-table";
-import { LeaveRequestsTable, type SerializedLeaveRequest } from "@/components/admin/leave-requests-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 
@@ -56,6 +53,24 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
   const { actor, scope } = await requireAnyBranchPermission("attendance:read");
   const raw = await searchParams;
 
+  // Leave and timesheets moved to their own pages. Keep old bookmarks working.
+  if (first(raw.view) === "leave") {
+    const params = new URLSearchParams();
+    for (const key of ["branchId", "search"]) {
+      const value = first(raw[key]);
+      if (value) params.set(key, value);
+    }
+    redirect(`/admin/leave${params.size ? `?${params}` : ""}`);
+  }
+  if (first(raw.view) === "timesheets") {
+    const params = new URLSearchParams();
+    for (const key of ["startDate", "endDate", "branchId", "search"]) {
+      const value = first(raw[key]);
+      if (value) params.set(key, value);
+    }
+    redirect(`/admin/payroll${params.size ? `?${params}` : ""}`);
+  }
+
   const view = (first(raw.view) as AttendanceView) || "daily";
   const now = new Date();
   const todayKey = dateKeyInZone(now, DISPLAY_TIMEZONE);
@@ -64,17 +79,6 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
   const exceptionsOnly = first(raw.exceptions) === "1";
   const search = first(raw.search);
   const flag = first(raw.flag);
-
-  // Default timesheet range: Monday of this week to today
-  const dayOfWeek = now.getDay();
-  const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diffToMon);
-  const defaultStartDate = dateKeyInZone(monday, DISPLAY_TIMEZONE);
-  const defaultEndDate = todayKey;
-
-  const startDate = first(raw.startDate) ?? defaultStartDate;
-  const endDate = first(raw.endDate) ?? defaultEndDate;
 
   const canManualEntry =
     can(actor, "attendance:manual_entry") ||
@@ -100,16 +104,6 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
       : await prisma.attendanceDay.count({
           where: {
             status: "NEEDS_REVIEW",
-            ...(scope.kind === "branches" ? { branchId: { in: scope.branchIds } } : {}),
-          },
-        });
-
-  const pendingLeaveCount =
-    scope.kind === "none"
-      ? 0
-      : await prisma.leaveRequest.count({
-          where: {
-            status: "PENDING",
             ...(scope.kind === "branches" ? { branchId: { in: scope.branchIds } } : {}),
           },
         });
@@ -143,7 +137,6 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
             branchId={branchId}
             date={date}
             exceptionsCount={exceptionsCount}
-            leaveRequestsCount={pendingLeaveCount}
           />
         </div>
         <div className="shrink-0 pb-2">
@@ -179,19 +172,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
         />
       )}
 
-      {/* View 3: Timesheets & Payroll */}
-      {view === "timesheets" && (
-        <TimesheetsView
-          scope={scope}
-          branches={branches}
-          startDate={startDate}
-          endDate={endDate}
-          branchId={branchId}
-          search={search}
-        />
-      )}
-
-      {/* View 4: Review Queue */}
+      {/* View 3: Review Queue */}
       {view === "exceptions" && (
         <ExceptionsQueueView
           scope={scope}
@@ -203,16 +184,6 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
         />
       )}
 
-      {/* View 5: Leave Requests */}
-      {view === "leave" && (
-        <LeaveRequestsView
-          scope={scope}
-          _branches={branches}
-          branchId={branchId}
-          search={search}
-          canWrite={canWrite}
-        />
-      )}
     </div>
   );
 }
@@ -334,42 +305,6 @@ async function LiveFloorView({
   return <LiveFloorBoard data={liveData} branches={branches} />;
 }
 
-async function TimesheetsView({
-  scope,
-  branches,
-  startDate,
-  endDate,
-  branchId,
-  search,
-}: {
-  scope: Parameters<typeof getTimesheetSummary>[0];
-  branches: { id: string; name: string }[];
-  startDate: string;
-  endDate: string;
-  branchId?: string;
-  search?: string;
-}) {
-  const timesheetData = await getTimesheetSummary(scope, {
-    startDate,
-    endDate,
-    branchId,
-    search,
-  });
-
-  return (
-    <div className="space-y-6">
-      <TimesheetFilters
-        branches={branches}
-        startDate={startDate}
-        endDate={endDate}
-        branchId={branchId}
-        search={search}
-      />
-      <TimesheetsTable data={timesheetData} />
-    </div>
-  );
-}
-
 async function ExceptionsQueueView({
   scope,
   branches,
@@ -444,121 +379,5 @@ async function ExceptionsQueueView({
   );
 }
 
-async function LeaveRequestsView({
-  scope,
-  _branches,
-  branchId,
-  search,
-  canWrite,
-}: {
-  scope: Parameters<typeof listPendingExceptions>[0];
-  _branches: { id: string; name: string }[];
-  branchId?: string;
-  search?: string;
-  canWrite: boolean;
-}) {
-  const branchFilter =
-    branchId
-      ? { branchId }
-      : scope.kind === "branches"
-        ? { branchId: { in: scope.branchIds } }
-        : {};
-
-  const requests = await prisma.leaveRequest.findMany({
-    where: {
-      ...branchFilter,
-      ...(search
-        ? {
-            employee: {
-              OR: [
-                { firstName: { contains: search, mode: "insensitive" } },
-                { lastName: { contains: search, mode: "insensitive" } },
-                { employeeCode: { contains: search, mode: "insensitive" } },
-              ],
-            },
-          }
-        : {}),
-    },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-    include: {
-      employee: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          employeeCode: true,
-          jobTitle: true,
-        },
-      },
-      branch: {
-        select: { id: true, name: true },
-      },
-      reviewer: {
-        select: { id: true, name: true },
-      },
-    },
-  });
-
-  const pendingCount = requests.filter((r) => r.status === "PENDING").length;
-  const approvedCount = requests.filter((r) => r.status === "APPROVED").length;
-  const rejectedCount = requests.filter((r) => r.status === "REJECTED").length;
-
-  const serializedRequests: SerializedLeaveRequest[] = requests.map((r) => {
-    const start = r.startDate.toISOString().slice(0, 10);
-    const end = r.endDate.toISOString().slice(0, 10);
-    const dayMs = 24 * 60 * 60 * 1000;
-    const daysCount = Math.max(
-      1,
-      Math.round((r.endDate.getTime() - r.startDate.getTime()) / dayMs) + 1,
-    );
-
-    return {
-      id: r.id,
-      employeeId: r.employeeId,
-      employeeName: `${r.employee.firstName} ${r.employee.lastName}`.trim(),
-      employeeCode: r.employee.employeeCode,
-      jobTitle: r.employee.jobTitle,
-      branchId: r.branchId,
-      branchName: r.branch?.name ?? null,
-      type: r.type,
-      startDate: start,
-      endDate: end,
-      daysCount,
-      reason: r.reason,
-      status: r.status,
-      reviewedBy: r.reviewer?.name ?? null,
-      reviewedAt: r.reviewedAt?.toISOString() ?? null,
-      managerNotes: r.managerNotes,
-      createdAt: r.createdAt.toISOString(),
-    };
-  });
-
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard
-          label="Pending Requests"
-          value={String(pendingCount)}
-          icon={Clock}
-        />
-        <StatCard
-          label="Approved Leave"
-          value={String(approvedCount)}
-          icon={CalendarCheck}
-        />
-        <StatCard
-          label="Declined"
-          value={String(rejectedCount)}
-          icon={AlertTriangle}
-        />
-      </div>
-
-      <LeaveRequestsTable
-        requests={serializedRequests}
-        canReview={canWrite}
-      />
-    </div>
-  );
-}
 
 

@@ -15,6 +15,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
@@ -29,10 +30,12 @@ import {
 export function AppSidebar({
   user,
   permissions = [],
+  badges = {},
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user: { name: string; email: string };
   permissions?: string[];
+  badges?: Partial<Record<NonNullable<NavItem["badge"]>, number>>;
 }) {
   const pathname = usePathname();
   const isActive = (item: NavItem) => (item.exact ? pathname === item.href : pathname.startsWith(item.href));
@@ -86,6 +89,11 @@ export function AppSidebar({
                         <item.icon />
                         <span>{item.label}</span>
                       </SidebarMenuButton>
+                      {item.badge && (badges[item.badge] ?? 0) > 0 && (
+                        <SidebarMenuBadge className="bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                          {badges[item.badge]}
+                        </SidebarMenuBadge>
+                      )}
                     </SidebarMenuItem>
                   ))}
                 </SidebarMenu>

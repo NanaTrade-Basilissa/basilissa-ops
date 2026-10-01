@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Brain,
+  CalendarCheck,
   CalendarClock,
   CalendarRange,
   ClipboardCheck,
@@ -16,6 +17,7 @@ import {
   Store,
   UserCog,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { Permission } from "@/lib/modules/identity/authorization";
@@ -32,6 +34,8 @@ export type NavItem = {
   icon: LucideIcon;
   exact: boolean;
   permission?: Permission;
+  /** Key into the counts the layout passes to the sidebar, shown as a badge. */
+  badge?: "pendingLeave";
 };
 
 export type NavGroup = {
@@ -60,6 +64,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/admin/attendance", label: "Attendance", icon: ClipboardList, exact: true, permission: "attendance:read" },
       { href: "/admin/shifts", label: "Shifts", icon: CalendarRange, exact: false, permission: "schedule:read" },
       { href: "/admin/attendance/policy", label: "Attendance policy", icon: CalendarClock, exact: false, permission: "policy:read" },
+      { href: "/admin/leave", label: "Leave", icon: CalendarCheck, exact: false, permission: "attendance:read", badge: "pendingLeave" },
+      { href: "/admin/payroll", label: "Payroll", icon: Wallet, exact: false, permission: "attendance:read" },
     ],
   },
   {

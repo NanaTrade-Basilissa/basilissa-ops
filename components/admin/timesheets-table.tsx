@@ -15,8 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/admin/stat-card";
-import { Empty, EmptyDescription } from "@/components/ui/empty";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { createColumnHelper } from "@tanstack/react-table";
+import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
 import { TableRowActions } from "@/components/admin/table-row-actions";
 import type { TimesheetSummaryData } from "@/lib/modules/attendance/queries";
@@ -32,6 +32,10 @@ function formatHoursDecimal(minutes: number): string {
   return (minutes / 60).toFixed(2);
 }
 
+type TimesheetRow = TimesheetSummaryData["rows"][number];
+
+const columnHelper = createColumnHelper<typeof dataTableFeatures, TimesheetRow>();
+
 export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
@@ -46,6 +50,93 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
     totalExceptions,
     rows,
   } = data;
+
+  const columns = columnHelper.columns([
+    columnHelper.accessor("name", {
+      header: "Employee",
+      cell: ({ row }) => (
+        <div className="space-y-0.5">
+          <span className="font-medium text-foreground">{row.original.name}</span>
+          {row.original.employeeCode && (
+            <span className="block font-mono text-xs text-muted-foreground">
+              {row.original.employeeCode}
+            </span>
+          )}
+        </div>
+      ),
+    }),
+    columnHelper.accessor("branchName", {
+      header: "Branch",
+      cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue()}</span>,
+    }),
+    columnHelper.display({
+      id: "days",
+      header: "Days (Work/Sched)",
+      cell: ({ row }) => (
+        <span className="text-sm">
+          <span className="font-medium text-foreground">{row.original.daysWorked}</span>
+          <span className="text-muted-foreground"> / {row.original.daysScheduled}</span>
+        </span>
+      ),
+    }),
+    columnHelper.accessor("netWorkedMinutes", {
+      header: "Net Worked",
+      cell: (info) => <span className="font-medium text-foreground">{formatDuration(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("regularMinutes", {
+      header: "Regular",
+      cell: (info) => <span className="text-muted-foreground">{formatDuration(info.getValue())}</span>,
+    }),
+    columnHelper.accessor("overtimeMinutes", {
+      header: "Overtime",
+      cell: (info) =>
+        info.getValue() > 0 ? (
+          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+            +{formatDuration(info.getValue())}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    }),
+    columnHelper.display({
+      id: "late",
+      header: "Late",
+      cell: ({ row }) =>
+        row.original.lateCount > 0 ? (
+          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+            {row.original.lateCount}x ({row.original.lateMinutes}m)
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    }),
+    columnHelper.accessor("exceptionsCount", {
+      header: "Exceptions",
+      cell: (info) =>
+        info.getValue() > 0 ? (
+          <Badge variant="destructive">{info.getValue()} need review</Badge>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    }),
+    columnHelper.display({
+      id: "actions",
+      header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <TableRowActions
+            actions={[
+              {
+                label: "Daily view",
+                href: `/admin/attendance?branchId=${row.original.branchId}&date=${startDate}`,
+                icon: Calendar,
+              },
+            ]}
+          />
+        </div>
+      ),
+    }),
+  ]);
 
   function exportPayrollCsv() {
     const headers = [
@@ -177,99 +268,12 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
         </div>
       </div>
 
-      {/* Table */}
-      {rows.length === 0 ? (
-        <Empty className="border">
-          <EmptyDescription>No attendance recorded for this period.</EmptyDescription>
-        </Empty>
-      ) : (
-        <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="text-xs font-semibold">Employee</TableHead>
-                <TableHead className="text-xs font-semibold">Branch</TableHead>
-                <TableHead className="text-xs font-semibold text-center">Days (Work/Sched)</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Net Worked</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Regular</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Overtime</TableHead>
-                <TableHead className="text-xs font-semibold text-center">Late</TableHead>
-                <TableHead className="text-xs font-semibold text-center">Exceptions</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.employeeId} className="hover:bg-muted/30">
-                  <TableCell className="font-medium text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedEmployeeId(row.employeeId)}
-                      className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
-                    >
-                      {row.name}
-                    </button>
-                    {row.employeeCode && (
-                      <div className="font-mono text-[11px] text-muted-foreground">
-                        {row.employeeCode}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{row.branchName}</TableCell>
-                  <TableCell className="text-xs text-center">
-                    <span className="font-medium text-foreground">{row.daysWorked}</span>
-                    <span className="text-muted-foreground"> / {row.daysScheduled}</span>
-                  </TableCell>
-                  <TableCell className="text-xs text-right font-medium text-foreground">
-                    {formatDuration(row.netWorkedMinutes)}
-                  </TableCell>
-                  <TableCell className="text-xs text-right text-muted-foreground">
-                    {formatDuration(row.regularMinutes)}
-                  </TableCell>
-                  <TableCell className="text-xs text-right">
-                    {row.overtimeMinutes > 0 ? (
-                      <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                        +{formatDuration(row.overtimeMinutes)}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs text-center">
-                    {row.lateCount > 0 ? (
-                      <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
-                        {row.lateCount}x ({row.lateMinutes}m)
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs text-center">
-                    {row.exceptionsCount > 0 ? (
-                      <Badge variant="destructive" className="text-xs">
-                        {row.exceptionsCount} need review
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs text-right">
-                    <TableRowActions
-                      actions={[
-                        {
-                          label: "Daily view",
-                          href: `/admin/attendance?branchId=${row.branchId}&date=${startDate}`,
-                          icon: Calendar,
-                        },
-                      ]}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <DataTable
+        columns={columns}
+        data={rows}
+        emptyMessage="No attendance recorded for this period."
+        onRowClick={(row) => setSelectedEmployeeId(row.employeeId)}
+      />
       <EmployeeDetailSheet
         employeeId={selectedEmployeeId}
         open={selectedEmployeeId !== null}

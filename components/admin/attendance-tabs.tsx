@@ -3,25 +3,23 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, CalendarCheck, CalendarDays, Clock, FileSpreadsheet } from "lucide-react";
+import { AlertTriangle, CalendarDays, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-export type AttendanceView = "daily" | "live" | "timesheets" | "exceptions" | "leave";
+export type AttendanceView = "daily" | "live" | "exceptions";
 
 export function AttendanceTabs({
   activeView = "daily",
   branchId,
   date,
   exceptionsCount = 0,
-  leaveRequestsCount = 0,
   className,
 }: {
   activeView: AttendanceView;
   branchId?: string;
   date?: string;
   exceptionsCount?: number;
-  leaveRequestsCount?: number;
   className?: string;
 }) {
   const searchParams = useSearchParams();
@@ -64,18 +62,11 @@ export function AttendanceTabs({
   }[] = [
     { id: "daily", label: "Daily Roster", icon: CalendarDays },
     { id: "live", label: "Live Floor Board", icon: Clock },
-    { id: "timesheets", label: "Timesheets & Payroll", icon: FileSpreadsheet },
     {
       id: "exceptions",
       label: "Review Queue",
       icon: AlertTriangle,
       badge: exceptionsCount,
-    },
-    {
-      id: "leave",
-      label: "Leave Requests",
-      icon: CalendarCheck,
-      badge: leaveRequestsCount,
     },
   ];
 
