@@ -1,6 +1,6 @@
 # Basilissa Operations Platform — Implementation Plan & Phases
 
-> **Status:** Planning. No implementation has begun.
+> **Status:** Historical plan, kept for its reasoning. Most of it has since been built; phase 4 (Odoo) and phase 6 (facial verification) are deferred. For which phases are built and what is next, read [HANDOVER](../HANDOVER.md) and the [register](./open-decisions.md); this plan is not updated as work lands.
 > **Date:** 2026-09-05
 > **Baseline:** commit `67481f5` — the live Basilissa Ghana Customer Feedback System
 > **Companion:** [Architecture & Discovery Assessment](./attendance-platform.md)

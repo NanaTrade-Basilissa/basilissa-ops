@@ -1,6 +1,6 @@
 # Basilissa Operations Platform — Architecture & Discovery Assessment
 
-> **Status:** Discovery / architecture proposal. No implementation.
+> **Status:** Discovery / architecture proposal, written before the build. Much of it is now implemented; read it for *why* the design is shaped as it is, and [HANDOVER](../HANDOVER.md) and the [register](./open-decisions.md) for what is true today.
 > **Revision:** 2 — 2026-09-05. Revised to incorporate multi-provider attendance
 > (mobile, fingerprint, manual), Odoo as a non-blocking ERP integration, and
 > capability-independent deployment. Revision 1 assumed a mobile-first,

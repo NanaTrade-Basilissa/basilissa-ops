@@ -8,18 +8,24 @@ ERP synchronisation. Next.js 16, React 19, Postgres 16, Prisma 6.
 
 ## Read these before changing anything
 
-The code is not the state of this project. These are:
+The code is not the state of this project. These are, and they are layered so
+a task loads only what it needs. **Start at [`docs/README.md`](docs/README.md)**,
+which maps "I am about to..." to the right pages.
 
 | File | What it holds |
 | --- | --- |
 | `docs/architecture/open-decisions.md` | **Start here.** Every provisional value, deferral, known gap and unknown, with why. Red items are blocked on the user. |
-| `docs/HANDOVER.md` | Where the work stopped, and **the one task to start on**, specified. |
-| `docs/architecture/decisions/` | ADRs — decisions that are expensive to reverse. 0001 runtime topology and portability, 0002 no Redis. |
-| `docs/architecture/implementation-plan.md` | Phases 0-8, and which unknowns gate each. |
+| `docs/HANDOVER.md` | Where the work stopped, and **the next task** (section 0). |
+| `docs/context/` | How the system fits together: `system-overview`, `codebase-map`, `domain-glossary`, `data-model`, `auth-and-permissions`, `attendance-pipeline`, `background-work-and-notifications`, `conventions`, `workflows` (recipes), `testing-and-verification`, `environments-and-deploy`. Read the one your task touches. |
+| `docs/specs/` | Feature specs written before building. |
+| `docs/architecture/decisions/` | ADRs: decisions that are expensive to reverse. 0001 runtime topology and portability, 0002 no Redis. |
+| `docs/architecture/implementation-plan.md` | Phases 0-8 and which unknowns gate each. Historical; not updated as work lands. |
 | `docs/architecture/attendance-platform.md` | The architecture assessment the plan came from. |
 
-Update the register in the same commit as the work. An entry that says
-"not built" about something you just built is worse than no entry.
+Update the register, the relevant `docs/context/` page and the handover in the
+same commit as the work. An entry that says "not built" about something you just
+built is worse than no entry. Facts that live in code (a permission list, an enum)
+are named by file in the docs, not copied; see the rules in `docs/README.md`.
 
 ## Gates
 

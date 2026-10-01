@@ -1,25 +1,40 @@
-# Basilissa Ghana — Customer Feedback System
+# Basilissa Operations Platform
 
-A production-ready customer feedback system for Basilissa Ghana: a mobile-first,
-QR-driven feedback form for customers (`/feedback`) and a protected analytics
-dashboard for staff (`/admin`).
+Operations software for Basilissa Ghana's retail branches. It began as a
+customer feedback system and now also covers staff attendance (mobile app GPS
+geofencing and fingerprint terminals), scheduling and rotas, leave, HR
+assessments and aptitude tests, roles and permissions, and an audit trail.
 
-- Customers scan a branch QR code, pick their branch (or it's preselected from
-  the QR link), answer exactly five fixed rating questions, and submit —
-  anonymously. No login, no free text, no name/phone/email collected.
-- Every submission is saved to PostgreSQL, emailed to a configured list of
-  staff addresses via Resend, and shows up in the admin dashboard immediately.
-- Admins sign in with email/password, manage branches (create, edit,
-  activate/deactivate, download a QR code), and explore feedback analytics
-  with filters, charts, and per-branch drill-downs.
+| Surface | Where | For |
+| --- | --- | --- |
+| Admin web | `/admin` | Managers, HR, administrators |
+| Customer feedback | `/feedback` (via a branch QR code) | Customers, anonymously |
+| Mobile API | `/api/v1` (docs at `/api-docs`) | The staff mobile app (separate repository) |
+| Terminal ingest | `/iclock` | ZKTeco fingerprint terminals |
+| Worker | `pnpm worker` | Background jobs and sweeps |
+
+## Start here
+
+**The code is not the state of this project.** Read [`docs/README.md`](./docs/README.md),
+which routes you to what you need:
+
+- [`docs/context/`](./docs/context/): how the system fits together (overview,
+  codebase map, glossary, data model, auth, attendance pipeline, conventions,
+  workflows, testing, deploy).
+- [`docs/architecture/open-decisions.md`](./docs/architecture/open-decisions.md):
+  every provisional value, deferral and known gap.
+- [`docs/HANDOVER.md`](./docs/HANDOVER.md): where work stopped and what is next.
+- [`CLAUDE.md`](./CLAUDE.md): working rules and the invariants that are easy to
+  break (also read by AI coding agents).
 
 ## Tech stack
 
-Next.js 16 (App Router, TypeScript) · PostgreSQL (Docker) · Prisma ·
-Tailwind CSS v4 · shadcn/ui · Recharts · hand-rolled credentials auth (`jose`
-signed JWT session cookies, following Next.js's own documented
-["stateless sessions"](https://nextjs.org/docs/app/guides/authentication)
-pattern — see "Why not Auth.js?" below) · Resend · Zod · pnpm.
+Next.js 16 (App Router, React 19, TypeScript) · PostgreSQL 16 · Prisma 6 ·
+Tailwind CSS v4 · shadcn/ui · Recharts · TanStack Table · Zod · pnpm ·
+hand-rolled credentials auth with `jose` signed session cookies backed by a
+`sessions` table (see "Why not Auth.js?" below) · email, SMS and push through
+external gateways (Nodemailer service, Hubtel, Firebase Cloud Messaging) ·
+a Postgres-backed job queue and a separate worker process.
 
 ---
 
@@ -29,9 +44,9 @@ pattern — see "Why not Auth.js?" below) · Resend · Zod · pnpm.
 - pnpm 10.x (`corepack enable` or `npm install -g pnpm`)
 - Docker Desktop / Docker Engine + Docker Compose v2 (`docker compose ...`,
   not the old `docker-compose`)
-- A [Resend](https://resend.com) account (free tier is fine) if you want real
-  emails to send — the app runs and accepts feedback without one; email
-  sending just logs an error and never blocks a submission.
+- Optional: an email gateway (`EMAIL_SERVER_URL`), an SMS gateway and Firebase
+  credentials. The app runs without any of them; email is skipped and SMS and push
+  are simulated, and nothing blocks a submission.
 
 ## Environment setup
 
@@ -47,8 +62,7 @@ can keep the defaults, but you should:
 - Generate a real `SESSION_SECRET`: `openssl rand -base64 32`
 - Set `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` / `SEED_ADMIN_NAME` to what
   you want your first admin login to be
-- Add a real `RESEND_API_KEY` and a `RESEND_FROM_EMAIL` on a domain verified
-  with Resend if you want notification emails to actually deliver
+- Set `EMAIL_SERVER_URL` if you want notification emails to actually deliver
 
 See every variable's purpose and default in [`.env.example`](./.env.example).
 
@@ -294,34 +308,23 @@ other admin route is). Click **Download QR PNG** to save it for printing.
 ## Project structure
 
 ```
-app/
-  feedback/                 # public customer flow (/feedback)
-  admin/
-    login/                   # public admin login
-    (dashboard)/              # route group: everything behind requireAdmin()
-      page.tsx                 # dashboard (stats, filters, charts, recent list)
-      branches/                 # list / new / edit / [id] analytics detail
-  api/
-    feedback/route.ts          # POST — the one public write API (rate-limited)
-    admin/branches/[id]/qr/     # GET — QR PNG (protected)
-    health/route.ts              # GET — DB connectivity check (Docker healthcheck)
-components/
-  ui/                        # shadcn-style primitives (Button, Card, Table, …)
-  feedback/                   # the 5-question wizard
-  admin/                       # dashboard filters, charts, forms, nav
-  brand/logo.tsx                 # placeholder brand mark — see "Theming" below
-lib/
-  auth/                      # session.ts (jose JWT), dal.ts, actions.ts
-  analytics.ts                 # every dashboard metric/chart query
-  validations.ts                # all Zod schemas
-  rate-limit.ts                  # shared rate limiter (Postgres-backed)
-  email.ts                        # Resend notification template + send
-  prisma.ts, env.ts, constants.ts, date.ts
-prisma/
-  schema.prisma, migrations/, seed.ts
-tests/                       # vitest — see "Testing" below
-docker/start.sh              # container entrypoint (migrate deploy → start)
+app/                  Next.js routes: admin (dashboard), public pages, api/v1, iclock
+components/           ui/ (shadcn), admin/, aptitude/, assessment/, feedback/, brand/
+lib/modules/<domain>/ domain logic: identity, attendance, employees, branches,
+                      devices, feedback, questions, assessments, aptitude
+lib/platform/         shared infrastructure: prisma, env, jobs, audit, email, sms,
+                      push, slack, rate-limit, date, logger
+lib/email-templates/  email HTML
+worker/               background worker entrypoint and job registry
+prisma/               schema, migrations, seeds, operational scripts
+tests/                vitest, one flat folder named by subject
+docs/                 context, architecture, specs, handover (start at docs/README.md)
+docker/start.sh       container entrypoint (PROCESS_ROLE selects app or worker)
 ```
+
+The full map, with module entry points and a task-to-file table, is in
+[`docs/context/codebase-map.md`](./docs/context/codebase-map.md). The layering
+rules are in [`lib/README.md`](./lib/README.md).
 
 ## Theming
 
@@ -346,7 +349,7 @@ signed, `httpOnly`, `Secure`, `SameSite=Lax` JWT session cookies via
 documents as its recommended "stateless sessions" approach, including the
 proxy-level optimistic check + Data Access Layer verification
 defense-in-depth pattern this project follows (`proxy.ts` +
-`lib/auth/dal.ts`). Next 16 is very new; Auth.js v5's provider/adapter
+`lib/modules/identity/dal.ts`). Next 16 is very new; Auth.js v5's provider/adapter
 configuration adds real complexity and a moving-target compatibility
 surface for comparatively little benefit here — one credentials provider,
 one session shape, no OAuth. The result is smaller, fully auditable, and
@@ -358,7 +361,7 @@ uses nothing beyond direct dependencies the stack already requires
 - Passwords hashed with bcrypt (`bcryptjs`, cost factor 12) — never stored
   or logged in plaintext.
 - Session cookies: `httpOnly`, `Secure` in production, `SameSite=Lax`,
-  8-hour expiry, verified server-side on every protected request (never
+  7-day sliding expiry, verified server-side on every protected request (never
   trusted from the client).
 - **Sessions are revocable.** The cookie is a signed JWT carrying only
   pointers (user id, session id, session version); the authoritative record
@@ -485,27 +488,19 @@ existing `logger.error` call starts reporting, with no call sites touched.
 ## Testing
 
 ```bash
-pnpm test          # vitest run — all tests, once
-pnpm test:watch    # vitest — watch mode
-pnpm typecheck      # tsc --noEmit
-pnpm lint           # eslint
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # the four gates
+pnpm test:watch                                          # while working
 ```
 
-Tests live in [`tests/`](./tests) and cover: submission validation
-(`validations.test.ts`), analytics calculations — distribution/trend
-bucketing, rounding (`analytics.test.ts`), the rate limiter
-(`rate-limit.test.ts`), admin session JWT signing/verification
-(`session.test.ts`), admin route protection (`proxy.test.ts`), the feedback
-API end-to-end against a mocked Prisma client — success, incomplete
-answers, inactive branch, unknown branch, and duplicate-submission
-idempotency (`api-feedback.test.ts`), and seed-data well-formedness /
-idempotency preconditions (`seed-data.test.ts`). None of these need a
-running database — Prisma is mocked where a test needs it.
+All four gates must pass, unpiped, before every commit. What the tests can and
+cannot prove, how to verify database-bound work on a scratch database, and how to
+verify auth changes with a real session are in
+[`docs/context/testing-and-verification.md`](./docs/context/testing-and-verification.md).
 
 ## Production deployment considerations
 
 - **Change every default**: `SESSION_SECRET`, `POSTGRES_PASSWORD`,
-  `SEED_ADMIN_PASSWORD`, and use a real `RESEND_API_KEY`/`RESEND_FROM_EMAIL`.
+  `SEED_ADMIN_PASSWORD`, and set `EMAIL_SERVER_URL`, `CRON_SECRET` and the SMS and Firebase credentials. See [`docs/context/environments-and-deploy.md`](./docs/context/environments-and-deploy.md).
 - **Don't expose Postgres publicly** — keep the `ports:` mapping on
   `postgres` commented out (as shipped); only `app` should reach it.
 - **Put the app behind HTTPS** (a reverse proxy / load balancer terminating
@@ -533,14 +528,14 @@ running database — Prisma is mocked where a test needs it.
 
 ## Known limitations
 
-- Elapsed `rate_limit_counters` rows are purged opportunistically (roughly
-  one request in a hundred). This moves onto the job runner in Phase 0.
-- No password-reset flow for admins (out of scope for this brief) — reset
-  a forgotten password by updating `passwordHash` directly, or by deleting
-  the `AdminUser` row and re-seeding.
-- The placeholder brand mark/colours are ready to swap in Basilissa's real
-  logo and palette (see "Theming") but aren't the final brand assets.
-- Automated tests run against a mocked Prisma client rather than a real
-  Postgres instance. The manual verification flow above (seed → submit
-  feedback → check the dashboard) is the full end-to-end check against a
-  real database.
+The authoritative list is
+[`docs/architecture/open-decisions.md`](./docs/architecture/open-decisions.md),
+which records every known gap with its reasoning and what reopens it. Two things
+worth knowing before you start:
+
+- Most tests run against a mocked Prisma client. Anything whose correctness lives
+  in a transaction, constraint or trigger must be verified against a real
+  scratch Postgres database; see
+  [`docs/context/testing-and-verification.md`](./docs/context/testing-and-verification.md).
+- Some attendance policy values are provisional placeholders awaiting the
+  business's real answers (register item A1).

@@ -1,14 +1,21 @@
-# Basilissa Operations Platform — Handover & Status (24 September 2026)
+# Basilissa Operations Platform — Handover & Status (1 October 2026)
 
-This document is the authoritative summary of the current engineering state, what has shipped, and the remaining code-related implementation tasks. It pairs with [`architecture/open-decisions.md`](./architecture/open-decisions.md) and [`architecture/implementation-plan.md`](./architecture/implementation-plan.md).
+This document is the authoritative summary of the current engineering state, what has shipped, and the remaining code-related implementation tasks. It pairs with [`architecture/open-decisions.md`](./architecture/open-decisions.md) and [`architecture/implementation-plan.md`](./architecture/implementation-plan.md). For how the system fits together, start at [`README.md`](./README.md) and [`context/`](./context/).
+
+## 0. The next task
+
+**Build Announcements**, specified in [`specs/announcements.md`](./specs/announcements.md): broadcast messages from the dashboard to staff devices, with an in-app inbox, one active urgent banner, optional acknowledgement, and push, SMS and email as per-send channel choices. The spec ends with the questions that need an answer from the business before the build starts and a phased build order. Phase 1 (schema, permission, audience resolution, inbox rows, and the mobile list and read endpoints) is the starting point.
+
+Nothing else is in flight. Public holidays, cover shifts and rota patterns are built but **not yet migrated in production** (register D4, D5).
 
 ---
 
 ## 1. Current State & CI Status
 
 * **Git Remote**: `origin/main` is up to date (`NanaTrade-Basilissa/basilissa-ops.git`).
-* **Test Suite**: **70 test files, 818 unit & integration tests passing** (`npm test`).
-* **Static Analysis**: 0 TypeScript compilation errors (`tsc --noEmit`), 0 ESLint warnings (`npm run lint`).
+* **Test Suite**: **73 test files, 876 tests passing** (`pnpm test`, verified 1 October 2026).
+* **Static Analysis**: `pnpm typecheck` and `pnpm lint` both exit 0 (verified 1 October 2026).
+* **Branches**: `develop` and `main` are identical at `4b860c3`.
 * **Worker & Container Deployment**:
   * Multi-arch `linux/amd64` Docker images built and pushed:
     * Docker Hub: `akwawcobbold/ac-ops-worker:latest`
@@ -22,7 +29,8 @@ This document is the authoritative summary of the current engineering state, wha
 
 ### A. Core Platform & Identity
 * **Multi-Tier Authorization (RBAC)**: `can(actor, action, resource)` DAL guards with `GLOBAL | REGION | BRANCH` scope support.
-* **MFA Enforcement**: Enforced for `SUPER_ADMIN`, `HR`, and `ADMINISTRATOR` using RFC-compliant TOTP secrets.
+* **MFA**: Enforced for `SUPER_ADMIN`; recommended (prompted, not blocking) for `HR` and `ADMINISTRATOR`. RFC-compliant TOTP, recovery codes, administrator reset. See `MFA_REQUIRED_ROLES` in `lib/modules/identity/constants.ts`.
+* **Custom roles**: Roles screen with a permission matrix; custom roles are built from the granular permission registry (`lib/modules/identity/permissions.ts`).
 * **Session Management**: Stateful session tracking in database with server-side instant revocation via `sessionVersion`.
 * **Audit Ledger**: Append-only audit log tracking mutations across all domains.
 * **Postgres Job Queue**: Durable job queue using PostgreSQL row-level locks (`FOR UPDATE SKIP LOCKED`) with exponential backoff and dead-letter handling.
@@ -61,7 +69,13 @@ This document is the authoritative summary of the current engineering state, wha
 * **Live "Who's In / Who's Late" Floor Screen**: Interactive board (`components/admin/live-floor-board.tsx`) under the **Live Floor** tab (`?view=live`), displaying real-time headcounts (Clocked In, Late, Scheduled, Absent) and current staff punch status.
 * **Exceptions Queue UI**: Dedicated screen (`components/admin/exceptions-table.tsx`) under the **Exceptions** tab (`?view=exceptions`) with one-click resolution modal (`components/admin/resolve-exception-dialog.tsx`) for missing clock-outs/ins, auto-closed shifts, and out-of-geofence punches.
 * **Interactive Attendance Correction UI**: Modal dialog (`components/admin/attendance-correction-dialog.tsx`) supporting typed operations (`ADJUST_TIME`, `VOID_EVENT`, `INSERT_EVENT`) with before-and-after timestamps, controlled reason codes, and manager sign-off.
-* **Automated Shift Reminders & Push Notifications**: Background sweep (`lib/modules/attendance/reminders.ts`) evaluates upcoming shifts 15–60 mins out and dispatches Expo push notifications via `lib/platform/push.ts`. Mobile app registers push tokens via `/api/v1/notifications/push-token` and handles local alerts in `core/services/notifications.ts`.
+* **Automated Shift Reminders & Push Notifications**: Background sweep (`lib/modules/attendance/reminders.ts`) evaluates upcoming shifts 15–60 mins out and dispatches push notifications via `lib/platform/push.ts` (Firebase Cloud Messaging and Expo tokens). Mobile app registers push tokens via `/api/v1/notifications/push-token` and handles local alerts in `core/services/notifications.ts`. Leave decisions also push.
+
+### I. Scheduling, leave and devices
+* **Shifts, assignments and rota**: weekly grid, copy week, bulk assign, one-day overrides, rota patterns with a per-branch Auto rota switch (off by default), public holidays with the bundled Ghana calendar, cover shifts. See `lib/modules/attendance/{schedule,patterns,holidays,cover}.ts` and register D4, D5.
+* **Leave requests**: submitted from the app, reviewed in admin (`app/admin/(dashboard)/leave`).
+* **Device registry**: fingerprint terminals registered and monitored (`devices`, `DeviceLog`, heartbeat); employees linked to terminal PINs.
+* **Store compliance**: public `/privacy` and `/delete-account` pages; an app-store review demo account (register A7).
 
 ---
 

@@ -459,7 +459,10 @@ vendor and a cost, so the choice is deliberately not made here.
 
 ### 🟢 C5 — Module boundary allowlist is growing
 
-**Where:** `PUBLIC_ENTRIES` in `eslint.config.mjs`
+**Where:** `PUBLIC_ENTRIES` and `MODULES` in `eslint.config.mjs`
+
+Separately: the `devices` module is missing from `MODULES`, so its boundaries are
+not enforced yet. Add it when next touching that file.
 
 Private-by-default with an allowlist of public entry-file names. It has been
 extended three times, once per pure-rules file added — `authorization`,
@@ -529,9 +532,12 @@ The lesson worth keeping: the enforcement was verified only against
 unauthenticated requests, which redirect to the login page long before any of
 this runs. That test could not have caught it, and passing it proved nothing.
 
-**One consequence to be aware of:** anyone holding `SUPER_ADMIN`, `HR` or
-`ADMINISTRATOR` is sent to enrolment on their next sign-in and cannot reach the
-dashboard until they finish it.
+**One consequence to be aware of:** anyone holding `SUPER_ADMIN` is sent to
+enrolment on their next sign-in and cannot reach the dashboard until they finish
+it. `HR` and `ADMINISTRATOR` were originally required too; since 16 September
+(`feat(security): implement MFA recommendations`) they are only *recommended*
+(`MFA_RECOMMENDED_ROLES` in `lib/modules/identity/constants.ts`): prompted, not
+blocked. If HR should be forced again, add the role to `MFA_REQUIRED_ROLES`.
 
 Resetting is permissioned (`user:write`), audited under its own action, bumps
 `sessionVersion`, and refuses self-reset — someone with a live session but no
@@ -676,6 +682,19 @@ Auto rota on, where nobody reviews the week by default.
 **Open question for the business:** which branches run Auto rota. Default is
 off everywhere, so nothing changes until someone turns it on.
 
+### 🟠 D6 — Announcements (broadcast to staff devices)
+
+**Status: specified, not built.** [specs/announcements.md](../specs/announcements.md).
+
+Push exists only as a side effect of system events, with no inbox, no read state
+and no audience targeting. The spec adds dashboard-composed announcements to
+everyone, branches or chosen people, over push, SMS and email (in-app inbox
+always), one active urgent banner at a time, and optional acknowledgement.
+
+**Blocked on the business:** who may send and who may send urgent, SMS budget, how
+staff without the app are reached, acknowledgement deadlines and retention. The
+spec lists them. **Also needs** the mobile team for the Notifications screen.
+
 ---
 
 ## E. Follow-ups found along the way
@@ -787,6 +806,33 @@ branch. A branch manager can post their own branch id with another branch's
 employee and change that person's day. Cover shifts (D4) check both sides; the
 override actions should do the same: require the permission on one of the
 employee's current branches.
+
+### 🟠 E7 — Revoking a mobile device binding does not invalidate its token
+
+`createDeviceToken` seals `{ employeeId, deviceId, phone, expiresAt }` with
+AES-256-GCM and it is valid for 30 days; `verifyDeviceToken` is pure
+cryptography with no database lookup (`lib/modules/attendance/mobile-auth.ts`).
+Terminated or suspended employees are refused at punch and status
+(`EMPLOYEE_NOT_ACTIVE`), so offboarding is covered. But revoking an
+`EmployeeDeviceIdentity` (a lost or stolen phone, a rebinding) leaves the old
+phone's token working for up to 30 days. Whether the other `/api/v1` routes
+(history, leave requests, push-token) re-check the employee's status has not been
+audited.
+
+**Trigger:** the first lost-phone report, or before the mobile app is widely
+distributed. Fix by checking the active binding for `deviceId` on each
+authenticated request, or by adding a token version the server can bump.
+
+### 🟢 E8 — The attendance cron route is open if `CRON_SECRET` is unset
+
+`app/api/cron/attendance/route.ts` only checks a secret `if (cronSecret)`. In
+production `CRON_SECRET` is set in Vercel (confirmed), and Vercel sends it as a
+Bearer token on cron calls, so production is closed. The sweeps are idempotent, so
+an open route elsewhere (a preview deploy, a new environment) costs load and noisy
+push notifications, not data.
+
+**Trigger:** the next environment stood up without the variable. Make the route
+refuse when it is unset outside local development, so forgetting it fails closed.
 
 ---
 
