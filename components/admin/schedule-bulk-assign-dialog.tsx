@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckSquare, Loader2, Square, Users } from "lucide-react";
+import { CheckSquare, Loader2, Search, Square, Users } from "lucide-react";
 import { toast } from "sonner";
 import { bulkAssignShiftAction } from "@/lib/modules/attendance/actions";
 import { Button } from "@/components/ui/button";
@@ -35,15 +35,23 @@ export function ScheduleBulkAssignDialog({
   employees,
   shifts,
   activeWeekStart,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   branchId: string;
   branchName: string;
   employees: { id: string; name: string; employeeCode: string | null }[];
   shifts: { id: string; name: string; startMinute: number; endMinute: number }[];
   activeWeekStart: string;
+  /** Controlled by a parent (the rota actions menu); no trigger is rendered. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : internalOpen;
+  const setOpen = controlled ? (next: boolean) => controlledOnOpenChange?.(next) : setInternalOpen;
   const [isPending, startTransition] = useTransition();
 
   const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>([]);
@@ -52,14 +60,22 @@ export function ScheduleBulkAssignDialog({
   const [validFrom, setValidFrom] = useState(activeWeekStart);
   const [validTo, setValidTo] = useState("");
 
-  const allSelected = employees.length > 0 && selectedEmpIds.length === employees.length;
+  const [query, setQuery] = useState("");
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return employees;
+    return employees.filter((e) => e.name.toLowerCase().includes(q) || (e.employeeCode ?? "").toLowerCase().includes(q));
+  }, [employees, query]);
+
+  // Select all acts on what the search shows, so "search cooks, select all"
+  // does what it says. People already ticked outside the search stay ticked.
+  const allSelected = visible.length > 0 && visible.every((e) => selectedEmpIds.includes(e.id));
 
   function toggleSelectAll() {
-    if (allSelected) {
-      setSelectedEmpIds([]);
-    } else {
-      setSelectedEmpIds(employees.map((e) => e.id));
-    }
+    const visibleIds = visible.map((e) => e.id);
+    setSelectedEmpIds((prev) =>
+      allSelected ? prev.filter((id) => !visibleIds.includes(id)) : [...new Set([...prev, ...visibleIds])],
+    );
   }
 
   function toggleEmployee(id: string) {
@@ -114,14 +130,16 @@ export function ScheduleBulkAssignDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <Users className="size-3.5" />
-            <span>Bulk Assign</span>
-          </Button>
-        }
-      />
+      {!controlled && (
+        <DialogTrigger
+          render={
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Users className="size-3.5" />
+              <span>Bulk Assign</span>
+            </Button>
+          }
+        />
+      )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Bulk Assign Shift</DialogTitle>
@@ -197,22 +215,34 @@ export function ScheduleBulkAssignDialog({
           {/* Employee multi-select checklist */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label>Select Staff ({selectedEmpIds.length}/{employees.length})</Label>
+              <Label>Select Staff ({selectedEmpIds.length}/{employees.length} selected)</Label>
               <button
                 type="button"
                 onClick={toggleSelectAll}
                 className="text-xs font-medium text-primary hover:underline"
               >
-                {allSelected ? "Deselect All" : "Select All"}
+                {allSelected ? "Deselect All" : query.trim() ? `Select All ${visible.length}` : "Select All"}
               </button>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name or code"
+                className="pl-9"
+                aria-label="Search staff"
+              />
             </div>
             <div className="rounded-lg border border-border bg-card p-2 max-h-48 overflow-y-auto space-y-1">
               {employees.length === 0 ? (
                 <div className="p-2 text-center text-xs text-muted-foreground">
                   No active staff assigned to this branch.
                 </div>
+              ) : visible.length === 0 ? (
+                <div className="p-2 text-center text-xs text-muted-foreground">No one matches.</div>
               ) : (
-                employees.map((emp) => {
+                visible.map((emp) => {
                   const isChecked = selectedEmpIds.includes(emp.id);
                   return (
                     <div

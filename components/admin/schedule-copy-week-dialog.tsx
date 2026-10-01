@@ -32,13 +32,21 @@ export function ScheduleCopyWeekDialog({
   branchId,
   branchName,
   activeWeekStart,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   branchId: string;
   branchName: string;
   activeWeekStart: string;
+  /** Controlled by a parent (the rota actions menu); no trigger is rendered. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : internalOpen;
+  const setOpen = controlled ? (next: boolean) => controlledOnOpenChange?.(next) : setInternalOpen;
   const [isPending, startTransition] = useTransition();
 
   // Preset previous weeks
@@ -69,14 +77,16 @@ export function ScheduleCopyWeekDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <Copy className="size-3.5" />
-            <span>Copy Week</span>
-          </Button>
-        }
-      />
+      {!controlled && (
+        <DialogTrigger
+          render={
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Copy className="size-3.5" />
+              <span>Copy Week</span>
+            </Button>
+          }
+        />
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Copy Weekly Rota</DialogTitle>

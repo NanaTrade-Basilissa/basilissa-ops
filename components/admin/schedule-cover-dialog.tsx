@@ -43,15 +43,23 @@ export function ScheduleCoverDialog({
   days,
   shifts,
   candidates,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   branchId: string;
   branchName: string;
   days: { dateKey: string; dayName: string; formattedDay: string; holidayName: string | null }[];
   shifts: { id: string; name: string; startMinute: number; endMinute: number }[];
   candidates: CoverCandidate[];
+  /** Controlled by a parent (the rota actions menu); no trigger is rendered. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : internalOpen;
+  const setOpen = controlled ? (next: boolean) => controlledOnOpenChange?.(next) : setInternalOpen;
   const [isPending, startTransition] = useTransition();
   const [dateKey, setDateKey] = useState(days.find((d) => d.holidayName)?.dateKey ?? days[0]?.dateKey ?? "");
   const [shiftId, setShiftId] = useState(shifts[0]?.id ?? "");
@@ -100,14 +108,16 @@ export function ScheduleCoverDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <ArrowRightLeft className="size-3.5" />
-            <span>Cover shift</span>
-          </Button>
-        }
-      />
+      {!controlled && (
+        <DialogTrigger
+          render={
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <ArrowRightLeft className="size-3.5" />
+              <span>Cover shift</span>
+            </Button>
+          }
+        />
+      )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Cover shift at {branchName}</DialogTitle>
