@@ -1,6 +1,6 @@
 # Spec: Announcements
 
-- **Status:** **Phases 1 and 2 are built** (schema, permissions, audience rules, compose, history, the staff inbox and its mobile API, and push through a fan-out job). Phases 3 (email, SMS) and 4 (urgent banner, acknowledgement) are not built; their columns are already in the schema. See [Build status](#build-status).
+- **Status:** **Phases 1, 2 and 4 are built** (schema, permissions, audience rules, compose, history, the staff inbox and its mobile API, push through a fan-out job, the urgent banner and acknowledgement). Only phase 3 (email, SMS) is not built; its columns are already in the schema. See [Build status](#build-status).
 - **Open questions:** the ones at the end are still open; Phase 1 and 2 used the defaults recorded under Build status.
 - **Owner:** to be assigned
 - **Register entry:** D6 in [open-decisions](../architecture/open-decisions.md)
@@ -230,8 +230,8 @@ Each phase ships on its own, and migrations are additive.
 | 1. Schema, permissions, audience resolution, compose (in-app), history, mobile inbox endpoints, system notices write inbox rows | **Built** |
 | 2. Push channel, fan-out job, per-recipient delivery status | **Built** |
 | 3. Email and SMS channels, per-channel reachability counts, SMS cost guard | Not built |
-| 4. Urgent banner, acknowledgement, stats, remind | Not built |
-| Mobile app: the Notifications screen (All and Announcements tabs, badge) | Not built, separate repository |
+| 4. Urgent banner, acknowledgement, stats | **Built** (the "remind unacknowledged" action is not) |
+| Mobile app: Notifications screen (All and Announcements tabs, badge), urgent banner, "I've read this" | **Built** (`feat/notifications-inbox` in the app repo; needs a native build to test) |
 
 **What differs from the design above, and why**
 
@@ -244,6 +244,16 @@ Each phase ships on its own, and migrations are additive.
 - **Push payload** carries `{ type: "ANNOUNCEMENT", announcementId }` and a 140 character preview.
 - **Token pruning is still not done.** A dead push token shows as a failed recipient and stays registered.
 - **The audience preview** shows how many recipients have the app (an active mobile binding), not how many have a registered push token.
+
+**Phase 4 decisions**
+
+- **Urgent is company-wide senders only** (`scope.kind === "all"`). The banner is shown to everyone and there is one, so a branch manager's urgent message would otherwise silently replace an administrator's. Branch managers can still send ordinary announcements and ask for acknowledgement.
+- **Sending a new urgent replaces the current one** in the same transaction: an expired banner the sweep has not reached is cleared as `EXPIRED`, a live one as `SUPERSEDED`. Two administrators sending at the same instant hit the partial unique index; one wins and the other is told to check and resend (`URGENT_CONFLICT`).
+- **Banner length is a choice** (4, 12 or 24 hours, or 3 days), never a free number.
+- **Acknowledgement** is set once with the server's clock, in the same transaction as its audit entry, and never changes. It also marks the inbox row read.
+- **Endpoints:** `GET /api/v1/announcements/urgent` and `POST /api/v1/announcements/{id}/ack`. Inbox items for announcements carry `urgent`, `ackRequired` and `acknowledged`.
+- **Expiry:** reads treat a past `bannerExpiresAt` as inactive, and the worker's periodic sweep (`expireUrgentBanners`) records it. A late sweep never shows a stale banner.
+- **Not done:** open question 9 (keeping the banner for someone who has not acknowledged after it expired for everyone else), and the "remind unacknowledged" action.
 
 **Verified** on a scratch Postgres database: the whole send is one transaction (a failing audit write rolls back the announcement, recipients, inbox rows and job); the second active urgent announcement is refused by the index; inbox rows are idempotent; the fan-out is safe to re-run; scope refusals write nothing. Verified in the browser with real sessions: the compose flow, the live count, the confirmation and the detail page; a branch manager sees only their branch, has no Everyone option and gets a 404 for an announcement they did not send. The mobile endpoints were exercised with a real device token.
 

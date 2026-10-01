@@ -38,6 +38,9 @@ const INPUT = {
   branchIds: ["accra"],
   employeeIds: [] as string[],
   sendPush: true,
+  isUrgent: false,
+  bannerHours: 24,
+  requiresAck: false,
 };
 
 describe("sendAnnouncement", () => {

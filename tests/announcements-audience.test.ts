@@ -134,6 +134,9 @@ describe("announcementSchema", () => {
     branchIds: ["accra"],
     employeeIds: [],
     sendPush: true,
+    isUrgent: false,
+    bannerHours: 24,
+    requiresAck: false,
   };
 
   it("trims and accepts a complete announcement", () => {

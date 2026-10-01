@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Loader2, Send, Smartphone, Users } from "lucide-react";
+import { Loader2, Megaphone, Send, Smartphone, Users, CheckCheck } from "lucide-react";
 import type { FormState } from "@/lib/platform/forms";
 import {
   previewAnnouncementAudienceAction,
@@ -12,6 +12,8 @@ import {
   ANNOUNCEMENT_BODY_MAX,
   ANNOUNCEMENT_TITLE_MAX,
   AUDIENCE_LABELS,
+  BANNER_HOURS,
+  DEFAULT_BANNER_HOURS,
   type AudienceKind,
 } from "@/lib/modules/announcements/constants";
 import type { ComposeOptions } from "@/lib/modules/announcements/queries";
@@ -30,6 +32,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,6 +62,9 @@ export function AnnouncementComposer({ options }: { options: ComposeOptions }) {
   const [employeeIds, setEmployeeIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [sendPush, setSendPush] = useState(true);
+  const [isUrgent, setIsUrgent] = useState(false);
+  const [bannerHours, setBannerHours] = useState<number>(DEFAULT_BANNER_HOURS);
+  const [requiresAck, setRequiresAck] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   // The count is kept with the audience it was computed for, so choosing a
@@ -313,6 +319,60 @@ export function AnnouncementComposer({ options }: { options: ComposeOptions }) {
               </p>
             </div>
           </div>
+
+          <div className="mt-5 flex items-start gap-3">
+            <Switch id="requiresAck" name="requiresAck" checked={requiresAck} onChange={(e) => setRequiresAck(e.target.checked)} />
+            <div className="space-y-0.5">
+              <Label htmlFor="requiresAck" className="flex items-center gap-1.5">
+                <CheckCheck className="size-4" />
+                Ask staff to confirm they have read it
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                They get an &ldquo;I&apos;ve read this&rdquo; button, and you see who has not tapped it.
+              </p>
+            </div>
+          </div>
+
+          {options.canSendToAll && (
+            <div className="mt-5 flex items-start gap-3">
+              <Switch id="isUrgent" name="isUrgent" checked={isUrgent} onChange={(e) => setIsUrgent(e.target.checked)} />
+              <div className="flex-1 space-y-1.5">
+                <div className="space-y-0.5">
+                  <Label htmlFor="isUrgent" className="flex items-center gap-1.5">
+                    <Megaphone className="size-4" />
+                    Urgent: pin a banner in the app
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Shown at the top of the app to everyone it reaches. Only one banner is up at a time.
+                  </p>
+                </div>
+                {isUrgent && (
+                  <>
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">Keep the banner for</span>
+                      <NativeSelect
+                        name="bannerHours"
+                        value={bannerHours}
+                        onChange={(e) => setBannerHours(Number(e.target.value))}
+                        className="w-32"
+                      >
+                        {BANNER_HOURS.map((hours) => (
+                          <option key={hours} value={hours}>
+                            {hours < 24 ? `${hours} hours` : `${hours / 24} ${hours === 24 ? "day" : "days"}`}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </div>
+                    {options.activeUrgent && (
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        This replaces the banner that is up now: &ldquo;{options.activeUrgent.title}&rdquo;.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -332,6 +392,7 @@ export function AnnouncementComposer({ options }: { options: ComposeOptions }) {
             <AlertDialogDescription>
               An announcement cannot be edited or taken back once it is sent.
               {sendPush ? " Their phones will be alerted." : " It will appear in their notifications screen only."}
+              {isUrgent && options.activeUrgent && ` It replaces the urgent banner “${options.activeUrgent.title}”.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

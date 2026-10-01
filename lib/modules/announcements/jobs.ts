@@ -137,3 +137,16 @@ export async function fanoutAnnouncementPush(payload: unknown): Promise<FanoutSu
 export async function handleAnnouncementFanout(payload: unknown): Promise<void> {
   await fanoutAnnouncementPush(payload);
 }
+
+/**
+ * Takes down banners whose time is up. Reads already treat an expired banner as
+ * inactive, so this only tidies the state (and frees the one-banner slot); a late
+ * run never shows a stale banner. Safe to repeat.
+ */
+export async function expireUrgentBanners(now: Date = new Date()): Promise<number> {
+  const result = await prisma.announcement.updateMany({
+    where: { isUrgent: true, bannerClearedAt: null, bannerExpiresAt: { lte: now } },
+    data: { bannerClearedAt: now, bannerClearReason: "EXPIRED" },
+  });
+  return result.count;
+}

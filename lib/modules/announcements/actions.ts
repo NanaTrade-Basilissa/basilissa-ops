@@ -3,10 +3,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { auditActorFrom, requireAnyBranchPermission } from "@/lib/modules/identity/server";
+import { DEFAULT_BANNER_HOURS } from "./constants";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { REFUSAL_MESSAGES, type AudiencePreview } from "./audience";
 import { audienceSchema, announcementSchema, type AudienceInput } from "./validation";
-import { previewAudience, sendAnnouncement } from "./service";
+import { clearUrgentBanner, previewAudience, sendAnnouncement } from "./service";
 
 /**
  * Both actions re-check `announcement:write`, because a Server Action is
@@ -32,6 +33,9 @@ export async function sendAnnouncementAction(
     branchIds: formData.getAll("branchIds").map(String),
     employeeIds: formData.getAll("employeeIds").map(String),
     sendPush: formData.get("sendPush") === "on",
+    isUrgent: formData.get("isUrgent") === "on",
+    bannerHours: formData.get("bannerHours") ?? DEFAULT_BANNER_HOURS,
+    requiresAck: formData.get("requiresAck") === "on",
   });
   if (!parsed.success) {
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
@@ -47,7 +51,11 @@ export async function sendAnnouncementAction(
     const message =
       result.error === "NO_RECIPIENTS"
         ? "Nobody active matches that audience, so there is no one to send it to."
-        : REFUSAL_MESSAGES[result.error];
+        : result.error === "URGENT_NEEDS_GLOBAL"
+          ? "Only someone with company-wide access can send an urgent announcement, because the banner is shown to everyone."
+          : result.error === "URGENT_CONFLICT"
+            ? "Another urgent announcement was sent a moment ago. Check it, then send yours again if it is still needed."
+            : REFUSAL_MESSAGES[result.error];
     return { error: message };
   }
 
@@ -61,4 +69,15 @@ export async function previewAnnouncementAudienceAction(input: AudienceInput): P
   const parsed = audienceSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "NO_RECIPIENTS" };
   return previewAudience(parsed.data, scope);
+}
+
+/** Ends an urgent banner early. The announcement stays in history. Company-wide senders only, like sending one. */
+export async function clearUrgentBannerAction(formData: FormData): Promise<void> {
+  const { actor, scope } = await requireAnyBranchPermission("announcement:write");
+  const id = String(formData.get("announcementId") ?? "");
+  if (!id || scope.kind !== "all") return;
+
+  await clearUrgentBanner(id, { audit: auditActorFrom(actor), name: actor.name });
+  revalidatePath("/admin/announcements");
+  revalidatePath(`/admin/announcements/${id}`);
 }

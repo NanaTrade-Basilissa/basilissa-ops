@@ -12,6 +12,10 @@ export const ANNOUNCEMENT_BODY_MAX = 2000;
  */
 export const PUSH_BODY_PREVIEW_MAX = 140;
 
+/** How long an urgent banner stays up. A choice, not a free number, so a banner cannot be left up for weeks. */
+export const BANNER_HOURS = [4, 12, 24, 72] as const;
+export const DEFAULT_BANNER_HOURS = 24;
+
 export const AUDIENCE_KINDS = ["ALL", "BRANCHES", "PEOPLE"] as const;
 export type AudienceKind = (typeof AUDIENCE_KINDS)[number];
 

@@ -14,8 +14,12 @@ export type AnnouncementRow = {
   createdByName: string;
   audienceKind: AudienceKind;
   sendPush: boolean;
+  isUrgent: boolean;
+  bannerActive: boolean;
+  requiresAck: boolean;
   recipients: number;
   read: number;
+  acknowledged: number;
 };
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, AnnouncementRow>();
@@ -25,7 +29,14 @@ const columns = columnHelper.columns([
     header: "Announcement",
     cell: (info) => (
       <div className="space-y-0.5">
-        <span className="font-medium text-foreground">{info.getValue()}</span>
+        <span className="flex items-center gap-2 font-medium text-foreground">
+          {info.getValue()}
+          {info.row.original.isUrgent && (
+            <Badge variant={info.row.original.bannerActive ? "destructive" : "outline"} className="text-[10px]">
+              {info.row.original.bannerActive ? "Urgent, banner up" : "Urgent"}
+            </Badge>
+          )}
+        </span>
         <span className="block text-xs text-muted-foreground">
           {formatSent(info.row.original.createdAt)} · {info.row.original.createdByName}
         </span>
@@ -51,6 +62,17 @@ const columns = columnHelper.columns([
         </span>
       );
     },
+  }),
+  columnHelper.accessor("acknowledged", {
+    header: "Confirmed",
+    cell: (info) =>
+      info.row.original.requiresAck ? (
+        <span className="tabular-nums">
+          {info.getValue()} <span className="text-xs text-muted-foreground">of {info.row.original.recipients}</span>
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground">Not asked</span>
+      ),
   }),
   columnHelper.accessor("sendPush", {
     header: "Delivery",

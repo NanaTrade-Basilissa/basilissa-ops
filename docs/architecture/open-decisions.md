@@ -685,16 +685,18 @@ off everywhere, so nothing changes until someone turns it on.
 
 ### 🟠 D6 — Announcements (broadcast to staff devices)
 
-**Status: phases 1 and 2 built (1 Oct 2026), not yet migrated in production.**
+**Status: phases 1, 2 and 4 built (1 Oct 2026), not yet migrated in production.**
 [specs/announcements.md](../specs/announcements.md) has the design and the build
 status. Built: dashboard compose to everyone, branches or chosen people; the
 always-on in-app inbox and its mobile endpoints; push through the
 `announcements.fanout` job; history and per-recipient read and push status.
 Leave decisions and shift reminders now also write inbox rows.
 
-**Not built:** email and SMS channels (phase 3); the urgent banner and
-acknowledgement (phase 4); the mobile Notifications screen (separate repository);
-a retry for failed push recipients; pruning of dead push tokens.
+**Not built:** email and SMS channels (phase 3); a "remind unacknowledged"
+action; a retry for failed push recipients; pruning of dead push tokens. The
+urgent banner is restricted to company-wide senders because there is one banner
+for everyone. The mobile app side (Notifications screen, banner, "I've read
+this") is built on `feat/notifications-inbox` in the app repo.
 
 **Production steps, in this order:**
 

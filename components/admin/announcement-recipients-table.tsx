@@ -13,6 +13,7 @@ export type RecipientTableRow = {
   readAt: Date | null;
   pushStatus: string;
   pushError: string | null;
+  acknowledgedAt: Date | null;
 };
 
 const PUSH_LABELS: Record<string, { label: string; className: string }> = {
@@ -24,7 +25,15 @@ const PUSH_LABELS: Record<string, { label: string; className: string }> = {
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, RecipientTableRow>();
 
-export function AnnouncementRecipientsTable({ rows, showPush }: { rows: RecipientTableRow[]; showPush: boolean }) {
+export function AnnouncementRecipientsTable({
+  rows,
+  showPush,
+  showAck,
+}: {
+  rows: RecipientTableRow[];
+  showPush: boolean;
+  showAck: boolean;
+}) {
   const columns = columnHelper.columns([
     columnHelper.accessor("name", {
       header: "Employee",
@@ -46,6 +55,21 @@ export function AnnouncementRecipientsTable({ rows, showPush }: { rows: Recipien
           <span className="text-sm text-muted-foreground">Not yet</span>
         ),
     }),
+    ...(showAck
+      ? [
+          columnHelper.accessor("acknowledgedAt", {
+            header: "Confirmed",
+            cell: (info) =>
+              info.getValue() ? (
+                <span className="text-sm">
+                  Yes <span className="text-xs text-muted-foreground">{formatSent(info.getValue()!)}</span>
+                </span>
+              ) : (
+                <span className="text-sm text-amber-700 dark:text-amber-300">Not yet</span>
+              ),
+          }),
+        ]
+      : []),
     ...(showPush
       ? [
           columnHelper.accessor("pushStatus", {

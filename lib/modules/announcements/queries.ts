@@ -14,6 +14,14 @@ import type { AudienceKind } from "./constants";
  * sees nothing and does not query.
  */
 
+/** A banner is showing while it is urgent, not cleared, and not past its expiry. */
+export function isBannerActive(
+  a: { isUrgent: boolean; bannerClearedAt: Date | null; bannerExpiresAt: Date | null },
+  now: Date,
+): boolean {
+  return a.isUrgent && a.bannerClearedAt === null && (a.bannerExpiresAt === null || a.bannerExpiresAt > now);
+}
+
 export type Viewer = { userId: string; scope: BranchScope };
 
 function visibleTo(viewer: Viewer): Prisma.AnnouncementWhereInput | null {
@@ -34,8 +42,12 @@ export type AnnouncementListRow = {
   createdByName: string;
   audienceKind: AudienceKind;
   sendPush: boolean;
+  isUrgent: boolean;
+  bannerActive: boolean;
+  requiresAck: boolean;
   recipients: number;
   read: number;
+  acknowledged: number;
 };
 
 export const ANNOUNCEMENTS_PAGE_SIZE = 25;
@@ -63,6 +75,10 @@ export async function listAnnouncements(
       createdByName: true,
       audienceKind: true,
       sendPush: true,
+      isUrgent: true,
+      bannerClearedAt: true,
+      bannerExpiresAt: true,
+      requiresAck: true,
       _count: { select: { recipients: true } },
     },
   });
@@ -76,6 +92,15 @@ export async function listAnnouncements(
       })
     : [];
   const readByAnnouncement = new Map(reads.map((row) => [row.announcementId, row._count._all]));
+  const acks = ids.length
+    ? await prisma.announcementRecipient.groupBy({
+        by: ["announcementId"],
+        where: { announcementId: { in: ids }, acknowledgedAt: { not: null } },
+        _count: { _all: true },
+      })
+    : [];
+  const ackByAnnouncement = new Map(acks.map((row) => [row.announcementId, row._count._all]));
+  const now = new Date();
 
   return {
     rows: announcements.map((announcement) => ({
@@ -85,8 +110,12 @@ export async function listAnnouncements(
       createdByName: announcement.createdByName,
       audienceKind: announcement.audienceKind,
       sendPush: announcement.sendPush,
+      isUrgent: announcement.isUrgent,
+      bannerActive: isBannerActive(announcement, now),
+      requiresAck: announcement.requiresAck,
       recipients: announcement._count.recipients,
       read: readByAnnouncement.get(announcement.id) ?? 0,
+      acknowledged: ackByAnnouncement.get(announcement.id) ?? 0,
     })),
     total,
     pageCount,
@@ -102,6 +131,7 @@ export type RecipientRow = {
   readAt: Date | null;
   pushStatus: string;
   pushError: string | null;
+  acknowledgedAt: Date | null;
 };
 
 export type AnnouncementDetail = {
@@ -112,8 +142,12 @@ export type AnnouncementDetail = {
   createdByName: string;
   audienceKind: AudienceKind;
   sendPush: boolean;
+  isUrgent: boolean;
+  bannerActive: boolean;
+  bannerExpiresAt: Date | null;
+  requiresAck: boolean;
   recipients: RecipientRow[];
-  counts: { recipients: number; read: number; pushSent: number; pushFailed: number; pushUnreachable: number };
+  counts: { recipients: number; read: number; acknowledged: number; pushSent: number; pushFailed: number; pushUnreachable: number };
 };
 
 /** The announcement and who it went to, or null when it does not exist or is not the viewer's to see. */
@@ -131,12 +165,17 @@ export async function getAnnouncementDetail(id: string, viewer: Viewer): Promise
       createdByName: true,
       audienceKind: true,
       sendPush: true,
+      isUrgent: true,
+      bannerClearedAt: true,
+      bannerExpiresAt: true,
+      requiresAck: true,
       recipients: {
         orderBy: { employee: { firstName: "asc" } },
         select: {
           employeeId: true,
           pushStatus: true,
           pushError: true,
+          acknowledgedAt: true,
           employee: { select: { firstName: true, lastName: true, employeeCode: true } },
         },
       },
@@ -160,6 +199,7 @@ export async function getAnnouncementDetail(id: string, viewer: Viewer): Promise
       readAt,
       pushStatus: row.pushStatus,
       pushError: row.pushError,
+      acknowledgedAt: row.acknowledgedAt,
     };
   });
 
@@ -173,10 +213,15 @@ export async function getAnnouncementDetail(id: string, viewer: Viewer): Promise
     createdByName: announcement.createdByName,
     audienceKind: announcement.audienceKind,
     sendPush: announcement.sendPush,
+    isUrgent: announcement.isUrgent,
+    bannerActive: isBannerActive(announcement, new Date()),
+    bannerExpiresAt: announcement.bannerExpiresAt,
+    requiresAck: announcement.requiresAck,
     recipients,
     counts: {
       recipients: recipients.length,
       read: recipients.filter((row) => row.read).length,
+      acknowledged: recipients.filter((row) => row.acknowledgedAt !== null).length,
       pushSent: countStatus("SENT"),
       pushFailed: countStatus("FAILED"),
       pushUnreachable: countStatus("UNREACHABLE"),
@@ -187,8 +232,10 @@ export async function getAnnouncementDetail(id: string, viewer: Viewer): Promise
 export type ComposeOptions = {
   branches: { id: string; name: string }[];
   employees: { id: string; name: string; employeeCode: string; branchNames: string[] }[];
-  /** True when the sender may choose Everyone. */
+  /** True when the sender may choose Everyone, and send urgent. */
   canSendToAll: boolean;
+  /** The urgent banner currently up, which a new urgent announcement would replace. */
+  activeUrgent: { id: string; title: string } | null;
 };
 
 /**
@@ -196,7 +243,7 @@ export type ComposeOptions = {
  * sender's scope. The form is a convenience; `sendAnnouncement` checks again.
  */
 export async function loadComposeOptions(scope: BranchScope, now = new Date()): Promise<ComposeOptions> {
-  if (scope.kind === "none") return { branches: [], employees: [], canSendToAll: false };
+  if (scope.kind === "none") return { branches: [], employees: [], canSendToAll: false, activeUrgent: null };
 
   const branchFilter: Prisma.BranchWhereInput =
     scope.kind === "branches" ? { id: { in: scope.branchIds } } : {};
@@ -236,5 +283,12 @@ export async function loadComposeOptions(scope: BranchScope, now = new Date()): 
       branchNames: employee.branchAssignments.map((assignment) => assignment.branch.name),
     })),
     canSendToAll: scope.kind === "all",
+    activeUrgent:
+      scope.kind === "all"
+        ? await prisma.announcement.findFirst({
+            where: { isUrgent: true, bannerClearedAt: null, OR: [{ bannerExpiresAt: null }, { bannerExpiresAt: { gt: now } }] },
+            select: { id: true, title: true },
+          })
+        : null,
   };
 }

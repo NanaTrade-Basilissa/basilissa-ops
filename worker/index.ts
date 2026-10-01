@@ -12,6 +12,7 @@ import {
   dispatchMissedClockInReminders,
 } from "@/lib/modules/attendance/jobs";
 import { purgeExpiredPasswordResets } from "@/lib/modules/identity/jobs";
+import { expireUrgentBanners } from "@/lib/modules/announcements/jobs";
 import { purgeSentInvitationJobs } from "@/lib/modules/assessments/jobs";
 import { autoSubmitExpiredAttempts, purgeSentInvitationJobs as purgeSentAptitudeInvitationJobs } from "@/lib/modules/aptitude/jobs";
 import { notifyJobDead, notifyWorkerError } from "@/lib/platform/slack";
@@ -180,6 +181,12 @@ async function runPeriodic(now: number): Promise<void> {
   // Expired password reset tokens, and the send jobs whose payloads carry the
   // tokens themselves. Separate try: neither sweep should be able to skip the
   // other by failing.
+  try {
+    const expired = await expireUrgentBanners(new Date());
+    if (expired > 0) logger.info("urgent banners expired", { expired });
+  } catch (error) {
+    logger.error("urgent banner expiry failed", { error });
+  }
   try {
     await purgeExpiredPasswordResets(new Date());
   } catch (error) {

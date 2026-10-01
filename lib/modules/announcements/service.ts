@@ -1,5 +1,6 @@
 import "server-only";
 import { Prisma, ProviderType } from "@prisma/client";
+import { SYSTEM_ACTOR } from "@/lib/platform/audit";
 import { prisma } from "@/lib/platform/prisma";
 import { recordAudit, type AuditActor } from "@/lib/platform/audit";
 import { enqueue } from "@/lib/platform/jobs";
@@ -101,7 +102,7 @@ export type Sender = { audit: AuditActor; name: string };
 
 export type SendResult =
   | { ok: true; announcementId: string; recipients: number }
-  | { ok: false; error: AudienceRefusal | "NO_RECIPIENTS" };
+  | { ok: false; error: AudienceRefusal | "NO_RECIPIENTS" | "URGENT_NEEDS_GLOBAL" | "URGENT_CONFLICT" };
 
 /**
  * Sends an announcement.
@@ -118,6 +119,11 @@ export async function sendAnnouncement(
   scope: BranchScope,
   now = new Date(),
 ): Promise<SendResult> {
+  // The banner is company-wide and there is only one, so only someone with a
+  // company-wide grant may take it: otherwise a branch manager's urgent message
+  // would silently replace an administrator's.
+  if (input.isUrgent && scope.kind !== "all") return { ok: false, error: "URGENT_NEEDS_GLOBAL" };
+
   const spec = audienceSpecFrom(input);
   const directory = await loadDirectory(spec, now);
 
@@ -127,8 +133,23 @@ export async function sendAnnouncement(
   const recipientIds = resolveRecipients(spec, directory);
   if (recipientIds.length === 0) return { ok: false, error: "NO_RECIPIENTS" };
 
-  const announcementId = await prisma.$transaction(
+  let announcementId: string;
+  try {
+  announcementId = await prisma.$transaction(
     async (tx) => {
+      if (input.isUrgent) {
+        // Free the one banner slot: an expired banner the sweep has not reached
+        // yet, then whatever is still showing.
+        await tx.announcement.updateMany({
+          where: { isUrgent: true, bannerClearedAt: null, bannerExpiresAt: { lte: now } },
+          data: { bannerClearedAt: now, bannerClearReason: "EXPIRED" },
+        });
+        await tx.announcement.updateMany({
+          where: { isUrgent: true, bannerClearedAt: null },
+          data: { bannerClearedAt: now, bannerClearedBy: sender.audit.userId, bannerClearReason: "SUPERSEDED" },
+        });
+      }
+
       const announcement = await tx.announcement.create({
         data: {
           title: input.title,
@@ -136,6 +157,9 @@ export async function sendAnnouncement(
           audienceKind: input.audienceKind,
           audienceSpec: spec as unknown as Prisma.InputJsonValue,
           sendPush: input.sendPush,
+          isUrgent: input.isUrgent,
+          bannerExpiresAt: input.isUrgent ? new Date(now.getTime() + input.bannerHours * 3_600_000) : null,
+          requiresAck: input.requiresAck,
           createdBy: sender.audit.userId,
           createdByName: sender.name,
           createdAt: now,
@@ -178,6 +202,8 @@ export async function sendAnnouncement(
             audienceKind: input.audienceKind,
             recipients: recipientIds.length,
             channels: { push: input.sendPush },
+            urgent: input.isUrgent,
+            requiresAck: input.requiresAck,
           },
         },
         tx,
@@ -187,6 +213,14 @@ export async function sendAnnouncement(
     },
     { timeout: 20_000 },
   );
+  } catch (error) {
+    // Two administrators sending urgent at the same instant: the database index
+    // lets one through and refuses the other.
+    if (input.isUrgent && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { ok: false, error: "URGENT_CONFLICT" };
+    }
+    throw error;
+  }
 
   log.info("announcement sent", {
     announcementId,
@@ -196,4 +230,131 @@ export async function sendAnnouncement(
   });
 
   return { ok: true, announcementId, recipients: recipientIds.length };
+}
+
+// ---------------------------------------------------------------------------
+// Urgent banner and acknowledgement, from the staff member's side
+// ---------------------------------------------------------------------------
+
+export type UrgentBanner = {
+  id: string;
+  title: string;
+  body: string;
+  requiresAck: boolean;
+  acknowledged: boolean;
+  expiresAt: Date | null;
+  createdAt: Date;
+};
+
+/**
+ * The banner this employee should see, or null. Active means not cleared and not
+ * past its expiry (so a late sweep never shows a stale banner), and the person was
+ * one of its recipients.
+ */
+export async function getActiveUrgentBanner(employeeId: string, now = new Date()): Promise<UrgentBanner | null> {
+  const row = await prisma.announcement.findFirst({
+    where: {
+      isUrgent: true,
+      bannerClearedAt: null,
+      OR: [{ bannerExpiresAt: null }, { bannerExpiresAt: { gt: now } }],
+      recipients: { some: { employeeId } },
+    },
+    select: {
+      id: true,
+      title: true,
+      body: true,
+      requiresAck: true,
+      bannerExpiresAt: true,
+      createdAt: true,
+      recipients: { where: { employeeId }, select: { acknowledgedAt: true } },
+    },
+  });
+  if (!row) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    requiresAck: row.requiresAck,
+    acknowledged: row.recipients[0]?.acknowledgedAt != null,
+    expiresAt: row.bannerExpiresAt,
+    createdAt: row.createdAt,
+  };
+}
+
+export type AnnouncementFlags = { requiresAck: boolean; acknowledged: boolean; urgent: boolean };
+
+/** Acknowledgement state for inbox items that are announcements, keyed by announcement id. */
+export async function loadAnnouncementFlags(
+  employeeId: string,
+  announcementIds: string[],
+): Promise<Map<string, AnnouncementFlags>> {
+  if (announcementIds.length === 0) return new Map();
+  const rows = await prisma.announcementRecipient.findMany({
+    where: { employeeId, announcementId: { in: announcementIds } },
+    select: { announcementId: true, acknowledgedAt: true, announcement: { select: { requiresAck: true, isUrgent: true } } },
+  });
+  return new Map(
+    rows.map((row) => [
+      row.announcementId,
+      { requiresAck: row.announcement.requiresAck, acknowledged: row.acknowledgedAt !== null, urgent: row.announcement.isUrgent },
+    ]),
+  );
+}
+
+export type AckResult = "OK" | "ALREADY" | "NOT_FOUND" | "NOT_REQUIRED";
+
+/**
+ * "I've read this". Evidence, so: set once, with the server's clock, in the same
+ * transaction as its audit entry, and never changed or cleared afterwards. Only a
+ * recipient of an announcement that asked for it can acknowledge; anyone else gets
+ * NOT_FOUND so ids cannot be probed. Acknowledging also marks the inbox row read.
+ */
+export async function acknowledgeAnnouncement(
+  employeeId: string,
+  announcementId: string,
+  now = new Date(),
+): Promise<AckResult> {
+  const recipient = await prisma.announcementRecipient.findUnique({
+    where: { announcementId_employeeId: { announcementId, employeeId } },
+    select: { acknowledgedAt: true, announcement: { select: { requiresAck: true } } },
+  });
+  if (!recipient) return "NOT_FOUND";
+  if (!recipient.announcement.requiresAck) return "NOT_REQUIRED";
+  if (recipient.acknowledgedAt) return "ALREADY";
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.announcementRecipient.updateMany({
+      where: { announcementId, employeeId, acknowledgedAt: null },
+      data: { acknowledgedAt: now },
+    });
+    await tx.notification.updateMany({ where: { employeeId, announcementId, readAt: null }, data: { readAt: now } });
+    if (updated.count === 0) return "ALREADY" as const;
+    await recordAudit(
+      {
+        actor: { ...SYSTEM_ACTOR, role: "EMPLOYEE" },
+        action: "announcement.acknowledged",
+        entityType: "Announcement",
+        entityId: announcementId,
+        metadata: { employeeId },
+      },
+      tx,
+    );
+    return "OK" as const;
+  });
+}
+
+/** Takes the banner down by hand. The announcement itself stays in history. */
+export async function clearUrgentBanner(announcementId: string, sender: Sender, now = new Date()): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const cleared = await tx.announcement.updateMany({
+      where: { id: announcementId, isUrgent: true, bannerClearedAt: null },
+      data: { bannerClearedAt: now, bannerClearedBy: sender.audit.userId, bannerClearReason: "MANUAL" },
+    });
+    if (cleared.count === 0) return false;
+    await recordAudit(
+      { actor: sender.audit, action: "announcement.banner_cleared", entityType: "Announcement", entityId: announcementId },
+      tx,
+    );
+    return true;
+  });
 }

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { listInbox, INBOX_DEFAULT_LIMIT } from "@/lib/platform/inbox";
+import { loadAnnouncementFlags } from "@/lib/modules/announcements/server";
 import { authenticateInboxRequest } from "./auth";
 
 /**
@@ -29,5 +30,16 @@ export async function GET(request: NextRequest) {
     cursor: params.get("cursor"),
   });
 
-  return NextResponse.json({ ok: true, items, nextCursor });
+  // Announcement items say whether they ask for "I've read this" and whether the
+  // caller has given it, so the app can show the button.
+  const flags = await loadAnnouncementFlags(
+    auth.employeeId,
+    items.flatMap((item) => (item.announcementId ? [item.announcementId] : [])),
+  );
+  const annotated = items.map((item) => {
+    const flag = item.announcementId ? flags.get(item.announcementId) : undefined;
+    return flag ? { ...item, urgent: flag.urgent, ackRequired: flag.requiresAck, acknowledged: flag.acknowledged } : item;
+  });
+
+  return NextResponse.json({ ok: true, items: annotated, nextCursor });
 }

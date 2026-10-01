@@ -141,6 +141,9 @@ describe("mobile notification endpoints", () => {
 
   it("returns the caller's inbox with a cursor, taking the employee from the token", async () => {
     const find = vi.spyOn(prisma.notification, "findMany").mockResolvedValueOnce([row("n2"), row("n1")] as never);
+    vi.spyOn(prisma.announcementRecipient, "findMany").mockResolvedValueOnce([
+      { announcementId: "ann_1", acknowledgedAt: null, announcement: { requiresAck: true, isUrgent: true } },
+    ] as never);
 
     const res = await listRoute(
       new NextRequest("http://localhost:3000/api/v1/notifications?kind=announcement&limit=1", authed),
@@ -150,7 +153,7 @@ describe("mobile notification endpoints", () => {
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.items).toHaveLength(1);
-    expect(body.items[0]).toMatchObject({ id: "n2", read: false });
+    expect(body.items[0]).toMatchObject({ id: "n2", read: false, urgent: true, ackRequired: true, acknowledged: false });
     expect(body.nextCursor).toBe("n2");
     expect(find.mock.calls[0]![0]!.where).toEqual({ employeeId: "emp_1", kind: "ANNOUNCEMENT" });
   });

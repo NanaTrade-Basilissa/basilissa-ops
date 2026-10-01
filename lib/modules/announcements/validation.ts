@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, AUDIENCE_KINDS } from "./constants";
+import { ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, AUDIENCE_KINDS, BANNER_HOURS } from "./constants";
 
 /**
  * A realistic ceiling, not a technical one: an announcement to more than this
@@ -18,6 +18,13 @@ export const announcementSchema = z
     branchIds: z.array(id).max(200),
     employeeIds: z.array(id).max(MAX_PEOPLE_PER_ANNOUNCEMENT, `Choose at most ${MAX_PEOPLE_PER_ANNOUNCEMENT} people, or use a branch`),
     sendPush: z.boolean(),
+    /** Pins a banner in the app. Company-wide senders only; one at a time. */
+    isUrgent: z.boolean(),
+    bannerHours: z.coerce
+      .number()
+      .refine((hours) => (BANNER_HOURS as readonly number[]).includes(hours), "Choose how long the banner stays up"),
+    /** Staff must tap "I've read this". */
+    requiresAck: z.boolean(),
   })
   .superRefine((value, ctx) => {
     if (value.audienceKind === "BRANCHES" && value.branchIds.length === 0) {

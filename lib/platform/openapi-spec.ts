@@ -657,6 +657,62 @@ Receives a ZKTeco ADMS table push. Body is tab-separated plain text, not JSON â€
       },
     },
 
+    "/api/v1/announcements/urgent": {
+      get: {
+        tags: ["Notifications"],
+        summary: "Urgent Announcement Banner",
+        description: "The urgent banner to pin at the top of the app for this employee, or banner: null. At most one is active at a time; it stops showing when it expires or is ended. requiresAck says whether to show an \"I've read this\" button, and acknowledged whether they already tapped it.",
+        operationId: "getUrgentBanner",
+        security: [{ DeviceTokenAuth: [] }],
+        responses: {
+          "200": {
+            description: "The banner, or null.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    banner: {
+                      type: "object",
+                      nullable: true,
+                      properties: {
+                        id: { type: "string" },
+                        title: { type: "string" },
+                        body: { type: "string" },
+                        requiresAck: { type: "boolean" },
+                        acknowledged: { type: "boolean" },
+                        expiresAt: { type: "string", format: "date-time", nullable: true },
+                        createdAt: { type: "string", format: "date-time" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Unauthorized: Missing, invalid, or expired device token.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+        },
+      },
+    },
+
+    "/api/v1/announcements/{id}/ack": {
+      post: {
+        tags: ["Notifications"],
+        summary: "Acknowledge an Announcement (I've read this)",
+        description: "Idempotent: acknowledging twice keeps the first time. 404 for an announcement the caller did not receive; 409 when it did not ask for acknowledgement.",
+        operationId: "acknowledgeAnnouncement",
+        security: [{ DeviceTokenAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "Acknowledged.", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean", example: true }, alreadyAcknowledged: { type: "boolean" } } } } } },
+          "401": { description: "Unauthorized: Missing, invalid, or expired device token.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Announcement not found.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "409": { description: "This announcement does not need confirmation.", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+        },
+      },
+    },
+
     "/api/v1/notifications/push-token": {
       post: {
         tags: ["Notifications"],
@@ -1651,6 +1707,9 @@ Authenticates a user using their Basilissa email and password, returning a 7-day
           body: { type: "string" },
           data: { type: "object", nullable: true, description: "Where tapping it should go, as ids only (for example announcementId)." },
           announcementId: { type: "string", nullable: true },
+          urgent: { type: "boolean", description: "Announcements only: sent as an urgent banner." },
+          ackRequired: { type: "boolean", description: "Announcements only: asks the employee to confirm they have read it." },
+          acknowledged: { type: "boolean", description: "Announcements only: this employee has confirmed." },
           read: { type: "boolean" },
           readAt: { type: "string", format: "date-time", nullable: true },
           createdAt: { type: "string", format: "date-time" },
