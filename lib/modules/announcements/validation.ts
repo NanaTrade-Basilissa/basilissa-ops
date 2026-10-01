@@ -18,6 +18,9 @@ export const announcementSchema = z
     branchIds: z.array(id).max(200),
     employeeIds: z.array(id).max(MAX_PEOPLE_PER_ANNOUNCEMENT, `Choose at most ${MAX_PEOPLE_PER_ANNOUNCEMENT} people, or use a branch`),
     sendPush: z.boolean(),
+    sendEmail: z.boolean(),
+    /** Costs money per message; off unless chosen. */
+    sendSms: z.boolean(),
     /** Pins a banner in the app. Company-wide senders only; one at a time. */
     isUrgent: z.boolean(),
     bannerHours: z.coerce

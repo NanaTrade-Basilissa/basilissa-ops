@@ -27,6 +27,8 @@ const INPUT = {
   branchIds: [] as string[],
   employeeIds: [] as string[],
   sendPush: false,
+  sendEmail: false,
+  sendSms: false,
   isUrgent: true,
   bannerHours: 4,
   requiresAck: true,

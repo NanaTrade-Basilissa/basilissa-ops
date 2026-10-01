@@ -2074,6 +2074,12 @@ model AnnouncementRecipient {
 
   acknowledgedAt DateTime?
 
+  /// Automatic reminders to confirm, for announcements that ask for it: how many
+  /// have been sent and when the last one went, so the sweep spaces them out and
+  /// stops after a few.
+  ackReminderCount Int       @default(0)
+  ackRemindedAt    DateTime?
+
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
   employee     Employee     @relation(fields: [employeeId], references: [id])
 

@@ -1,6 +1,6 @@
 # Spec: Announcements
 
-- **Status:** **Phases 1, 2 and 4 are built** (schema, permissions, audience rules, compose, history, the staff inbox and its mobile API, push through a fan-out job, the urgent banner and acknowledgement). Only phase 3 (email, SMS) is not built; its columns are already in the schema. See [Build status](#build-status).
+- **Status:** **All four phases are built** (schema, permissions, audience rules, compose, history, the staff inbox and its mobile API, push, SMS and email through a fan-out job, the urgent banner, acknowledgement and automatic reminders). See [Build status](#build-status).
 - **Open questions:** the ones at the end are still open; Phase 1 and 2 used the defaults recorded under Build status.
 - **Owner:** to be assigned
 - **Register entry:** D6 in [open-decisions](../architecture/open-decisions.md)
@@ -229,8 +229,8 @@ Each phase ships on its own, and migrations are additive.
 | --- | --- |
 | 1. Schema, permissions, audience resolution, compose (in-app), history, mobile inbox endpoints, system notices write inbox rows | **Built** |
 | 2. Push channel, fan-out job, per-recipient delivery status | **Built** |
-| 3. Email and SMS channels, per-channel reachability counts, SMS cost guard | Not built |
-| 4. Urgent banner, acknowledgement, stats | **Built** (the "remind unacknowledged" action is not) |
+| 3. Email and SMS channels, per-channel reachability counts, SMS cost guard | **Built** |
+| 4. Urgent banner, acknowledgement, stats, automatic reminders | **Built** |
 | Mobile app: Notifications screen (All and Announcements tabs, badge), urgent banner, "I've read this" | **Built** (`feat/notifications-inbox` in the app repo; needs a native build to test) |
 
 **What differs from the design above, and why**
@@ -245,6 +245,20 @@ Each phase ships on its own, and migrations are additive.
 - **Token pruning is still not done.** A dead push token shows as a failed recipient and stays registered.
 - **The audience preview** shows how many recipients have the app (an active mobile binding), not how many have a registered push token.
 
+**Phase 3 decisions: SMS and email**
+
+- **Separate switches.** Push (default on), Email (default off) and SMS (default off). The in-app inbox is always on.
+- **SMS warns when chosen.** An amber notice says SMS costs money for every message, shows how many people would be texted (and how many have no number and are skipped), and states the limit. The confirmation dialog repeats the count.
+- **SMS has a hard ceiling:** a send that would text more than `MAX_SMS_RECIPIENTS` (300, in `constants.ts`) is refused, so a slip cannot run up a bill. Raise it deliberately.
+- **Per-recipient, per-channel status** for all three channels. No number or address is `UNREACHABLE`, not a failure. The dashboard detail page shows a column per channel.
+- **Email:** one message per person, with an idempotency key (`announcement:<id>:<employee>`) so a retry never double-sends. SMS text is `Basilissa: <title>. <body>`, flattened and capped at 320 characters.
+- **Retry failed:** a button on the detail page puts only FAILED deliveries back to pending and re-runs the job. Sent ones are never touched, so nobody gets a second copy.
+- **Dead push tokens are pruned** when the provider says a token will never work again (FCM `registration-token-not-registered` or `invalid-registration-token`, Expo `DeviceNotRegistered`). Only the token goes; the binding and device name stay.
+
+**Automatic confirmation reminders** (no button): for an announcement that asks for confirmation, a push goes to everyone who has not confirmed, first after 4 hours (1 hour if urgent), then once a day, at most three, and none after a week (`ackReminderDue`, `remindUnacknowledged`). The record is written before the push, so a failed push is not repeated every sweep. It goes by push whether or not the sender chose push, because confirming is the point.
+
+**The urgent banner lingers** for anyone who has not confirmed it: after it expires on its own, they keep seeing it until they confirm or a week passes. One ended by hand, or replaced by a newer urgent, does not linger, because someone chose to stop showing it.
+
 **Phase 4 decisions**
 
 - **Urgent is company-wide senders only** (`scope.kind === "all"`). The banner is shown to everyone and there is one, so a branch manager's urgent message would otherwise silently replace an administrator's. Branch managers can still send ordinary announcements and ask for acknowledgement.
@@ -253,7 +267,7 @@ Each phase ships on its own, and migrations are additive.
 - **Acknowledgement** is set once with the server's clock, in the same transaction as its audit entry, and never changes. It also marks the inbox row read.
 - **Endpoints:** `GET /api/v1/announcements/urgent` and `POST /api/v1/announcements/{id}/ack`. Inbox items for announcements carry `urgent`, `ackRequired` and `acknowledged`.
 - **Expiry:** reads treat a past `bannerExpiresAt` as inactive, and the worker's periodic sweep (`expireUrgentBanners`) records it. A late sweep never shows a stale banner.
-- **Not done:** open question 9 (keeping the banner for someone who has not acknowledged after it expired for everyone else), and the "remind unacknowledged" action.
+- **Open question 9** (keep the banner past expiry for the unconfirmed) is done: see above.
 
 **Verified** on a scratch Postgres database: the whole send is one transaction (a failing audit write rolls back the announcement, recipients, inbox rows and job); the second active urgent announcement is refused by the index; inbox rows are idempotent; the fan-out is safe to re-run; scope refusals write nothing. Verified in the browser with real sessions: the compose flow, the live count, the confirmation and the detail page; a branch manager sees only their branch, has no Everyone option and gets a 404 for an announcement they did not send. The mobile endpoints were exercised with a real device token.
 

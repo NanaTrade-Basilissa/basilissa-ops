@@ -101,8 +101,10 @@ the same queue safely because claiming uses `SKIP LOCKED`.
 - Dynamic sender name: the branch name for feedback, `Basilissa HR` for
   candidate invites, `Basilissa Admin` for staff invites and resets.
 - The admin **Email queue** screen shows jobs, deliveries and failures.
-- Not configured (no `EMAIL_SERVER_URL`) means `skipped`, not an error, so local
-  development works without a gateway.
+- **Careful:** with no `EMAIL_SERVER_URL`, `env.ts` falls back to the production
+  Nodemailer gateway, so an unconfigured environment really sends. When verifying
+  email-sending code against a scratch database, point `EMAIL_SERVER_URL` at a dead
+  local port (`http://127.0.0.1:9/email`) so nothing can leave the machine.
 
 ### SMS
 
@@ -147,8 +149,8 @@ the same queue safely because claiming uses `SKIP LOCKED`.
   broadcasts go through the announcements module's fan-out job, which batches
   tokens and records each person's outcome. See the
   [announcements spec](../specs/announcements.md).
-- Open item: invalid or expired tokens are reported in receipts but nothing
-  prunes them (no code in `push.ts` clears a dead token).
+- Tokens the provider says are permanently dead are pruned automatically
+  (`pruneDeadPushTokens`): only the token is removed, not the binding.
 
 ### Slack
 
@@ -167,8 +169,9 @@ containing personal data beyond what an operator needs.
 | Staff login | SMS OTP | `mobile-auth.ts` |
 | Leave decision | Push, and an inbox row | `attendance/leave.ts` |
 | Shift in 15 to 60 minutes | Push, and an inbox row | `attendance/reminders.ts` |
+| Announcement asked for confirmation and not confirmed | Push reminder: after 4 hours (1 if urgent), then daily, at most 3 | `announcements/jobs.ts` `remindUnacknowledged` |
 | Shift started 15 to 45 minutes ago and no clock-in | Push, and an inbox row | `attendance/reminders.ts` `dispatchMissedClockInReminders` |
-| Dashboard announcement | Inbox row always; push if chosen (email and SMS planned) | `announcements/service.ts`, `announcements/jobs.ts` |
+| Dashboard announcement | Inbox row always; push, email and SMS if chosen (SMS off by default, capped) | `announcements/service.ts`, `announcements/jobs.ts` |
 | Dead job, crash, quarantine | Slack | `slack.ts` |
 
 ## Guidelines for new notifications

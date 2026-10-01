@@ -13,10 +13,12 @@ import {
   type AudiencePreview,
   type AudienceRefusal,
   type AudienceSpec,
+  type SendRefusal,
   type DirectoryEntry,
 } from "./audience";
 import type { AnnouncementInput, AudienceInput } from "./validation";
 import { ANNOUNCEMENT_FANOUT } from "./jobs";
+import { ACK_REMINDER, MAX_SMS_RECIPIENTS, isUsablePhone } from "./constants";
 
 const log = scoped("announcements");
 
@@ -81,7 +83,15 @@ export async function previewAudience(
   if (recipients.length === 0) return { ok: false, error: "NO_RECIPIENTS" };
 
   const withApp = await countWithApp(recipients);
-  return { ok: true, recipients: recipients.length, withApp, withoutApp: recipients.length - withApp };
+  const contacts = await prisma.employee.findMany({ where: { id: { in: recipients } }, select: { email: true, phone: true } });
+  return {
+    ok: true,
+    recipients: recipients.length,
+    withApp,
+    withoutApp: recipients.length - withApp,
+    withEmail: contacts.filter((c) => Boolean(c.email?.includes("@"))).length,
+    withPhone: contacts.filter((c) => isUsablePhone(c.phone)).length,
+  };
 }
 
 /**
@@ -102,7 +112,7 @@ export type Sender = { audit: AuditActor; name: string };
 
 export type SendResult =
   | { ok: true; announcementId: string; recipients: number }
-  | { ok: false; error: AudienceRefusal | "NO_RECIPIENTS" | "URGENT_NEEDS_GLOBAL" | "URGENT_CONFLICT" };
+  | { ok: false; error: AudienceRefusal | SendRefusal };
 
 /**
  * Sends an announcement.
@@ -133,6 +143,12 @@ export async function sendAnnouncement(
   const recipientIds = resolveRecipients(spec, directory);
   if (recipientIds.length === 0) return { ok: false, error: "NO_RECIPIENTS" };
 
+  // SMS costs money per message: refuse a send that would text too many people.
+  if (input.sendSms) {
+    const phones = await prisma.employee.findMany({ where: { id: { in: recipientIds } }, select: { phone: true } });
+    if (phones.filter((p) => isUsablePhone(p.phone)).length > MAX_SMS_RECIPIENTS) return { ok: false, error: "SMS_LIMIT" };
+  }
+
   let announcementId: string;
   try {
   announcementId = await prisma.$transaction(
@@ -157,6 +173,8 @@ export async function sendAnnouncement(
           audienceKind: input.audienceKind,
           audienceSpec: spec as unknown as Prisma.InputJsonValue,
           sendPush: input.sendPush,
+          sendSms: input.sendSms,
+          sendEmail: input.sendEmail,
           isUrgent: input.isUrgent,
           bannerExpiresAt: input.isUrgent ? new Date(now.getTime() + input.bannerHours * 3_600_000) : null,
           requiresAck: input.requiresAck,
@@ -172,6 +190,8 @@ export async function sendAnnouncement(
           announcementId: announcement.id,
           employeeId,
           pushStatus: input.sendPush ? "PENDING" : "NOT_REQUESTED",
+          smsStatus: input.sendSms ? "PENDING" : "NOT_REQUESTED",
+          emailStatus: input.sendEmail ? "PENDING" : "NOT_REQUESTED",
         })),
       });
 
@@ -187,7 +207,7 @@ export async function sendAnnouncement(
         tx,
       );
 
-      if (input.sendPush) {
+      if (input.sendPush || input.sendSms || input.sendEmail) {
         await enqueue(ANNOUNCEMENT_FANOUT, { announcementId: announcement.id }, {}, tx);
       }
 
@@ -201,7 +221,7 @@ export async function sendAnnouncement(
             title: input.title,
             audienceKind: input.audienceKind,
             recipients: recipientIds.length,
-            channels: { push: input.sendPush },
+            channels: { push: input.sendPush, sms: input.sendSms, email: input.sendEmail },
             urgent: input.isUrgent,
             requiresAck: input.requiresAck,
           },
@@ -227,6 +247,8 @@ export async function sendAnnouncement(
     audienceKind: input.audienceKind,
     recipients: recipientIds.length,
     push: input.sendPush,
+    sms: input.sendSms,
+    email: input.sendEmail,
   });
 
   return { ok: true, announcementId, recipients: recipientIds.length };
@@ -252,23 +274,46 @@ export type UrgentBanner = {
  * one of its recipients.
  */
 export async function getActiveUrgentBanner(employeeId: string, now = new Date()): Promise<UrgentBanner | null> {
-  const row = await prisma.announcement.findFirst({
+  const select = {
+    id: true,
+    title: true,
+    body: true,
+    requiresAck: true,
+    bannerExpiresAt: true,
+    createdAt: true,
+    recipients: { where: { employeeId }, select: { acknowledgedAt: true } },
+  } as const;
+
+  // 1. The live banner.
+  let row = await prisma.announcement.findFirst({
     where: {
       isUrgent: true,
       bannerClearedAt: null,
       OR: [{ bannerExpiresAt: null }, { bannerExpiresAt: { gt: now } }],
       recipients: { some: { employeeId } },
     },
-    select: {
-      id: true,
-      title: true,
-      body: true,
-      requiresAck: true,
-      bannerExpiresAt: true,
-      createdAt: true,
-      recipients: { where: { employeeId }, select: { acknowledgedAt: true } },
-    },
+    select,
   });
+
+  // 2. Otherwise one that expired on its own while this person still has not
+  //    confirmed it: they keep seeing it until they do (or a week passes). Ended by
+  //    hand or replaced means someone chose to stop showing it, so that does not linger.
+  if (!row) {
+    row = await prisma.announcement.findFirst({
+      where: {
+        isUrgent: true,
+        requiresAck: true,
+        createdAt: { gt: new Date(now.getTime() - ACK_REMINDER.stopAfterDays * 86_400_000) },
+        OR: [
+          { bannerClearedAt: null, bannerExpiresAt: { lte: now } },
+          { bannerClearReason: "EXPIRED" },
+        ],
+        recipients: { some: { employeeId, acknowledgedAt: null } },
+      },
+      orderBy: { createdAt: "desc" },
+      select,
+    });
+  }
   if (!row) return null;
   return {
     id: row.id,
@@ -356,5 +401,36 @@ export async function clearUrgentBanner(announcementId: string, sender: Sender, 
       tx,
     );
     return true;
+  });
+}
+
+/**
+ * Puts every FAILED delivery of an announcement back to pending and runs the
+ * fan-out again. Only channels the sender chose, only failures (a person with no
+ * phone or no address is UNREACHABLE and stays so), and only recipients not yet
+ * reached, so nobody gets a second copy. Safe to press twice: the second press
+ * finds nothing failed.
+ */
+export async function retryFailedDeliveries(announcementId: string, sender: Sender): Promise<number> {
+  return prisma.$transaction(async (tx) => {
+    const [push, sms, email] = await Promise.all([
+      tx.announcementRecipient.updateMany({ where: { announcementId, pushStatus: "FAILED" }, data: { pushStatus: "PENDING", pushError: null } }),
+      tx.announcementRecipient.updateMany({ where: { announcementId, smsStatus: "FAILED" }, data: { smsStatus: "PENDING", smsError: null } }),
+      tx.announcementRecipient.updateMany({ where: { announcementId, emailStatus: "FAILED" }, data: { emailStatus: "PENDING", emailError: null } }),
+    ]);
+    const total = push.count + sms.count + email.count;
+    if (total === 0) return 0;
+    await enqueue(ANNOUNCEMENT_FANOUT, { announcementId }, {}, tx);
+    await recordAudit(
+      {
+        actor: sender.audit,
+        action: "announcement.delivery_retried",
+        entityType: "Announcement",
+        entityId: announcementId,
+        metadata: { push: push.count, sms: sms.count, email: email.count },
+      },
+      tx,
+    );
+    return total;
   });
 }

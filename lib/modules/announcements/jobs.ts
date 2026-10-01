@@ -4,8 +4,11 @@ import { ProviderType } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { scoped } from "@/lib/platform/logger";
 import { PermanentJobError } from "@/lib/platform/jobs";
-import { parseDeviceMetadata, sendPushNotification } from "@/lib/platform/push";
-import { PUSH_BODY_PREVIEW_MAX } from "./constants";
+import { parseDeviceMetadata, sendEmployeePushNotification, sendPushNotification } from "@/lib/platform/push";
+import { sendEmail } from "@/lib/platform/email";
+import { sendSms } from "@/lib/platform/sms";
+import { buildAnnouncementEmailHtml } from "@/lib/email-templates/announcements";
+import { PUSH_BODY_PREVIEW_MAX, ackReminderDue, isUsablePhone, smsText } from "./constants";
 
 /**
  * Background work owned by the announcements module. Registered with the worker
@@ -133,15 +136,201 @@ export async function fanoutAnnouncementPush(payload: unknown): Promise<FanoutSu
   return summary;
 }
 
-/** The registered handler. The summary is for tests and logs; the queue needs none. */
+const SIMPLE_CHUNK = 50;
+
+export type ChannelSummary = { sent: number; failed: number; unreachable: number };
+
+/**
+ * Texts an announcement. Same shape as the push fan-out: only recipients still
+ * `PENDING`, each outcome recorded before moving on, so a retry resumes. A person
+ * with no usable number is `UNREACHABLE`, not failed. SMS costs money, which is why
+ * sending refuses an audience over the limit (see `MAX_SMS_RECIPIENTS`) and why
+ * this never sends to a recipient it has already recorded as sent.
+ */
+export async function fanoutAnnouncementSms(payload: unknown): Promise<ChannelSummary> {
+  const { announcementId } = announcementFanoutPayload.parse(payload);
+  const summary: ChannelSummary = { sent: 0, failed: 0, unreachable: 0 };
+  const announcement = await prisma.announcement.findUnique({
+    where: { id: announcementId },
+    select: { title: true, body: true, sendSms: true },
+  });
+  if (!announcement) throw new PermanentJobError(`announcement ${announcementId} no longer exists`);
+  if (!announcement.sendSms) return summary;
+  const message = smsText(announcement.title, announcement.body);
+
+  for (;;) {
+    const pending = await prisma.announcementRecipient.findMany({
+      where: { announcementId, smsStatus: "PENDING" },
+      orderBy: { employeeId: "asc" },
+      take: SIMPLE_CHUNK,
+      select: { id: true, employee: { select: { phone: true } } },
+    });
+    if (pending.length === 0) break;
+
+    for (const row of pending) {
+      if (!isUsablePhone(row.employee.phone)) {
+        await prisma.announcementRecipient.update({ where: { id: row.id }, data: { smsStatus: "UNREACHABLE" } });
+        summary.unreachable++;
+        continue;
+      }
+      let outcome: { ok: boolean; error?: string };
+      try {
+        outcome = await sendSms({ recipient: row.employee.phone!, message });
+      } catch (error) {
+        outcome = { ok: false, error: error instanceof Error ? error.message : "SMS_ERROR" };
+      }
+      await prisma.announcementRecipient.update({
+        where: { id: row.id },
+        data: outcome.ok
+          ? { smsStatus: "SENT", smsSentAt: new Date(), smsError: null }
+          : { smsStatus: "FAILED", smsError: (outcome.error ?? "Not accepted by the SMS gateway").slice(0, 300) },
+      });
+      if (outcome.ok) summary.sent++;
+      else summary.failed++;
+    }
+  }
+  return summary;
+}
+
+/** Emails an announcement, one message each, with an idempotency key so a retry never double-sends. */
+export async function fanoutAnnouncementEmail(payload: unknown): Promise<ChannelSummary> {
+  const { announcementId } = announcementFanoutPayload.parse(payload);
+  const summary: ChannelSummary = { sent: 0, failed: 0, unreachable: 0 };
+  const announcement = await prisma.announcement.findUnique({
+    where: { id: announcementId },
+    select: { title: true, body: true, sendEmail: true, createdByName: true },
+  });
+  if (!announcement) throw new PermanentJobError(`announcement ${announcementId} no longer exists`);
+  if (!announcement.sendEmail) return summary;
+
+  for (;;) {
+    const pending = await prisma.announcementRecipient.findMany({
+      where: { announcementId, emailStatus: "PENDING" },
+      orderBy: { employeeId: "asc" },
+      take: SIMPLE_CHUNK,
+      select: { id: true, employeeId: true, employee: { select: { email: true, firstName: true } } },
+    });
+    if (pending.length === 0) break;
+
+    for (const row of pending) {
+      const email = row.employee.email?.trim();
+      if (!email || !email.includes("@")) {
+        await prisma.announcementRecipient.update({ where: { id: row.id }, data: { emailStatus: "UNREACHABLE" } });
+        summary.unreachable++;
+        continue;
+      }
+      const result = await sendEmail({
+        to: [email],
+        from: "Basilissa",
+        subject: announcement.title,
+        html: buildAnnouncementEmailHtml({
+          title: announcement.title,
+          body: announcement.body,
+          recipientName: row.employee.firstName,
+          senderName: announcement.createdByName,
+        }),
+        idempotencyKey: `announcement:${announcementId}:${row.employeeId}`,
+        context: { announcementId, employeeId: row.employeeId },
+      });
+      const ok = result.status === "sent";
+      await prisma.announcementRecipient.update({
+        where: { id: row.id },
+        data: ok
+          ? { emailStatus: "SENT", emailSentAt: new Date(), emailError: null }
+          : {
+              emailStatus: "FAILED",
+              emailError:
+                result.status === "skipped"
+                  ? "Email is not configured"
+                  : String((result as { error?: unknown }).error ?? "Not accepted by the email gateway").slice(0, 300),
+            },
+      });
+      if (ok) summary.sent++;
+      else summary.failed++;
+    }
+  }
+  return summary;
+}
+
+/**
+ * The job: every channel the sender chose, in turn. One channel failing does not
+ * stop the others (each records its own outcome per person), but a thrown error
+ * still fails the job so it is retried and, if it keeps failing, reported to Slack.
+ */
 export async function handleAnnouncementFanout(payload: unknown): Promise<void> {
-  await fanoutAnnouncementPush(payload);
+  const errors: unknown[] = [];
+  for (const run of [fanoutAnnouncementPush, fanoutAnnouncementSms, fanoutAnnouncementEmail]) {
+    try {
+      await run(payload);
+    } catch (error) {
+      if (error instanceof PermanentJobError) throw error;
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw errors[0];
+}
+
+export type ReminderSummary = { examined: number; reminded: number };
+
+/**
+ * Reminds people who have not confirmed an announcement that asked for it.
+ * Automatic: first after a few hours (one for an urgent announcement), then daily,
+ * at most three, none after a week (`ackReminderDue` holds the schedule).
+ *
+ * The record is written BEFORE the push, so a failed push is not retried every
+ * sweep: a reminder is a nudge, and being late once is better than being repeated.
+ * It goes by push whether or not the sender chose push for the original, because
+ * confirming is the point. Someone with no registered phone simply is not nudged;
+ * the banner and the inbox still ask.
+ */
+export async function remindUnacknowledged(now: Date = new Date()): Promise<ReminderSummary> {
+  const candidates = await prisma.announcementRecipient.findMany({
+    where: {
+      acknowledgedAt: null,
+      ackReminderCount: { lt: 3 },
+      announcement: { requiresAck: true, createdAt: { gt: new Date(now.getTime() - 7 * 86_400_000) } },
+      employee: { status: "ACTIVE" },
+    },
+    take: 500,
+    orderBy: { announcement: { createdAt: "asc" } },
+    select: {
+      id: true,
+      employeeId: true,
+      announcementId: true,
+      acknowledgedAt: true,
+      ackReminderCount: true,
+      ackRemindedAt: true,
+      announcement: { select: { title: true, requiresAck: true, isUrgent: true, createdAt: true } },
+    },
+  });
+
+  let reminded = 0;
+  for (const row of candidates) {
+    if (!ackReminderDue(row, row.announcement, now)) continue;
+    await prisma.announcementRecipient.update({
+      where: { id: row.id },
+      data: { ackReminderCount: { increment: 1 }, ackRemindedAt: now },
+    });
+    try {
+      await sendEmployeePushNotification(row.employeeId, {
+        title: "Please confirm you have read this",
+        body: row.announcement.title,
+        data: { type: "ANNOUNCEMENT", announcementId: row.announcementId, reminder: true },
+      });
+      reminded++;
+    } catch (error) {
+      scoped("announcements.reminders").warn("could not send a confirmation reminder", { employeeId: row.employeeId, error });
+    }
+  }
+  return { examined: candidates.length, reminded };
 }
 
 /**
  * Takes down banners whose time is up. Reads already treat an expired banner as
  * inactive, so this only tidies the state (and frees the one-banner slot); a late
- * run never shows a stale banner. Safe to repeat.
+ * run never shows a stale banner. Safe to repeat. A banner that asked for
+ * confirmation keeps showing to people who have not given it (see
+ * `getActiveUrgentBanner`), whatever this has recorded.
  */
 export async function expireUrgentBanners(now: Date = new Date()): Promise<number> {
   const result = await prisma.announcement.updateMany({

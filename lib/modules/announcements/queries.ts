@@ -42,6 +42,8 @@ export type AnnouncementListRow = {
   createdByName: string;
   audienceKind: AudienceKind;
   sendPush: boolean;
+  sendSms: boolean;
+  sendEmail: boolean;
   isUrgent: boolean;
   bannerActive: boolean;
   requiresAck: boolean;
@@ -75,6 +77,8 @@ export async function listAnnouncements(
       createdByName: true,
       audienceKind: true,
       sendPush: true,
+      sendSms: true,
+      sendEmail: true,
       isUrgent: true,
       bannerClearedAt: true,
       bannerExpiresAt: true,
@@ -110,6 +114,8 @@ export async function listAnnouncements(
       createdByName: announcement.createdByName,
       audienceKind: announcement.audienceKind,
       sendPush: announcement.sendPush,
+      sendSms: announcement.sendSms,
+      sendEmail: announcement.sendEmail,
       isUrgent: announcement.isUrgent,
       bannerActive: isBannerActive(announcement, now),
       requiresAck: announcement.requiresAck,
@@ -131,6 +137,10 @@ export type RecipientRow = {
   readAt: Date | null;
   pushStatus: string;
   pushError: string | null;
+  smsStatus: string;
+  smsError: string | null;
+  emailStatus: string;
+  emailError: string | null;
   acknowledgedAt: Date | null;
 };
 
@@ -142,12 +152,29 @@ export type AnnouncementDetail = {
   createdByName: string;
   audienceKind: AudienceKind;
   sendPush: boolean;
+  sendSms: boolean;
+  sendEmail: boolean;
   isUrgent: boolean;
   bannerActive: boolean;
   bannerExpiresAt: Date | null;
   requiresAck: boolean;
   recipients: RecipientRow[];
-  counts: { recipients: number; read: number; acknowledged: number; pushSent: number; pushFailed: number; pushUnreachable: number };
+  counts: {
+    recipients: number;
+    read: number;
+    acknowledged: number;
+    pushSent: number;
+    pushFailed: number;
+    pushUnreachable: number;
+    smsSent: number;
+    smsFailed: number;
+    smsUnreachable: number;
+    emailSent: number;
+    emailFailed: number;
+    emailUnreachable: number;
+    /** Failed on any channel, which is what Retry acts on. */
+    failedDeliveries: number;
+  };
 };
 
 /** The announcement and who it went to, or null when it does not exist or is not the viewer's to see. */
@@ -165,6 +192,8 @@ export async function getAnnouncementDetail(id: string, viewer: Viewer): Promise
       createdByName: true,
       audienceKind: true,
       sendPush: true,
+      sendSms: true,
+      sendEmail: true,
       isUrgent: true,
       bannerClearedAt: true,
       bannerExpiresAt: true,
@@ -175,6 +204,10 @@ export async function getAnnouncementDetail(id: string, viewer: Viewer): Promise
           employeeId: true,
           pushStatus: true,
           pushError: true,
+          smsStatus: true,
+          smsError: true,
+          emailStatus: true,
+          emailError: true,
           acknowledgedAt: true,
           employee: { select: { firstName: true, lastName: true, employeeCode: true } },
         },
@@ -199,11 +232,16 @@ export async function getAnnouncementDetail(id: string, viewer: Viewer): Promise
       readAt,
       pushStatus: row.pushStatus,
       pushError: row.pushError,
+      smsStatus: row.smsStatus,
+      smsError: row.smsError,
+      emailStatus: row.emailStatus,
+      emailError: row.emailError,
       acknowledgedAt: row.acknowledgedAt,
     };
   });
 
-  const countStatus = (status: string) => recipients.filter((row) => row.pushStatus === status).length;
+  const countStatus = (field: "pushStatus" | "smsStatus" | "emailStatus", status: string) =>
+    recipients.filter((row) => row[field] === status).length;
 
   return {
     id: announcement.id,
@@ -213,6 +251,8 @@ export async function getAnnouncementDetail(id: string, viewer: Viewer): Promise
     createdByName: announcement.createdByName,
     audienceKind: announcement.audienceKind,
     sendPush: announcement.sendPush,
+    sendSms: announcement.sendSms,
+    sendEmail: announcement.sendEmail,
     isUrgent: announcement.isUrgent,
     bannerActive: isBannerActive(announcement, new Date()),
     bannerExpiresAt: announcement.bannerExpiresAt,
@@ -222,9 +262,17 @@ export async function getAnnouncementDetail(id: string, viewer: Viewer): Promise
       recipients: recipients.length,
       read: recipients.filter((row) => row.read).length,
       acknowledged: recipients.filter((row) => row.acknowledgedAt !== null).length,
-      pushSent: countStatus("SENT"),
-      pushFailed: countStatus("FAILED"),
-      pushUnreachable: countStatus("UNREACHABLE"),
+      pushSent: countStatus("pushStatus", "SENT"),
+      pushFailed: countStatus("pushStatus", "FAILED"),
+      pushUnreachable: countStatus("pushStatus", "UNREACHABLE"),
+      smsSent: countStatus("smsStatus", "SENT"),
+      smsFailed: countStatus("smsStatus", "FAILED"),
+      smsUnreachable: countStatus("smsStatus", "UNREACHABLE"),
+      emailSent: countStatus("emailStatus", "SENT"),
+      emailFailed: countStatus("emailStatus", "FAILED"),
+      emailUnreachable: countStatus("emailStatus", "UNREACHABLE"),
+      failedDeliveries:
+        countStatus("pushStatus", "FAILED") + countStatus("smsStatus", "FAILED") + countStatus("emailStatus", "FAILED"),
     },
   };
 }

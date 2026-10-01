@@ -685,30 +685,35 @@ off everywhere, so nothing changes until someone turns it on.
 
 ### 🟠 D6 — Announcements (broadcast to staff devices)
 
-**Status: phases 1, 2 and 4 built (1 Oct 2026), not yet migrated in production.**
+**Status: all four phases built (1 Oct 2026), not yet migrated in production.**
 [specs/announcements.md](../specs/announcements.md) has the design and the build
 status. Built: dashboard compose to everyone, branches or chosen people; the
 always-on in-app inbox and its mobile endpoints; push through the
 `announcements.fanout` job; history and per-recipient read and push status.
 Leave decisions and shift reminders now also write inbox rows.
 
-**Not built:** email and SMS channels (phase 3); a "remind unacknowledged"
-action; a retry for failed push recipients; pruning of dead push tokens. The
-urgent banner is restricted to company-wide senders because there is one banner
+**Built since the first cut:** email and SMS (separate switches, SMS off by
+default with a cost warning and a 300-person ceiling), automatic confirmation
+reminders, the banner lingering for the unconfirmed, a Retry failed button, and
+pruning of dead push tokens. The urgent banner is restricted to company-wide senders because there is one banner
 for everyone. The mobile app side (Notifications screen, banner, "I've read
 this") is built on `feat/notifications-inbox` in the app repo.
 
 **Production steps, in this order:**
 
-1. Run the migration: `pnpm db:migrate:deploy:prod` applies
-   `20261001200000_add_announcements`. It is additive (three tables, four enums,
-   one hand-written partial unique index) and touches no existing table.
+1. Run the migrations: `pnpm db:migrate:deploy:prod` applies
+   `20261001200000_add_announcements` (three tables, four enums, one hand-written
+   partial unique index) and `20261001230000_add_announcement_ack_reminders` (two
+   columns). Both are additive and touch no existing table.
 2. Deploy the web app.
 3. **Redeploy the worker** (Railway and Cloud Run). Until it runs the new
    registry it cannot handle `announcements.fanout`; such jobs retry and then
    succeed once it catches up, so nothing is lost, but push is delayed.
-4. Confirm `FIREBASE_SERVICE_ACCOUNT_KEY` is set on the worker. Without it FCM
-   sends fail and recipients show as failed.
+4. Confirm `FIREBASE_SERVICE_ACCOUNT_KEY` is set on the worker (otherwise FCM sends
+   fail), and `SMS_GATEWAY_URL` / `SMS_GATEWAY_AUTH_TOKEN` and `EMAIL_SERVER_URL` if
+   SMS and email should really send. **SMS is simulated when the gateway URL is
+   unset, but email is not: with no `EMAIL_SERVER_URL` it falls back to the
+   production gateway.**
 
 **Defaults to confirm with the business:** who may send. Today
 `announcement:write` is held by branch manager, area manager, HR, administrator

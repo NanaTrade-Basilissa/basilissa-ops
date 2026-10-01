@@ -30,6 +30,9 @@ export type AudienceRefusal =
   | "UNKNOWN_PERSON"
   | "NO_ACCESS";
 
+/** Why a send is refused for a reason other than who it is addressed to. */
+export type SendRefusal = "NO_RECIPIENTS" | "URGENT_NEEDS_GLOBAL" | "URGENT_CONFLICT" | "SMS_LIMIT";
+
 export type AudienceCheck = { ok: true } | { ok: false; reason: AudienceRefusal };
 
 /**
@@ -38,7 +41,7 @@ export type AudienceCheck = { ok: true } | { ok: false; reason: AudienceRefusal 
  * server-only service.
  */
 export type AudiencePreview =
-  | { ok: true; recipients: number; withApp: number; withoutApp: number }
+  | { ok: true; recipients: number; withApp: number; withoutApp: number; withEmail: number; withPhone: number }
   | { ok: false; error: AudienceRefusal | "NO_RECIPIENTS" };
 
 /**

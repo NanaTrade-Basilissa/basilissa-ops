@@ -21,6 +21,8 @@ export interface PushReceipt {
   id?: string;
   error?: string;
   simulated?: boolean;
+  /** The provider says this token will never work again (app uninstalled, token rotated). */
+  permanent?: boolean;
 }
 
 export interface StoredDeviceMetadata {
@@ -69,6 +71,34 @@ export function parseDeviceMetadata(rawLabel: string | null): StoredDeviceMetada
 export function deviceNameFromLabel(rawLabel: string | null | undefined): string | null {
   const name = parseDeviceMetadata(rawLabel ?? null).deviceName?.trim();
   return name ? name : null;
+}
+
+/** FCM error codes meaning the registration token is permanently unusable. */
+function isDeadFcmCode(code: string | undefined): boolean {
+  return code === "messaging/registration-token-not-registered" || code === "messaging/invalid-registration-token";
+}
+
+/**
+ * Removes the given tokens from the device identities that hold them. Only the
+ * token goes: the binding and the device name stay (see `deviceNameFromLabel`).
+ * The phone registers a fresh token the next time the app starts.
+ */
+export async function pruneDeadPushTokens(tokens: string[]): Promise<number> {
+  let pruned = 0;
+  for (const token of new Set(tokens)) {
+    const identities = await prisma.employeeDeviceIdentity.findMany({
+      where: { providerType: ProviderType.MOBILE_APP, revokedAt: null, label: { contains: token } },
+      select: { id: true, label: true },
+    });
+    for (const identity of identities) {
+      const meta = parseDeviceMetadata(identity.label);
+      if (meta.pushToken !== token) continue;
+      const label = meta.deviceName ?? (meta.platform ? JSON.stringify({ platform: meta.platform }) : null);
+      await prisma.employeeDeviceIdentity.update({ where: { id: identity.id }, data: { label } });
+      pruned++;
+    }
+  }
+  return pruned;
 }
 
 let isFirebaseAdminInitialized = false;
@@ -180,6 +210,7 @@ async function sendFCMPushNotification(
         ok: false,
         token,
         error: resp?.error?.message || resp?.error?.code || "FCM_DISPATCH_FAILED",
+        permanent: isDeadFcmCode(resp?.error?.code),
       };
     });
   } catch (err) {
@@ -244,6 +275,7 @@ async function sendExpoPushNotification(
         ok: false,
         token,
         error: ticket?.message || "DISPATCH_FAILED",
+        permanent: (ticket?.details as { error?: string } | undefined)?.error === "DeviceNotRegistered",
       };
     });
   } catch (err) {
@@ -308,6 +340,18 @@ export async function sendPushNotification(
   if (fcmTokens.length > 0) {
     const fcmReceipts = await sendFCMPushNotification(fcmTokens, payload);
     receipts.push(...fcmReceipts);
+  }
+
+  // A token the provider says is dead is removed now, so the next send reports
+  // "no device" instead of failing again, and the person is not counted as
+  // reachable. Best effort: it must never fail the send.
+  const dead = receipts.filter((receipt) => receipt.permanent).map((receipt) => receipt.token);
+  if (dead.length > 0) {
+    try {
+      await pruneDeadPushTokens(dead);
+    } catch (error) {
+      log.warn("could not prune dead push tokens", { error });
+    }
   }
 
   return receipts;

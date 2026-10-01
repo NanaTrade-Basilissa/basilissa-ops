@@ -13,6 +13,10 @@ export type RecipientTableRow = {
   readAt: Date | null;
   pushStatus: string;
   pushError: string | null;
+  smsStatus: string;
+  smsError: string | null;
+  emailStatus: string;
+  emailError: string | null;
   acknowledgedAt: Date | null;
 };
 
@@ -23,15 +27,25 @@ const PUSH_LABELS: Record<string, { label: string; className: string }> = {
   UNREACHABLE: { label: "No device", className: "text-muted-foreground" },
 };
 
+/** The same states for SMS and email, where "unreachable" means no number or address on file. */
+const CONTACT_LABELS: Record<string, { label: string; className: string }> = {
+  ...PUSH_LABELS,
+  UNREACHABLE: { label: "None on file", className: "text-muted-foreground" },
+};
+
 const columnHelper = createColumnHelper<typeof dataTableFeatures, RecipientTableRow>();
 
 export function AnnouncementRecipientsTable({
   rows,
   showPush,
+  showSms,
+  showEmail,
   showAck,
 }: {
   rows: RecipientTableRow[];
   showPush: boolean;
+  showSms: boolean;
+  showEmail: boolean;
   showAck: boolean;
 }) {
   const columns = columnHelper.columns([
@@ -79,6 +93,38 @@ export function AnnouncementRecipientsTable({
               if (!meta) return <span className="text-xs text-muted-foreground">-</span>;
               return (
                 <Badge variant="outline" className={meta.className} title={info.row.original.pushError ?? undefined}>
+                  {meta.label}
+                </Badge>
+              );
+            },
+          }),
+        ]
+      : []),
+    ...(showSms
+      ? [
+          columnHelper.accessor("smsStatus", {
+            header: "SMS",
+            cell: (info) => {
+              const meta = CONTACT_LABELS[info.getValue()];
+              if (!meta) return <span className="text-xs text-muted-foreground">-</span>;
+              return (
+                <Badge variant="outline" className={meta.className} title={info.row.original.smsError ?? undefined}>
+                  {meta.label}
+                </Badge>
+              );
+            },
+          }),
+        ]
+      : []),
+    ...(showEmail
+      ? [
+          columnHelper.accessor("emailStatus", {
+            header: "Email",
+            cell: (info) => {
+              const meta = CONTACT_LABELS[info.getValue()];
+              if (!meta) return <span className="text-xs text-muted-foreground">-</span>;
+              return (
+                <Badge variant="outline" className={meta.className} title={info.row.original.emailError ?? undefined}>
                   {meta.label}
                 </Badge>
               );

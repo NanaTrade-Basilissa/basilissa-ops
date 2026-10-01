@@ -1,6 +1,6 @@
 "use client";
 
-import { Smartphone } from "lucide-react";
+import { Mail, MessageSquare, Smartphone } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,8 @@ export type AnnouncementRow = {
   createdByName: string;
   audienceKind: AudienceKind;
   sendPush: boolean;
+  sendSms: boolean;
+  sendEmail: boolean;
   isUrgent: boolean;
   bannerActive: boolean;
   requiresAck: boolean;
@@ -76,15 +78,34 @@ const columns = columnHelper.columns([
   }),
   columnHelper.accessor("sendPush", {
     header: "Delivery",
-    cell: (info) =>
-      info.getValue() ? (
-        <Badge variant="outline" className="gap-1">
-          <Smartphone className="size-3" />
-          Push
-        </Badge>
-      ) : (
-        <span className="text-xs text-muted-foreground">In app only</span>
-      ),
+    cell: (info) => {
+      const row = info.row.original;
+      if (!row.sendPush && !row.sendSms && !row.sendEmail) {
+        return <span className="text-xs text-muted-foreground">In app only</span>;
+      }
+      return (
+        <div className="flex flex-wrap gap-1">
+          {row.sendPush && (
+            <Badge variant="outline" className="gap-1">
+              <Smartphone className="size-3" />
+              Push
+            </Badge>
+          )}
+          {row.sendSms && (
+            <Badge variant="outline" className="gap-1">
+              <MessageSquare className="size-3" />
+              SMS
+            </Badge>
+          )}
+          {row.sendEmail && (
+            <Badge variant="outline" className="gap-1">
+              <Mail className="size-3" />
+              Email
+            </Badge>
+          )}
+        </div>
+      );
+    },
   }),
 ]);
 

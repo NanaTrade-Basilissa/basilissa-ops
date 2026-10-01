@@ -38,6 +38,8 @@ const INPUT = {
   branchIds: ["accra"],
   employeeIds: [] as string[],
   sendPush: true,
+  sendEmail: false,
+  sendSms: false,
   isUrgent: false,
   bannerHours: 24,
   requiresAck: false,
@@ -67,13 +69,15 @@ describe("sendAnnouncement", () => {
       title: "Branch closed Friday",
       audienceKind: "BRANCHES",
       sendPush: true,
+      sendEmail: false,
+      sendSms: false,
       createdBy: "user_1",
       createdByName: "Efua HR",
     });
     const recipients = tx.announcementRecipient.createMany.mock.calls[0]![0].data;
     expect(recipients).toEqual([
-      { announcementId: "ann_1", employeeId: "ama", pushStatus: "PENDING" },
-      { announcementId: "ann_1", employeeId: "kofi", pushStatus: "PENDING" },
+      { announcementId: "ann_1", employeeId: "ama", pushStatus: "PENDING", smsStatus: "NOT_REQUESTED", emailStatus: "NOT_REQUESTED" },
+      { announcementId: "ann_1", employeeId: "kofi", pushStatus: "PENDING", smsStatus: "NOT_REQUESTED", emailStatus: "NOT_REQUESTED" },
     ]);
     const inbox = tx.notification.createMany.mock.calls[0]![0].data;
     expect(inbox).toHaveLength(2);
@@ -146,11 +150,18 @@ describe("previewAudience", () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it("counts recipients and how many have the app", async () => {
-    vi.spyOn(prisma.employee, "findMany").mockResolvedValueOnce([
-      employee("ama", ["accra"]),
-      employee("kofi", ["accra"]),
-      employee("esi", ["accra"]),
-    ] as never);
+    // One spy, queued in call order: the directory, then the contact details.
+    vi.spyOn(prisma.employee, "findMany")
+      .mockResolvedValueOnce([
+        employee("ama", ["accra"]),
+        employee("kofi", ["accra"]),
+        employee("esi", ["accra"]),
+      ] as never)
+      .mockResolvedValueOnce([
+        { email: "a@x.com", phone: "0241234567" },
+        { email: null, phone: "0241234568" },
+        { email: "c@x.com", phone: null },
+      ] as never);
     vi.spyOn(prisma.employeeDeviceIdentity, "findMany").mockResolvedValueOnce([
       { employeeId: "ama" },
       { employeeId: "kofi" },
@@ -161,7 +172,7 @@ describe("previewAudience", () => {
       ALL,
     );
 
-    expect(preview).toEqual({ ok: true, recipients: 3, withApp: 2, withoutApp: 1 });
+    expect(preview).toEqual({ ok: true, recipients: 3, withApp: 2, withoutApp: 1, withEmail: 2, withPhone: 2 });
   });
 
   it("applies the same scope rule as sending", async () => {

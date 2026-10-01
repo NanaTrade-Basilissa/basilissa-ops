@@ -7,7 +7,9 @@ import { DEFAULT_BANNER_HOURS } from "./constants";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { REFUSAL_MESSAGES, type AudiencePreview } from "./audience";
 import { audienceSchema, announcementSchema, type AudienceInput } from "./validation";
-import { clearUrgentBanner, previewAudience, sendAnnouncement } from "./service";
+import { getAnnouncementDetail } from "./queries";
+import { clearUrgentBanner, previewAudience, retryFailedDeliveries, sendAnnouncement } from "./service";
+import { MAX_SMS_RECIPIENTS } from "./constants";
 
 /**
  * Both actions re-check `announcement:write`, because a Server Action is
@@ -33,6 +35,8 @@ export async function sendAnnouncementAction(
     branchIds: formData.getAll("branchIds").map(String),
     employeeIds: formData.getAll("employeeIds").map(String),
     sendPush: formData.get("sendPush") === "on",
+    sendEmail: formData.get("sendEmail") === "on",
+    sendSms: formData.get("sendSms") === "on",
     isUrgent: formData.get("isUrgent") === "on",
     bannerHours: formData.get("bannerHours") ?? DEFAULT_BANNER_HOURS,
     requiresAck: formData.get("requiresAck") === "on",
@@ -53,7 +57,9 @@ export async function sendAnnouncementAction(
         ? "Nobody active matches that audience, so there is no one to send it to."
         : result.error === "URGENT_NEEDS_GLOBAL"
           ? "Only someone with company-wide access can send an urgent announcement, because the banner is shown to everyone."
-          : result.error === "URGENT_CONFLICT"
+          : result.error === "SMS_LIMIT"
+            ? `That would text more than ${MAX_SMS_RECIPIENTS} people. Text fewer people, or use push and email instead.`
+            : result.error === "URGENT_CONFLICT"
             ? "Another urgent announcement was sent a moment ago. Check it, then send yours again if it is still needed."
             : REFUSAL_MESSAGES[result.error];
     return { error: message };
@@ -79,5 +85,21 @@ export async function clearUrgentBannerAction(formData: FormData): Promise<void>
 
   await clearUrgentBanner(id, { audit: auditActorFrom(actor), name: actor.name });
   revalidatePath("/admin/announcements");
+  revalidatePath(`/admin/announcements/${id}`);
+}
+
+/**
+ * Retries the deliveries that failed. Allowed for the sender of the announcement
+ * and for company-wide senders, the same people who can see it (`getAnnouncementDetail`
+ * is checked first, so a branch manager cannot retry someone else's).
+ */
+export async function retryFailedDeliveriesAction(formData: FormData): Promise<void> {
+  const { actor, scope } = await requireAnyBranchPermission("announcement:write");
+  const id = String(formData.get("announcementId") ?? "");
+  if (!id) return;
+  const visible = await getAnnouncementDetail(id, { userId: actor.userId, scope });
+  if (!visible) return;
+
+  await retryFailedDeliveries(id, { audit: auditActorFrom(actor), name: actor.name });
   revalidatePath(`/admin/announcements/${id}`);
 }

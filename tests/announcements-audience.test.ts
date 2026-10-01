@@ -134,6 +134,8 @@ describe("announcementSchema", () => {
     branchIds: ["accra"],
     employeeIds: [],
     sendPush: true,
+    sendEmail: false,
+    sendSms: false,
     isUrgent: false,
     bannerHours: 24,
     requiresAck: false,

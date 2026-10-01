@@ -4,7 +4,7 @@ This document is the authoritative summary of the current engineering state, wha
 
 ## 0. The next task
 
-**Announcements phase 3 (email and SMS channels)**, specified in [`specs/announcements.md`](./specs/announcements.md). Phases 1, 2 and 4 are built (1 October 2026, branch `feat/announcements`): compose, audience rules, history, the staff inbox with its mobile endpoints, push through a fan-out job, the urgent banner and acknowledgement. The mobile app side is built on `feat/notifications-inbox` in the app repo and needs a native build to test. Phase 3 needs answers from the business first: the SMS budget and how staff without the app are reached. Also still open: a "remind unacknowledged" action.
+**Announcements are built end to end** ([`specs/announcements.md`](./specs/announcements.md), 1 October 2026, branch `feat/announcements`): compose, audience rules, history, the staff inbox with its mobile endpoints, push, SMS and email, the urgent banner, acknowledgement with automatic reminders, retry of failed deliveries, and pruning of dead push tokens. The mobile app side is on `feat/notifications-inbox` in the app repo and needs a native build to test. What is left is rolling it out: run the two migrations on production, redeploy the web app and the worker, set the SMS and email gateway variables, and merge both branches. Nothing else is in flight.
 
 **Built but not yet migrated in production:** public holidays and cover shifts (register D4), rota patterns (D5), and announcements (D6). Each register entry has its production steps; D6's includes redeploying the worker.
 

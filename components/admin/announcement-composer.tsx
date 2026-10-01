@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Loader2, Megaphone, Send, Smartphone, Users, CheckCheck } from "lucide-react";
+import { AlertTriangle, CheckCheck, Loader2, Mail, Megaphone, MessageSquare, Send, Smartphone, Users } from "lucide-react";
 import type { FormState } from "@/lib/platform/forms";
 import {
   previewAnnouncementAudienceAction,
@@ -14,6 +14,7 @@ import {
   AUDIENCE_LABELS,
   BANNER_HOURS,
   DEFAULT_BANNER_HOURS,
+  MAX_SMS_RECIPIENTS,
   type AudienceKind,
 } from "@/lib/modules/announcements/constants";
 import type { ComposeOptions } from "@/lib/modules/announcements/queries";
@@ -62,6 +63,8 @@ export function AnnouncementComposer({ options }: { options: ComposeOptions }) {
   const [employeeIds, setEmployeeIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [sendPush, setSendPush] = useState(true);
+  const [sendEmail, setSendEmail] = useState(false);
+  const [sendSms, setSendSms] = useState(false);
   const [isUrgent, setIsUrgent] = useState(false);
   const [bannerHours, setBannerHours] = useState<number>(DEFAULT_BANNER_HOURS);
   const [requiresAck, setRequiresAck] = useState(false);
@@ -321,6 +324,64 @@ export function AnnouncementComposer({ options }: { options: ComposeOptions }) {
           </div>
 
           <div className="mt-5 flex items-start gap-3">
+            <Switch id="sendEmail" name="sendEmail" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+            <div className="space-y-0.5">
+              <Label htmlFor="sendEmail" className="flex items-center gap-1.5">
+                <Mail className="size-4" />
+                Email
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Also email it to staff who have an address on file
+                {shownPreview?.ok ? ` (${shownPreview.withEmail} of ${shownPreview.recipients})` : ""}.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex items-start gap-3">
+            <Switch id="sendSms" name="sendSms" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
+            <div className="flex-1 space-y-1.5">
+              <div className="space-y-0.5">
+                <Label htmlFor="sendSms" className="flex items-center gap-1.5">
+                  <MessageSquare className="size-4" />
+                  SMS
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Also text it to staff who have a phone number on file. Off unless you choose it.
+                </p>
+              </div>
+              {sendSms && (
+                <div
+                  role="alert"
+                  className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                >
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    <strong>SMS costs money for every message.</strong>{" "}
+                    {shownPreview?.ok ? (
+                      shownPreview.withPhone > MAX_SMS_RECIPIENTS ? (
+                        <>
+                          This would text {shownPreview.withPhone} people, over the limit of {MAX_SMS_RECIPIENTS} per
+                          send, so it will be refused. Choose fewer people, or use push and email.
+                        </>
+                      ) : (
+                        <>
+                          This will text about {shownPreview.withPhone} {shownPreview.withPhone === 1 ? "person" : "people"}
+                          {shownPreview.recipients - shownPreview.withPhone > 0
+                            ? `; ${shownPreview.recipients - shownPreview.withPhone} have no phone number and are skipped`
+                            : ""}
+                          . Limit: {MAX_SMS_RECIPIENTS} per send. Push and email are free, so use them if they are enough.
+                        </>
+                      )
+                    ) : (
+                      <>Choose who it is for to see how many people would be texted. Limit: {MAX_SMS_RECIPIENTS} per send.</>
+                    )}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-5 flex items-start gap-3">
             <Switch id="requiresAck" name="requiresAck" checked={requiresAck} onChange={(e) => setRequiresAck(e.target.checked)} />
             <div className="space-y-0.5">
               <Label htmlFor="requiresAck" className="flex items-center gap-1.5">
@@ -392,6 +453,8 @@ export function AnnouncementComposer({ options }: { options: ComposeOptions }) {
             <AlertDialogDescription>
               An announcement cannot be edited or taken back once it is sent.
               {sendPush ? " Their phones will be alerted." : " It will appear in their notifications screen only."}
+              {sendEmail && " It will be emailed."}
+              {sendSms && shownPreview?.ok && ` It will be texted to about ${shownPreview.withPhone} people, which costs money.`}
               {isUrgent && options.activeUrgent && ` It replaces the urgent banner “${options.activeUrgent.title}”.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
