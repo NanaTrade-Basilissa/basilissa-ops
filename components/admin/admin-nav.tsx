@@ -1,19 +1,15 @@
 import {
   BarChart3,
   Brain,
-  CalendarCheck,
-  CalendarClock,
   CalendarRange,
   ClipboardCheck,
   ClipboardList,
-  Fingerprint,
   History,
   Layers,
   LayoutDashboard,
   ListChecks,
   Mail,
   MessageSquareText,
-  PartyPopper,
   Shield,
   Store,
   UserCog,
@@ -29,22 +25,64 @@ import type { Permission } from "@/lib/modules/identity/authorization";
  * stays a plain data module read by the sidebar.
  */
 
-export type NavItem = {
+export type NavBadge = "pendingLeave";
+
+export type NavLink = {
   href: string;
   label: string;
   icon: LucideIcon;
   exact: boolean;
   permission?: Permission;
   /** Key into the counts the layout passes to the sidebar, shown as a badge. */
-  badge?: "pendingLeave";
+  badge?: NavBadge;
 };
+
+/**
+ * Related pages folded under one expandable entry. Has no page of its own and
+ * no permission of its own: it is visible when any child is.
+ */
+export type NavFolder = {
+  label: string;
+  icon: LucideIcon;
+  children: readonly Omit<NavLink, "icon">[];
+};
+
+export type NavItem = NavLink | NavFolder;
 
 export type NavGroup = {
   label: string;
   items: readonly NavItem[];
 };
 
-export const DASHBOARD_ITEM: NavItem = { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true };
+export const isFolder = (item: NavItem): item is NavFolder => "children" in item;
+
+/**
+ * The navigation one person sees: links they hold the permission for, folders
+ * with at least one such child, sections with anything left in them. Pure, so
+ * the sidebar and the authorization tests share one definition.
+ */
+export function visibleNav(permissions: readonly string[], groups: readonly NavGroup[] = NAV_GROUPS): NavGroup[] {
+  const allowed = (permission?: Permission) => !permission || permissions.includes(permission);
+  return groups
+    .map((group) => ({
+      label: group.label,
+      items: group.items.flatMap((item): NavItem[] => {
+        if (!isFolder(item)) return allowed(item.permission) ? [item] : [];
+        const children = item.children.filter((child) => allowed(child.permission));
+        return children.length > 0 ? [{ ...item, children }] : [];
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+/** Every page href in a set of groups, folders opened up. */
+export function navHrefs(groups: readonly NavGroup[]): string[] {
+  return groups.flatMap((group) =>
+    group.items.flatMap((item) => (isFolder(item) ? item.children.map((child) => child.href) : [item.href])),
+  );
+}
+
+export const DASHBOARD_ITEM: NavLink = { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true };
 
 // Navigation links are gated by permission so that users only see features
 // they have full or partial access to. Server actions and pages enforce
@@ -60,13 +98,34 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "People",
     items: [
       { href: "/admin/employees", label: "Employees", icon: Users, exact: false, permission: "employee:read" },
-      { href: "/admin/branches", label: "Branches", icon: Store, exact: false, permission: "branch:read" },
-      { href: "/admin/devices", label: "Devices", icon: Fingerprint, exact: false, permission: "device:read" },
-      { href: "/admin/attendance", label: "Attendance", icon: ClipboardList, exact: true, permission: "attendance:read" },
-      { href: "/admin/shifts", label: "Shifts", icon: CalendarRange, exact: false, permission: "schedule:read" },
-      { href: "/admin/attendance/policy", label: "Attendance policy", icon: CalendarClock, exact: false, permission: "policy:read" },
-      { href: "/admin/holidays", label: "Public holidays", icon: PartyPopper, exact: false, permission: "policy:read" },
-      { href: "/admin/leave", label: "Leave", icon: CalendarCheck, exact: false, permission: "attendance:read", badge: "pendingLeave" },
+      {
+        label: "Branches",
+        icon: Store,
+        children: [
+          { href: "/admin/branches", label: "Branches", exact: false, permission: "branch:read" },
+          // The fingerprint terminals installed at each branch.
+          { href: "/admin/devices", label: "Devices", exact: false, permission: "device:read" },
+        ],
+      },
+      {
+        label: "Attendance",
+        icon: ClipboardList,
+        children: [
+          { href: "/admin/attendance", label: "Daily attendance", exact: true, permission: "attendance:read" },
+          { href: "/admin/leave", label: "Leave", exact: false, permission: "attendance:read", badge: "pendingLeave" },
+          { href: "/admin/attendance/policy", label: "Attendance policy", exact: false, permission: "policy:read" },
+        ],
+      },
+      {
+        // Who is expected at work: the rota, and the days nobody is. Rota
+        // patterns land here too.
+        label: "Scheduling",
+        icon: CalendarRange,
+        children: [
+          { href: "/admin/shifts", label: "Shifts & rota", exact: false, permission: "schedule:read" },
+          { href: "/admin/holidays", label: "Public holidays", exact: false, permission: "policy:read" },
+        ],
+      },
       { href: "/admin/payroll", label: "Payroll", icon: Wallet, exact: false, permission: "attendance:read" },
     ],
   },

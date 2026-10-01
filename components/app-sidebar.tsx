@@ -3,7 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DASHBOARD_ITEM, NAV_GROUPS, type NavItem } from "@/components/admin/admin-nav";
+import { ChevronRight } from "lucide-react";
+import {
+  DASHBOARD_ITEM,
+  isFolder,
+  visibleNav,
+  type NavBadge,
+  type NavFolder,
+  type NavLink,
+} from "@/components/admin/admin-nav";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NavUser } from "@/components/nav-user";
 import { Logo } from "@/components/brand/logo";
 import {
@@ -18,8 +27,101 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
+
+type Badges = Partial<Record<NavBadge, number>>;
+
+const BADGE_CLASS = "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
+
+function CountBadge({ count, className = "" }: { count: number; className?: string }) {
+  return (
+    <span
+      className={`flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums ${BADGE_CLASS} ${className}`}
+    >
+      {count}
+    </span>
+  );
+}
+
+/**
+ * Related pages under one expandable entry. Opens itself on any of its pages,
+ * so you never land somewhere with its section shut. While closed it carries
+ * its children's counts, so a pending leave request is not hidden by folding
+ * Attendance away. In the icon-only sidebar there is nowhere to unfold into,
+ * so the icon goes straight to the first page.
+ */
+function NavFolderItem({
+  item,
+  isActive,
+  badges,
+}: {
+  item: NavFolder;
+  isActive: (link: Pick<NavLink, "href" | "exact">) => boolean;
+  badges: Badges;
+}) {
+  const { state, isMobile } = useSidebar();
+  const activeChild = item.children.some(isActive);
+  const [open, setOpen] = React.useState(activeChild);
+
+  // Navigating into the folder from elsewhere opens it. Adjusted during render
+  // rather than in an effect, React's pattern for state that follows a prop.
+  const [wasActive, setWasActive] = React.useState(activeChild);
+  if (activeChild !== wasActive) {
+    setWasActive(activeChild);
+    if (activeChild) setOpen(true);
+  }
+
+  const total = item.children.reduce((sum, child) => sum + (child.badge ? (badges[child.badge] ?? 0) : 0), 0);
+
+  if (state === "collapsed" && !isMobile) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          tooltip={item.label}
+          isActive={activeChild}
+          render={<Link href={item.children[0]!.href} />}
+        >
+          <item.icon />
+          <span>{item.label}</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="group/collapsible" render={<SidebarMenuItem />}>
+      <CollapsibleTrigger render={<SidebarMenuButton tooltip={item.label} isActive={activeChild && !open} />}>
+        <item.icon />
+        <span>{item.label}</span>
+        {!open && total > 0 && <CountBadge count={total} className="ml-auto" />}
+        {/* shadcn's sidebar-07 pattern: the collapsible's own open state turns it. */}
+        <ChevronRight
+          className={`${!open && total > 0 ? "" : "ml-auto"} transition-transform duration-200 group-data-open/collapsible:rotate-90`}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <SidebarMenuSub>
+          {item.children.map((child) => {
+            const count = child.badge ? (badges[child.badge] ?? 0) : 0;
+            return (
+              <SidebarMenuSubItem key={child.href}>
+                <SidebarMenuSubButton isActive={isActive(child)} render={<Link href={child.href} />}>
+                  <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                  {count > 0 && <CountBadge count={count} />}
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            );
+          })}
+        </SidebarMenuSub>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 /**
  * The real admin sidebar, built on shadcn's Sidebar primitives
@@ -35,10 +137,11 @@ export function AppSidebar({
 }: React.ComponentProps<typeof Sidebar> & {
   user: { name: string; email: string };
   permissions?: string[];
-  badges?: Partial<Record<NonNullable<NavItem["badge"]>, number>>;
+  badges?: Badges;
 }) {
   const pathname = usePathname();
-  const isActive = (item: NavItem) => (item.exact ? pathname === item.href : pathname.startsWith(item.href));
+  const isActive = (link: Pick<NavLink, "href" | "exact">) =>
+    link.exact ? pathname === link.href : pathname.startsWith(link.href);
 
   return (
     <Sidebar collapsible="icon" variant="inset" {...props}>
@@ -71,36 +174,30 @@ export function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {NAV_GROUPS.map((group) => {
-          const items = group.items.filter((item) => {
-            if (item.permission && !permissions.includes(item.permission)) return false;
-            return true;
-          });
-          if (items.length === 0) return null;
-
-          return (
-            <SidebarGroup key={group.label}>
-              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {items.map((item) => (
+        {visibleNav(permissions).map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) =>
+                  isFolder(item) ? (
+                    <NavFolderItem key={item.label} item={item} isActive={isActive} badges={badges} />
+                  ) : (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton tooltip={item.label} isActive={isActive(item)} render={<Link href={item.href} />}>
                         <item.icon />
                         <span>{item.label}</span>
                       </SidebarMenuButton>
                       {item.badge && (badges[item.badge] ?? 0) > 0 && (
-                        <SidebarMenuBadge className="bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                          {badges[item.badge]}
-                        </SidebarMenuBadge>
+                        <SidebarMenuBadge className={BADGE_CLASS}>{badges[item.badge]}</SidebarMenuBadge>
                       )}
                     </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          );
-        })}
+                  ),
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter>

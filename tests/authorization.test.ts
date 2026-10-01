@@ -12,7 +12,7 @@ import {
   type ActorAssignment,
   type Permission,
 } from "@/lib/modules/identity/authorization";
-import { NAV_GROUPS } from "@/components/admin/admin-nav";
+import { navHrefs, visibleNav } from "@/components/admin/admin-nav";
 
 /**
  * authorization.ts is pure, so the whole matrix is testable without a database
@@ -379,12 +379,9 @@ describe("hasAnyPermission and heldPermissions", () => {
 });
 
 describe("navigation visibility by role", () => {
+  // The sidebar's own filter, folders included, so this tests what renders.
   function getVisibleNav(actorUser: Actor) {
-    const permissions = heldPermissions(actorUser);
-    return NAV_GROUPS.map((group) => ({
-      label: group.label,
-      items: group.items.filter((item) => !item.permission || permissions.includes(item.permission)),
-    })).filter((group) => group.items.length > 0);
+    return visibleNav(heldPermissions(actorUser));
   }
 
   it("shows all sections and all items to SUPER_ADMIN", () => {
@@ -395,7 +392,7 @@ describe("navigation visibility by role", () => {
     expect(groupLabels).toEqual(["People", "HR", "Operations", "Administration"]);
 
     const adminGroup = nav.find((g) => g.label === "Administration")!;
-    const adminHrefs = adminGroup.items.map((i) => i.href);
+    const adminHrefs = navHrefs([adminGroup]);
     expect(adminHrefs).toContain("/admin/email-queue");
     expect(adminHrefs).toContain("/admin/users");
   });
@@ -409,7 +406,7 @@ describe("navigation visibility by role", () => {
     expect(groupLabels).not.toContain("HR");
 
     const adminGroup = nav.find((g) => g.label === "Administration")!;
-    const adminHrefs = adminGroup.items.map((i) => i.href);
+    const adminHrefs = navHrefs([adminGroup]);
     expect(adminHrefs).toContain("/admin/users");
     expect(adminHrefs).not.toContain("/admin/email-queue");
   });
@@ -423,7 +420,7 @@ describe("navigation visibility by role", () => {
     expect(groupLabels).not.toContain("Administration");
 
     const opsGroup = nav.find((g) => g.label === "Operations")!;
-    const opsHrefs = opsGroup.items.map((i) => i.href);
+    const opsHrefs = navHrefs([opsGroup]);
     expect(opsHrefs).toContain("/admin/feedback");
     expect(opsHrefs).toContain("/admin/feedback/all");
     expect(opsHrefs).not.toContain("/admin/feedback/questions");
@@ -439,7 +436,7 @@ describe("navigation visibility by role", () => {
     expect(groupLabels).not.toContain("Administration");
 
     const peopleGroup = nav.find((g) => g.label === "People")!;
-    const peopleHrefs = peopleGroup.items.map((i) => i.href);
+    const peopleHrefs = navHrefs([peopleGroup]);
     expect(peopleHrefs).toContain("/admin/employees");
     expect(peopleHrefs).toContain("/admin/branches");
     expect(peopleHrefs).toContain("/admin/attendance");
@@ -447,10 +444,29 @@ describe("navigation visibility by role", () => {
     expect(peopleHrefs).not.toContain("/admin/attendance/policy");
 
     const opsGroup = nav.find((g) => g.label === "Operations")!;
-    const opsHrefs = opsGroup.items.map((i) => i.href);
+    const opsHrefs = navHrefs([opsGroup]);
     expect(opsHrefs).toContain("/admin/feedback");
     expect(opsHrefs).toContain("/admin/feedback/all");
     expect(opsHrefs).not.toContain("/admin/feedback/questions");
+  });
+
+  it("keeps a folder with only the children a person may open, and drops an empty one", () => {
+    const manager = actor([branchRole(Role.BRANCH_MANAGER, "branch_accra")]);
+    const people = getVisibleNav(manager).find((g) => g.label === "People")!;
+    const attendance = people.items.find((i) => i.label === "Attendance");
+    expect(attendance && "children" in attendance ? attendance.children.map((c) => c.href) : []).toEqual([
+      "/admin/attendance",
+      "/admin/leave",
+    ]);
+
+    const Icon = (() => null) as never;
+    const groups = [
+      {
+        label: "Test",
+        items: [{ label: "Locked", icon: Icon, children: [{ href: "/x", label: "X", exact: true, permission: "policy:write" as const }] }],
+      },
+    ];
+    expect(visibleNav(["attendance:read"], groups)).toEqual([]);
   });
 
   it("hides all navigation groups for EMPLOYEE", () => {
