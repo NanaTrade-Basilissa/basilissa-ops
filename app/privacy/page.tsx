@@ -11,7 +11,7 @@ import { PLAY_LISTING } from "@/lib/platform/play-listing";
 // and render literally. See open-decisions.md, A6.
 const DETAILS = {
   ...PLAY_LISTING,
-  lastUpdated: "29 September 2026",
+  lastUpdated: "30 September 2026",
   locationWhen: "only while the app is in use",
   smsProvider: "Hubtel",
   contactDetails: "info@basilissagh.com",
@@ -57,9 +57,10 @@ export default function PrivacyPage() {
 
           <Section title="1. Who we are and who this covers">
             <p>
-              {DETAILS.developerName} publishes the {DETAILS.appName} Android app. It is used by
-              employees to record their attendance (clocking in and out). Accounts are created by
-              the employee&apos;s employer, and this policy covers those employees.
+              {DETAILS.developerName} publishes the {DETAILS.appName} app for Android (Google Play)
+              and iPhone (Apple App Store). It is used by employees to record their attendance
+              (clocking in and out). Accounts are created by the employee&apos;s employer, and
+              this policy covers those employees.
             </p>
             <p>
               The app is not for the general public and is not for children. We do not knowingly
@@ -154,18 +155,24 @@ export default function PrivacyPage() {
             </p>
           </Section>
 
-          <Section title="8. Permissions the app requests on Android">
+          <Section title="8. Permissions the app requests">
             <ul className="list-disc space-y-1 pl-6">
               <li>
-                <strong>Location (fine and coarse):</strong> to check you are at your assigned
-                branch when you clock in or out.
+                <strong>Location:</strong> to check you are at your assigned branch when you
+                clock in or out. On Android this is fine and coarse location. On iPhone it is
+                &ldquo;While Using the App&rdquo; location, and you can turn off precise location
+                in iOS settings. We do not ask for location access in the background.
               </li>
               <li>
                 <strong>Notifications:</strong> to send you shift and attendance alerts.
               </li>
               <li>
-                <strong>Network state:</strong> to know whether the device is online, so saved
-                attendance can be synced.
+                <strong>Network access:</strong> on Android, network state, to know whether the
+                device is online so saved attendance can be synced.
+              </li>
+              <li>
+                <strong>Background refresh (iPhone):</strong> lets the app sync saved attendance
+                and receive notifications while it is not open. It does not use your location.
               </li>
             </ul>
           </Section>

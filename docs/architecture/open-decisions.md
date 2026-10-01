@@ -119,7 +119,12 @@ legal and audit reasons, location collected only while the app is in use.
 The policy's factual claims came from the user's description of the Android
 app and its `app.json`, not from this repo. **What to do:** confirm the merged
 release manifest contains `ACCESS_NETWORK_STATE` (the policy lists it) and no
-`ACCESS_BACKGROUND_LOCATION`. If an iOS build ships, the policy needs a revisit.
+`ACCESS_BACKGROUND_LOCATION`. The policy now also covers the iPhone app (30 Sep
+2026): its only location string is "When In Use" (the plugin defaults for Always,
+Face ID and Motion were removed in `app.json`), and it lists iOS background
+refresh. Re-check that if the iOS app ever asks for more. Also confirm the
+Firebase Analytics iOS pod's advertising-ID support matches the App Store
+"App Privacy" answers (the policy says nothing about ads or tracking).
 `/delete-account` is excluded from Vercel Analytics
 (`components/site-analytics.tsx`).
 
