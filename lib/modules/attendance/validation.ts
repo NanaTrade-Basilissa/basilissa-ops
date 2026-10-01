@@ -46,3 +46,23 @@ export const attendancePolicySchema = z.object({
 });
 
 export type AttendancePolicyInput = z.infer<typeof attendancePolicySchema>;
+
+const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date");
+
+export const holidaySchema = z.object({
+  dateKey,
+  name: z.string().trim().min(2, "Name the holiday").max(80),
+  confirmed: z.boolean(),
+});
+
+export const coverShiftSchema = z.object({
+  branchId: z.string().min(1, "Choose the branch"),
+  dateKey,
+  shiftId: z.string().min(1, "Choose a shift"),
+  employeeIds: z.array(z.string().min(1)).min(1, "Choose at least one person").max(100),
+  reason: z.string().trim().min(3, "Say why, e.g. holiday supervision").max(200),
+  /** Replace an override the person already has that day. */
+  overwrite: z.boolean(),
+});
+
+export type CoverShiftInput = z.infer<typeof coverShiftSchema>;

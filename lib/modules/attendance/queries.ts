@@ -5,6 +5,7 @@ import type { BranchScope } from "@/lib/modules/identity/authorization";
 import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { resolveScheduleForDate } from "./schedule";
+import { loadHolidayKeys } from "./holidays";
 
 /**
  * Read models for the manager-facing attendance views.
@@ -270,6 +271,7 @@ export async function getAttendanceDay(
         startMinute: true,
         endMinute: true,
         unpaidBreakMinutes: true,
+        offOnPublicHolidays: true,
       },
     }),
     prisma.employeeShiftAssignment.findMany({
@@ -353,6 +355,7 @@ export async function getAttendanceDay(
       type: e.type,
       shiftId: e.shiftId,
     })),
+    holidays: await loadHolidayKeys(),
   });
 
   const day = {
@@ -775,6 +778,7 @@ export async function getLiveFloorStatus(
         startMinute: true,
         endMinute: true,
         unpaidBreakMinutes: true,
+        offOnPublicHolidays: true,
       },
     }),
   ]);
@@ -811,6 +815,7 @@ export async function getLiveFloorStatus(
   ]);
 
   const dayMap = new Map(todayDays.map((d) => [d.employeeId, d]));
+  const holidays = await loadHolidayKeys();
 
   const staffList: LiveFloorStaff[] = [];
 
@@ -830,6 +835,7 @@ export async function getLiveFloorStatus(
       shifts,
       assignments: empAssignments,
       exceptions: empExceptions,
+      holidays,
     });
 
     const scheduledStart = day?.scheduledStart ?? resolved?.scheduledStart ?? null;

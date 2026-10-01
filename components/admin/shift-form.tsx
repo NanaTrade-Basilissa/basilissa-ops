@@ -26,6 +26,7 @@ export function ShiftForm({
     startTime: string;
     endTime: string;
     unpaidBreakMinutes: number;
+    offOnPublicHolidays: boolean;
     isActive: boolean;
   };
   submitLabel: string;
@@ -112,6 +113,22 @@ export function ShiftForm({
             </option>
           ))}
         </NativeSelect>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-3">
+          <Switch
+            id="offOnPublicHolidays"
+            name="offOnPublicHolidays"
+            defaultChecked={defaultValues?.offOnPublicHolidays ?? false}
+          />
+          <Label htmlFor="offOnPublicHolidays">Off on public holidays</Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          For office hours like the 8-5 default. People on this shift every week are off on a
+          holiday and are not marked absent. Leave it off for branch shifts, which open on holidays.
+          A single-day override or cover shift still applies on a holiday.
+        </p>
       </div>
 
       <div className="flex items-center gap-3">

@@ -10,7 +10,7 @@ import {
   type ManualEntryReason,
 } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
-import { auditActorFrom, requirePermission } from "@/lib/modules/identity/server";
+import { auditActorFrom, can, requirePermission } from "@/lib/modules/identity/server";
 import { recordAudit } from "@/lib/platform/audit";
 import { settleDay } from "./settle";
 import { applyCorrection } from "./correction-service";
@@ -19,11 +19,12 @@ import { checkManualEntry } from "./manual";
 import { resolvePolicy } from "./policy-repository";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { supersedePolicy } from "./policy-repository";
-import { attendancePolicySchema } from "./validation";
+import { attendancePolicySchema, coverShiftSchema, holidaySchema, type CoverShiftInput } from "./validation";
 import { canAuthorizeOvertime } from "./overtime-auth";
 import { autoCloseStaleDays, type AutoCloseSummary } from "./auto-close";
 import { shiftDateKey } from "@/lib/platform/date";
 import { reviewLeaveRequest } from "./leave";
+import { DuplicateHolidayError, deleteHoliday, importCalendarHolidays, resettleDates, saveHoliday } from "./holidays";
 
 // `FormState` already includes undefined, so intersecting with it would make
 // the whole type non-optional. Extend the non-null half and re-add undefined.
@@ -295,6 +296,8 @@ export async function saveScheduleOverride(
       update: {
         type,
         shiftId: type === ScheduleExceptionType.DAY_OFF ? null : shiftId,
+        // A day off is not worked anywhere, so it cannot be a cover shift.
+        ...(type === ScheduleExceptionType.DAY_OFF ? { branchId: null } : {}),
         reason,
       },
     });
@@ -746,3 +749,189 @@ export async function reviewLeaveRequestAction(
   }
 }
 
+
+
+// ---------------------------------------------------------------------------
+// Public holidays
+//
+// Holidays change who is scheduled, so they sit with attendance policy and
+// use its permission: the people who set grace periods also own this list.
+// ---------------------------------------------------------------------------
+
+function revalidateHolidayViews() {
+  revalidatePath("/admin/holidays");
+  revalidatePath("/admin/shifts");
+  revalidatePath("/admin/attendance");
+}
+
+export async function saveHolidayAction(
+  id: string | null,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requirePermission("policy:write");
+
+  const parsed = holidaySchema.safeParse({
+    dateKey: formData.get("dateKey"),
+    name: formData.get("name"),
+    confirmed: formData.get("confirmed") === "on",
+  });
+  if (!parsed.success) {
+    return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  try {
+    const { affectedDates } = await saveHoliday(id, parsed.data, auditActorFrom(actor));
+    await resettleDates(affectedDates);
+  } catch (error) {
+    if (error instanceof DuplicateHolidayError) {
+      return { error: error.message, fieldErrors: { dateKey: "Already a holiday" } };
+    }
+    throw error;
+  }
+
+  revalidateHolidayViews();
+  return { success: true };
+}
+
+export async function deleteHolidayAction(id: string): Promise<{ ok: boolean; error?: string }> {
+  const actor = await requirePermission("policy:write");
+  const { affectedDates } = await deleteHoliday(id, auditActorFrom(actor));
+  await resettleDates(affectedDates);
+  revalidateHolidayViews();
+  return { ok: true };
+}
+
+export async function importCalendarHolidaysAction(
+  year: number,
+): Promise<{ ok: boolean; added?: number; skipped?: number; error?: string }> {
+  const actor = await requirePermission("policy:write");
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+    return { ok: false, error: "Choose a year between 2020 and 2100." };
+  }
+  const result = await importCalendarHolidays(year, auditActorFrom(actor));
+  await resettleDates(result.affectedDates);
+  revalidateHolidayViews();
+  return { ok: true, added: result.added, skipped: result.skipped };
+}
+
+// ---------------------------------------------------------------------------
+// Cover shifts
+// ---------------------------------------------------------------------------
+
+export type CoverShiftResult = {
+  ok: boolean;
+  error?: string;
+  assigned?: number;
+  /** People who already had an override that day and were left alone. */
+  skipped?: string[];
+};
+
+/**
+ * Rosters people to work one shift at a branch on one day, including people
+ * from other branches. It is a one-day override like any other, with the
+ * branch recorded, and that is what lets their punch be accepted there.
+ *
+ * Two permissions, because two schedules change: the receiving branch gains
+ * someone, and each person's own branch loses them for the day. Naming the
+ * receiving branch alone must not let its manager take staff from anywhere.
+ */
+export async function assignCoverShiftAction(input: CoverShiftInput): Promise<CoverShiftResult> {
+  const parsed = coverShiftSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid cover shift." };
+  }
+  const { branchId, dateKey, shiftId, employeeIds, reason, overwrite } = parsed.data;
+
+  const actor = await requirePermission("schedule:write", { branchId });
+
+  const shift = await prisma.shift.findFirst({
+    where: { id: shiftId, isActive: true, OR: [{ branchId }, { branchId: null }] },
+    select: { id: true },
+  });
+  if (!shift) return { ok: false, error: "That shift is not available at this branch." };
+
+  const employees = await prisma.employee.findMany({
+    where: { id: { in: employeeIds }, status: "ACTIVE" },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      branchAssignments: { where: { validTo: null }, select: { branchId: true } },
+    },
+  });
+  if (employees.length !== new Set(employeeIds).size) {
+    return { ok: false, error: "Some of the people chosen are not active employees." };
+  }
+
+  const notYours = employees.filter(
+    (employee) =>
+      !employee.branchAssignments.some((assignment) =>
+        can(actor, "schedule:write", { branchId: assignment.branchId }),
+      ),
+  );
+  if (notYours.length > 0) {
+    return {
+      ok: false,
+      error: `You cannot change the schedule of ${notYours
+        .map((e) => `${e.firstName} ${e.lastName}`.trim())
+        .join(", ")}. Ask someone who manages their branch.`,
+    };
+  }
+
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  const skipped: string[] = [];
+  let assigned = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const employee of employees) {
+      const existing = await tx.scheduleException.findUnique({
+        where: { employeeId_date: { employeeId: employee.id, date } },
+      });
+      if (existing && !overwrite) {
+        skipped.push(`${employee.firstName} ${employee.lastName}`.trim());
+        continue;
+      }
+
+      const data = {
+        type: ScheduleExceptionType.EXTRA_SHIFT,
+        shiftId,
+        branchId,
+        reason,
+      };
+      const cover = await tx.scheduleException.upsert({
+        where: { employeeId_date: { employeeId: employee.id, date } },
+        create: { employeeId: employee.id, date, createdBy: actor.userId, ...data },
+        update: data,
+      });
+
+      await recordAudit(
+        {
+          actor: auditActorFrom(actor),
+          action: "schedule.cover_assigned",
+          entityType: "ScheduleException",
+          entityId: cover.id,
+          before: existing
+            ? { type: existing.type, shiftId: existing.shiftId, branchId: existing.branchId, reason: existing.reason }
+            : undefined,
+          after: { ...data, employeeId: employee.id, date: dateKey },
+        },
+        tx,
+      );
+
+      // Recalculate only a day that already has a record, e.g. a cover entered
+      // after the fact. Settling always writes a row, so doing it for a cover
+      // booked in advance would create an empty attendance day for the future.
+      const recorded = await tx.attendanceDay.findUnique({
+        where: { employeeId_workDate: { employeeId: employee.id, workDate: date } },
+        select: { branchId: true },
+      });
+      if (recorded) await settleDay(employee.id, recorded.branchId, dateKey, tx);
+      assigned += 1;
+    }
+  });
+
+  revalidatePath("/admin/shifts");
+  revalidatePath("/admin/attendance");
+  return { ok: true, assigned, skipped };
+}

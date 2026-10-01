@@ -419,7 +419,7 @@ export async function commitEmployeeImport(formData: FormData): Promise<Employee
 // Shifts
 // ---------------------------------------------------------------------------
 
-const SHIFT_FIELDS = ["name", "startMinute", "endMinute", "unpaidBreakMinutes", "isActive"] as const;
+const SHIFT_FIELDS = ["name", "startMinute", "endMinute", "unpaidBreakMinutes", "offOnPublicHolidays", "isActive"] as const;
 
 function parseShift(formData: FormData) {
   const toMinutes = (value: FormDataEntryValue | null) => {
@@ -433,6 +433,7 @@ function parseShift(formData: FormData) {
     startMinute: toMinutes(formData.get("startTime")),
     endMinute: toMinutes(formData.get("endTime")),
     unpaidBreakMinutes: formData.get("unpaidBreakMinutes"),
+    offOnPublicHolidays: formData.get("offOnPublicHolidays") === "on",
     isActive: formData.get("isActive") === "on",
   });
 }

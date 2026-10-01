@@ -27,6 +27,7 @@ export type ShiftRow = {
   startTime: string;
   endTime: string;
   unpaidBreakMinutes: number;
+  offOnPublicHolidays: boolean;
 };
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, ShiftRow>();
@@ -234,6 +235,7 @@ export function ShiftsTable({
             startTime: editingShift.startTime,
             endTime: editingShift.endTime,
             unpaidBreakMinutes: editingShift.unpaidBreakMinutes,
+            offOnPublicHolidays: editingShift.offOnPublicHolidays,
             isActive: editingShift.isActive,
           }}
         />

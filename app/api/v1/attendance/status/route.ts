@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
   const todayDate = new Date(`${todayKey}T00:00:00.000Z`);
 
   // 3. Fetch today's attendance day, recent punch events, corrections, schedules, and approved leaves concurrently
-  const [todayDay, recentEvents, corrections, shifts, shiftAssignments, exceptions, branchMapRecords, upcomingLeaves] = await Promise.all([
+  const [todayDay, recentEvents, corrections, shifts, shiftAssignments, exceptions, branchMapRecords, upcomingLeaves, holidayRows] = await Promise.all([
     prisma.attendanceDay.findFirst({
       where: {
         employeeId,
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
     }),
     prisma.shift.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, startMinute: true, endMinute: true, unpaidBreakMinutes: true },
+      select: { id: true, name: true, startMinute: true, endMinute: true, unpaidBreakMinutes: true, offOnPublicHolidays: true },
     }),
     prisma.employeeShiftAssignment.findMany({
       where: {
@@ -165,7 +165,11 @@ export async function GET(request: NextRequest) {
         endDate: true,
       },
     }),
+    prisma.publicHoliday.findMany({ select: { date: true, name: true } }),
   ]);
+
+  const holidayNames = new Map(holidayRows.map((h) => [h.date.toISOString().slice(0, 10), h.name]));
+  const holidays = new Set(holidayNames.keys());
 
   const voidedIds = new Set(
     corrections.map((c) => c.targetEventId).filter(Boolean) as string[],
@@ -184,7 +188,9 @@ export async function GET(request: NextRequest) {
       dateKey: ex.date.toISOString().slice(0, 10),
       shiftId: ex.shiftId,
       type: ex.type,
+      branchId: ex.branchId,
     })),
+    holidays,
   });
 
   // 4b. Resolve upcoming schedule for the next 7 days
@@ -235,7 +241,9 @@ export async function GET(request: NextRequest) {
         dateKey: ex.date.toISOString().slice(0, 10),
         shiftId: ex.shiftId,
         type: ex.type,
+        branchId: ex.branchId,
       })),
+      holidays,
     });
 
     const shift = resolved ? shifts.find((s) => s.id === resolved.shiftId) : null;
@@ -302,7 +310,10 @@ export async function GET(request: NextRequest) {
   } else if (!hasSchedule) {
     canClockIn = false;
     clockInDisabledReason = "NO_SHIFT_SCHEDULED";
-    clockInDisabledMessage = "No shift scheduled for you today. Contact your manager to be added to the rota.";
+    const holidayName = holidayNames.get(todayKey);
+    clockInDisabledMessage = holidayName
+      ? `Today is a public holiday (${holidayName}). If you are working, ask your manager to roster you.`
+      : "No shift scheduled for you today. Contact your manager to be added to the rota.";
   } else {
     canClockIn = true;
     clockInDisabledReason = null;

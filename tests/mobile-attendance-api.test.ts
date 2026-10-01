@@ -9,6 +9,7 @@ import { AttendanceDirection } from "@prisma/client";
 describe("Mobile Attendance APIs", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(prisma.publicHoliday, "findMany").mockResolvedValue([]);
   });
 
   const validToken = createDeviceToken({

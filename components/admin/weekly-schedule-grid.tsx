@@ -14,6 +14,7 @@ export type DayColumn = {
   dayName: string;
   formattedDay: string;
   isoWeekday: number;
+  holidayName: string | null;
 };
 
 export type EmployeeDaySchedule = {
@@ -26,6 +27,8 @@ export type EmployeeDaySchedule = {
   exceptionId?: string;
   exceptionType?: ScheduleExceptionType;
   exceptionReason?: string;
+  coverBranchName?: string | null;
+  isAway?: boolean;
 };
 
 export type EmployeeScheduleRow = {
@@ -34,6 +37,8 @@ export type EmployeeScheduleRow = {
   employeeCode: string | null;
   jobTitle: string | null;
   days: Record<string, EmployeeDaySchedule>;
+  isVisitor: boolean;
+  homeBranchName: string | null;
 };
 
 export type DailyCoverage = {
@@ -84,6 +89,7 @@ export function WeeklyScheduleGrid({
     if (!canManage) return;
 
     const daySchedule = emp.days[day.dateKey];
+    if (emp.isVisitor && !daySchedule.coverBranchName) return;
     setSelectedCell({
       employeeId: emp.employeeId,
       employeeName: emp.name,
@@ -127,6 +133,14 @@ export function WeeklyScheduleGrid({
                       <span className="text-[11px] font-normal text-muted-foreground lowercase">
                         {day.formattedDay}
                       </span>
+                      {day.holidayName && (
+                        <span
+                          className="mt-0.5 max-w-24 truncate rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-rose-800 dark:bg-rose-950 dark:text-rose-200"
+                          title={day.holidayName}
+                        >
+                          {day.holidayName}
+                        </span>
+                      )}
                     </div>
                   </th>
                 );
@@ -156,6 +170,11 @@ export function WeeklyScheduleGrid({
                       )}
                       {emp.jobTitle && <span>· {emp.jobTitle}</span>}
                     </div>
+                    {emp.isVisitor && (
+                      <span className="mt-1 inline-block rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-200">
+                        Covering from {emp.homeBranchName ?? "another branch"}
+                      </span>
+                    )}
                   </td>
                   {data.days.map((day) => {
                     const sched = emp.days[day.dateKey];
@@ -168,7 +187,7 @@ export function WeeklyScheduleGrid({
                         className={`p-2 text-center align-middle transition-colors ${
                           isToday ? "bg-primary/5" : ""
                         } ${
-                          canManage
+                          canManage && !(emp.isVisitor && !sched.coverBranchName)
                             ? "cursor-pointer hover:bg-muted/40"
                             : ""
                         }`}
@@ -180,10 +199,17 @@ export function WeeklyScheduleGrid({
                             : undefined
                         }
                       >
-                        {sched.shiftName ? (
+                        {sched.shiftName && sched.isAway ? (
+                          <div className="inline-flex flex-col items-center justify-center rounded-lg border border-dashed border-sky-400/60 bg-sky-500/5 px-2 py-1 text-xs text-sky-900 dark:text-sky-200 w-full min-h-12">
+                            <span className="font-semibold truncate max-w-24">At {sched.coverBranchName}</span>
+                            <span className="text-[10px] text-muted-foreground truncate max-w-24">{sched.shiftName}</span>
+                          </div>
+                        ) : sched.shiftName ? (
                           <div
                             className={`inline-flex flex-col items-center justify-center rounded-lg px-2 py-1 text-xs transition-all w-full min-h-12 ${
-                              sched.isException
+                              sched.coverBranchName
+                                ? "border border-sky-500/40 bg-sky-500/10 text-sky-900 dark:text-sky-200"
+                                : sched.isException
                                 ? "border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
                                 : "border border-border/80 bg-background text-foreground shadow-2xs"
                             }`}
@@ -196,11 +222,15 @@ export function WeeklyScheduleGrid({
                                 {minutesToTime(sched.startMinute)}–{minutesToTime(sched.endMinute)}
                               </span>
                             )}
-                            {sched.isException && (
+                            {sched.coverBranchName ? (
+                              <span className="text-[9px] uppercase font-bold text-sky-600 dark:text-sky-400 mt-0.5">
+                                cover
+                              </span>
+                            ) : sched.isException ? (
                               <span className="text-[9px] uppercase font-bold text-amber-600 dark:text-amber-400 mt-0.5">
                                 override
                               </span>
-                            )}
+                            ) : null}
                           </div>
                         ) : sched.exceptionType === ScheduleExceptionType.DAY_OFF ? (
                           <div className="inline-flex flex-col items-center justify-center rounded-lg px-2 py-1 text-xs border border-muted bg-muted/30 text-muted-foreground w-full min-h-12">
@@ -208,6 +238,10 @@ export function WeeklyScheduleGrid({
                             <span className="text-[9px] uppercase font-bold text-amber-600 dark:text-amber-400">
                               override
                             </span>
+                          </div>
+                        ) : day.holidayName && !emp.isVisitor ? (
+                          <div className="flex items-center justify-center min-h-12 text-rose-700/70 dark:text-rose-300/70 text-xs font-medium">
+                            Holiday
                           </div>
                         ) : (
                           <div className="flex items-center justify-center min-h-12 text-muted-foreground/40 text-xs">

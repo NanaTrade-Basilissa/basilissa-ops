@@ -20,6 +20,7 @@ import {
   resolveDuplicate,
   type DedupCandidate,
 } from "./events";
+import { isCoveringAt } from "./cover";
 import { resolvePolicy } from "./policy-repository";
 import { resolveWorkDate, settleDay } from "./settle";
 import type { ProjectedDay } from "./projection";
@@ -177,7 +178,9 @@ export async function ingestEvent(
       assignment.branchId === command.branchId &&
       assignment.validFrom.getTime() <= command.occurredAt.getTime(),
   );
-  if (!assignedHere) {
+  // A cover shift admits a punch at a branch the person is not assigned to,
+  // for that shift's window only.
+  if (!assignedHere && !(await isCoveringAt(employee.id, command.branchId, command.occurredAt))) {
     return {
       ok: false,
       reason: "BRANCH_NOT_ASSIGNED",

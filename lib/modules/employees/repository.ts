@@ -198,6 +198,7 @@ export async function listShifts(scope?: BranchScope) {
       startMinute: true,
       endMinute: true,
       unpaidBreakMinutes: true,
+      offOnPublicHolidays: true,
       isActive: true,
       _count: { select: { assignments: true } },
     },

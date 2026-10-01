@@ -32,6 +32,7 @@ const DAY_SHIFT: ResolvedSchedule = {
   unpaidBreakMinutes: 30,
   crossesMidnight: false,
   source: "assignment",
+  coverBranchId: null,
 };
 
 const NIGHT_SHIFT: ResolvedSchedule = {
@@ -43,6 +44,7 @@ const NIGHT_SHIFT: ResolvedSchedule = {
   unpaidBreakMinutes: 0,
   crossesMidnight: true,
   source: "assignment",
+  coverBranchId: null,
 };
 
 const policy = (overrides: Partial<ResolvedPolicy> = {}): ResolvedPolicy => ({

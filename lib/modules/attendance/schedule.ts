@@ -17,6 +17,8 @@ export type ShiftTemplate = {
   startMinute: number;
   endMinute: number;
   unpaidBreakMinutes: number;
+  /** Recurring assignments to this shift stop on public holidays. */
+  offOnPublicHolidays: boolean;
 };
 
 export type AssignmentLike = {
@@ -32,6 +34,8 @@ export type ExceptionLike = {
   dateKey: string;
   type: ScheduleExceptionType;
   shiftId: string | null;
+  /** A cover shift's branch; null or absent for the usual branch. */
+  branchId?: string | null;
 };
 
 export type ScheduleInputs = {
@@ -39,6 +43,12 @@ export type ScheduleInputs = {
   shifts: readonly ShiftTemplate[];
   assignments: readonly AssignmentLike[];
   exceptions: readonly ExceptionLike[];
+  /**
+   * Local dates ("YYYY-MM-DD") that are public holidays. Required rather than
+   * optional so that every caller has to load them: a caller that forgot would
+   * silently mark the office absent on every holiday.
+   */
+  holidays: ReadonlySet<string>;
 };
 
 export type ResolvedSchedule = {
@@ -52,6 +62,8 @@ export type ResolvedSchedule = {
   /** True when the shift runs past local midnight. */
   crossesMidnight: boolean;
   source: "exception" | "assignment";
+  /** Set when the day is a cover shift at another branch. */
+  coverBranchId: string | null;
 };
 
 /** A shift whose end is at or before its start runs into the next day. */
@@ -79,6 +91,7 @@ function build(
   workDateKey: string,
   timeZone: string,
   source: ResolvedSchedule["source"],
+  coverBranchId: string | null = null,
 ): ResolvedSchedule {
   const spansMidnight = crossesMidnight(shift);
 
@@ -97,6 +110,7 @@ function build(
     unpaidBreakMinutes: shift.unpaidBreakMinutes,
     crossesMidnight: spansMidnight,
     source,
+    coverBranchId,
   };
 }
 
@@ -109,6 +123,12 @@ function build(
  *   2. an effective assignment covering that weekday
  *   3. nothing — attendance is still recorded, but flagged UNSCHEDULED and no
  *      lateness or overtime is computed, because there is nothing to compare to
+ *
+ * Public holidays only touch step 2, and only for shifts marked
+ * `offOnPublicHolidays`: the office's 8-5 stops, a branch's recurring rota does
+ * not. An exception is someone's deliberate decision about that exact day, so
+ * it applies on a holiday like any other day; that is how people are rostered
+ * to work one.
  */
 export function resolveScheduleForDate(
   workDateKey: string,
@@ -125,7 +145,7 @@ export function resolveScheduleForDate(
     // A SHIFT_CHANGE or EXTRA_SHIFT naming a shift that no longer exists is
     // bad data, not a day off. Fall through so the assignment still applies
     // rather than silently unscheduling someone who is at work.
-    if (shift) return build(shift, workDateKey, timeZone, "exception");
+    if (shift) return build(shift, workDateKey, timeZone, "exception", exception.branchId ?? null);
   }
 
   const weekday = isoWeekdayInZone(dayStart, timeZone);
@@ -137,7 +157,9 @@ export function resolveScheduleForDate(
   if (!assignment) return null;
 
   const shift = findShift(shifts, assignment.shiftId);
-  return shift ? build(shift, workDateKey, timeZone, "assignment") : null;
+  if (!shift) return null;
+  if (shift.offOnPublicHolidays && inputs.holidays.has(workDateKey)) return null;
+  return build(shift, workDateKey, timeZone, "assignment");
 }
 
 /**
@@ -210,4 +232,26 @@ export function anchorWorkDate(
   );
 
   return { workDateKey: best.key, schedule: best.schedule };
+}
+
+/**
+ * Whether a punch belongs to a cover shift, so it may be accepted at a branch
+ * the person is not assigned to.
+ *
+ * Uses the same window as anchoring: from four hours before the shift starts to
+ * eight hours after it ends. A cover shift is permission for that shift, not
+ * for the whole day or the days around it, so an early arrival is fine and a
+ * punch the next afternoon is not.
+ */
+export function punchFallsInCoverShift(
+  occurredAt: Date,
+  cover: { dateKey: string; shift: ShiftTemplate },
+  timeZone: string,
+): boolean {
+  const scheduled = build(cover.shift, cover.dateKey, timeZone, "exception");
+  const t = occurredAt.getTime();
+  return (
+    t >= scheduled.scheduledStart.getTime() - ANCHOR_BEFORE_START_MINUTES * 60_000 &&
+    t <= scheduled.scheduledEnd.getTime() + ANCHOR_AFTER_END_MINUTES * 60_000
+  );
 }

@@ -13,6 +13,8 @@ import { evaluateGeofence, type PunchCoordinates } from "./geofence";
 import { ingestEvent, type IngestCommand } from "./ingest";
 import type { ProjectedDay } from "./projection";
 import { resolveScheduleForDate } from "./schedule";
+import { loadHolidayKeys } from "./holidays";
+import { isCoveringAt } from "./cover";
 
 export type RecordMobilePunchInput = {
   employeeId: string;
@@ -85,7 +87,7 @@ export async function recordMobilePunch(
       status: true,
       branchAssignments: {
         where: { branchId },
-        select: { branchId: true },
+        select: { branchId: true, validFrom: true, validTo: true },
       },
     },
   });
@@ -106,7 +108,16 @@ export async function recordMobilePunch(
     };
   }
 
-  if (employee.branchAssignments.length === 0) {
+  // Mirrors the ingest pipeline's own check, so the person gets this message
+  // rather than a generic refusal: assigned here, or covering a shift here.
+  // Same instant the punch is recorded at: the client clock only counts offline.
+  const punchAt = isOffline && occurredAt ? occurredAt : new Date();
+  const assignedHere = employee.branchAssignments.some(
+    (assignment) =>
+      assignment.validFrom.getTime() <= punchAt.getTime() &&
+      (assignment.validTo === null || assignment.validTo.getTime() > punchAt.getTime()),
+  );
+  if (!assignedHere && !(await isCoveringAt(employeeId, branchId, punchAt))) {
     return {
       ok: false,
       error: "BRANCH_NOT_ASSIGNED",
@@ -182,7 +193,7 @@ export async function recordMobilePunch(
     }
 
     // 4b. Reject if employee has no shift scheduled for today
-    const [shifts, shiftAssignments, exceptions] = await Promise.all([
+    const [shifts, shiftAssignments, exceptions, holidays] = await Promise.all([
       prisma.shift.findMany({
         where: { isActive: true },
         select: {
@@ -191,6 +202,7 @@ export async function recordMobilePunch(
           startMinute: true,
           endMinute: true,
           unpaidBreakMinutes: true,
+          offOnPublicHolidays: true,
         },
       }),
       prisma.employeeShiftAssignment.findMany({
@@ -212,8 +224,9 @@ export async function recordMobilePunch(
           employeeId,
           date: todayDate,
         },
-        select: { date: true, shiftId: true, type: true },
+        select: { date: true, shiftId: true, type: true, branchId: true },
       }),
+      loadHolidayKeys(),
     ]);
 
     const resolvedSchedule = resolveScheduleForDate(todayKey, {
@@ -224,7 +237,9 @@ export async function recordMobilePunch(
         dateKey: todayKey,
         shiftId: ex.shiftId,
         type: ex.type,
+        branchId: ex.branchId,
       })),
+      holidays,
     });
 
     if (!resolvedSchedule) {

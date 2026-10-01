@@ -10,12 +10,13 @@ import { prisma } from "@/lib/platform/prisma";
 describe("recordMobilePunch", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(prisma.publicHoliday, "findMany").mockResolvedValue([]);
   });
 
   const validEmployee = {
     id: "emp_1",
     status: "ACTIVE",
-    branchAssignments: [{ branchId: "branch_1" }],
+    branchAssignments: [{ branchId: "branch_1", validFrom: new Date("2020-01-01T00:00:00Z"), validTo: null }],
   };
 
   const validBranch = {
@@ -50,6 +51,9 @@ describe("recordMobilePunch", () => {
       status: "ACTIVE",
       branchAssignments: [], // Not assigned to branch_1
     } as never);
+    // ...and no cover shift there either.
+    vi.spyOn(prisma.branch, "findUnique").mockResolvedValueOnce({ timezone: "Africa/Accra" } as never);
+    vi.spyOn(prisma.scheduleException, "findMany").mockResolvedValueOnce([]);
 
     const result = await recordMobilePunch({
       employeeId: "emp_1",
@@ -62,6 +66,38 @@ describe("recordMobilePunch", () => {
     if (!result.ok) {
       expect(result.error).toBe("BRANCH_NOT_ASSIGNED");
     }
+  });
+
+  it("lets someone with a cover shift there past the branch check", async () => {
+    const now = new Date();
+    const todayKey = now.toISOString().slice(0, 10);
+    vi.spyOn(prisma.employee, "findUnique").mockResolvedValueOnce({
+      id: "emp_1",
+      status: "ACTIVE",
+      branchAssignments: [],
+    } as never);
+    // isCoveringAt: the branch's timezone, then a cover shift spanning now.
+    vi.spyOn(prisma.branch, "findUnique")
+      .mockResolvedValueOnce({ timezone: "Africa/Accra" } as never)
+      .mockResolvedValueOnce(validBranch as never);
+    vi.spyOn(prisma.scheduleException, "findMany").mockResolvedValueOnce([
+      {
+        date: new Date(`${todayKey}T00:00:00.000Z`),
+        shift: { id: "all_day", name: "All day", startMinute: 0, endMinute: 1439, unpaidBreakMinutes: 0, offOnPublicHolidays: false },
+      },
+    ] as never);
+
+    const result = await recordMobilePunch({
+      employeeId: "emp_1",
+      branchId: "branch_1",
+      direction: AttendanceDirection.IN,
+      // Far outside the geofence: proves the punch got past the branch check
+      // and was stopped by the next one.
+      coordinates: { latitude: 6.5, longitude: -0.1742, accuracyMeters: 10 },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).not.toBe("BRANCH_NOT_ASSIGNED");
   });
 
   it("rejects clock-in outside geofence without calling ingestEvent", async () => {

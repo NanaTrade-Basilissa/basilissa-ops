@@ -293,6 +293,7 @@ model Branch {
   leaveRequests LeaveRequest[]
   feedbackRecipients BranchFeedbackRecipient[]
   devices     Device[]
+  coverShifts ScheduleException[]
 
   @@index([isActive])
   @@map("branches")
@@ -479,6 +480,12 @@ model Shift {
   /// be punched when it is EXPLICIT_PUNCH.
   unpaidBreakMinutes Int @default(0)
 
+  /// Office-style hours that stop on a public holiday (the 8-5 default).
+  /// Restaurant shifts leave this false: branches open on holidays, so their
+  /// recurring schedules keep running. Only recurring assignments are affected;
+  /// a one-day override naming this shift still applies on a holiday.
+  offOnPublicHolidays Boolean @default(false)
+
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -541,16 +548,54 @@ model ScheduleException {
   type       ScheduleExceptionType
   /// Required for SHIFT_CHANGE and EXTRA_SHIFT; meaningless for DAY_OFF.
   shiftId    String?
+  /// Set for a cover shift: the branch the person works at that day, which may
+  /// not be one they are assigned to. It is what lets their punch be accepted
+  /// there, for that shift only. Null means wherever they normally work.
+  branchId   String?
 
   reason    String
   createdBy String?
   createdAt DateTime @default(now())
 
-  shift Shift? @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  shift  Shift?  @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
   @@unique([employeeId, date])
   @@index([date])
+  @@index([branchId, date])
   @@map("schedule_exceptions")
+}
+
+enum HolidaySource {
+  /// Pre-filled from the bundled Ghana calendar (the date-holidays package).
+  CALENDAR
+  /// Entered by hand: a one-off declaration, or a correction.
+  MANUAL
+}
+
+/// A public holiday, for every branch.
+///
+/// Kept in the database rather than read from a calendar at runtime, because
+/// the dates that matter are decided by people: Eid falls when the government
+/// announces it, and one-off holidays are declared at short notice. The
+/// calendar only pre-fills a year; HR owns the list.
+///
+/// Every row applies, confirmed or not. `confirmed` is a prompt, not a switch:
+/// a pre-filled Eid date is an estimate until announced, and should say so,
+/// but leaving it unapplied would mark the whole office absent if nobody got
+/// round to confirming it.
+model PublicHoliday {
+  id        String        @id @default(cuid())
+  /// Local calendar date. One holiday per date.
+  date      DateTime      @unique @db.Date
+  name      String
+  source    HolidaySource @default(MANUAL)
+  confirmed Boolean       @default(true)
+  createdBy String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("public_holidays")
 }
 
 enum LeaveType {

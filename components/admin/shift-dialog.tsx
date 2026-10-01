@@ -33,6 +33,7 @@ export function ShiftDialog({
     startTime: string;
     endTime: string;
     unpaidBreakMinutes: number;
+    offOnPublicHolidays: boolean;
     isActive: boolean;
   };
   submitLabel: string;

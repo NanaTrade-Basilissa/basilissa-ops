@@ -6,6 +6,7 @@ import type { BranchScope } from "@/lib/modules/identity/authorization";
 describe("getAttendanceDay", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(prisma.publicHoliday, "findMany").mockResolvedValue([]);
   });
 
   const scopeAll: BranchScope = { kind: "all" };

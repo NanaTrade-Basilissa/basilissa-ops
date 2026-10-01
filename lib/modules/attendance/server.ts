@@ -23,3 +23,5 @@ export * from "./review-demo";
 export * from "./excel-export";
 export * from "./leave";
 export * from "./reminders";
+export * from "./holidays";
+export * from "./cover";

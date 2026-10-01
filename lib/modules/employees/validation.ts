@@ -96,6 +96,7 @@ export const shiftInputSchema = z
     startMinute: z.coerce.number().int().min(0).max(1439),
     endMinute: z.coerce.number().int().min(0).max(1439),
     unpaidBreakMinutes: z.coerce.number().int().min(0).max(240),
+    offOnPublicHolidays: z.boolean(),
     isActive: z.boolean(),
   })
   // A shift equal at both ends is either zero hours or twenty-four, and neither

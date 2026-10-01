@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarClock, ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { can, hasAnyPermission, requireAnyBranchPermission } from "@/lib/modules/identity/server";
+import { branchScope, can, hasAnyPermission, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { createShift } from "@/lib/modules/employees/actions";
-import { getWeeklyBranchSchedule, listShifts } from "@/lib/modules/employees/server";
+import { getWeeklyBranchSchedule, listEmployees, listShifts } from "@/lib/modules/employees/server";
+import { ScheduleCoverDialog, type CoverCandidate } from "@/components/admin/schedule-cover-dialog";
 import { minutesToTime } from "@/lib/modules/employees/validation";
 import { prisma } from "@/lib/platform/prisma";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -76,6 +77,20 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
   const canManageBranch =
     canWriteAny &&
     (allowGlobal || (selectedBranchId ? can(actor, "schedule:write", { branchId: selectedBranchId }) : false));
+
+  // Anyone whose schedule this person may change can be sent to cover here,
+  // from this branch or any other. The action re-checks both sides.
+  const coverCandidates: CoverCandidate[] =
+    canManageBranch && activeTab === "schedule"
+      ? (await listEmployees(branchScope(actor, "schedule:write"), { status: "ACTIVE" })).map((e) => ({
+          id: e.id,
+          name: `${e.firstName} ${e.lastName}`.trim(),
+          employeeCode: e.employeeCode,
+          jobTitle: e.jobTitle,
+          homeBranchName:
+            e.branchAssignments.find((ba) => ba.isPrimary)?.branch.name ?? e.branchAssignments[0]?.branch.name ?? null,
+        }))
+      : [];
 
   return (
     <div className="space-y-6">
@@ -167,6 +182,13 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
                   branchId={selectedBranchId}
                   branchName={weeklyData.branchName}
                   activeWeekStart={weekStartKey}
+                />
+                <ScheduleCoverDialog
+                  branchId={selectedBranchId}
+                  branchName={weeklyData.branchName}
+                  days={weeklyData.days}
+                  shifts={weeklyData.shifts}
+                  candidates={coverCandidates}
                 />
                 <ScheduleBulkAssignDialog
                   branchId={selectedBranchId}
@@ -269,6 +291,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
             startTime: minutesToTime(shift.startMinute),
             endTime: minutesToTime(shift.endMinute),
             unpaidBreakMinutes: shift.unpaidBreakMinutes,
+            offOnPublicHolidays: shift.offOnPublicHolidays,
           }))}
         />
       )}

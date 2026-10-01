@@ -8,6 +8,7 @@ import { voidedEventIds } from "./corrections";
 import { projectDay, type ProjectedDay, type ProjectionEvent } from "./projection";
 import { resolvePolicy } from "./policy-repository";
 import { anchorWorkDate, resolveScheduleForDate, type ScheduleInputs } from "./schedule";
+import { loadHolidayKeys } from "./holidays";
 
 /**
  * Turning the pure projection into a stored day.
@@ -26,7 +27,7 @@ export async function loadScheduleInputs(
   branchId: string,
   tx: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<ScheduleInputs> {
-  const [branch, assignments, exceptions, shifts] = await Promise.all([
+  const [branch, assignments, exceptions, shifts, holidays] = await Promise.all([
     tx.branch.findUnique({ where: { id: branchId }, select: { timezone: true } }),
     tx.employeeShiftAssignment.findMany({
       where: { employeeId },
@@ -34,12 +35,13 @@ export async function loadScheduleInputs(
     }),
     tx.scheduleException.findMany({
       where: { employeeId },
-      select: { date: true, type: true, shiftId: true },
+      select: { date: true, type: true, shiftId: true, branchId: true },
     }),
     tx.shift.findMany({
       where: { OR: [{ branchId }, { branchId: null }] },
-      select: { id: true, name: true, startMinute: true, endMinute: true, unpaidBreakMinutes: true },
+      select: { id: true, name: true, startMinute: true, endMinute: true, unpaidBreakMinutes: true, offOnPublicHolidays: true },
     }),
+    loadHolidayKeys(tx),
   ]);
 
   return {
@@ -52,7 +54,9 @@ export async function loadScheduleInputs(
       dateKey: entry.date.toISOString().slice(0, 10),
       type: entry.type,
       shiftId: entry.shiftId,
+      branchId: entry.branchId,
     })),
+    holidays,
   };
 }
 

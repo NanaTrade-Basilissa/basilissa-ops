@@ -24,6 +24,7 @@ const DAY: ShiftTemplate = {
   startMinute: 8 * 60,
   endMinute: 17 * 60,
   unpaidBreakMinutes: 30,
+  offOnPublicHolidays: false,
 };
 
 const NIGHT: ShiftTemplate = {
@@ -32,6 +33,7 @@ const NIGHT: ShiftTemplate = {
   startMinute: 22 * 60,
   endMinute: 6 * 60,
   unpaidBreakMinutes: 0,
+  offOnPublicHolidays: false,
 };
 
 const EVENING: ShiftTemplate = {
@@ -40,6 +42,7 @@ const EVENING: ShiftTemplate = {
   startMinute: 16 * 60,
   endMinute: 23 * 60,
   unpaidBreakMinutes: 0,
+  offOnPublicHolidays: false,
 };
 
 const ALL_WEEK = [1, 2, 3, 4, 5, 6, 7];
@@ -51,6 +54,7 @@ function inputs(overrides: Partial<ScheduleInputs> = {}): ScheduleInputs {
     shifts: [DAY, NIGHT, EVENING],
     assignments: [{ shiftId: "day", daysOfWeek: ALL_WEEK, validFrom: FROM_2026, validTo: null }],
     exceptions: [],
+    holidays: new Set(),
     ...overrides,
   };
 }

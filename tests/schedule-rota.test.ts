@@ -14,6 +14,7 @@ describe("weekly schedule resolution logic", () => {
     startMinute: 420, // 07:00
     endMinute: 900, // 15:00
     unpaidBreakMinutes: 0,
+    offOnPublicHolidays: false,
   };
 
   const eveningShift: ShiftTemplate = {
@@ -22,6 +23,7 @@ describe("weekly schedule resolution logic", () => {
     startMinute: 900, // 15:00
     endMinute: 1380, // 23:00
     unpaidBreakMinutes: 0,
+    offOnPublicHolidays: false,
   };
 
   const shifts = [morningShift, eveningShift];
@@ -30,6 +32,7 @@ describe("weekly schedule resolution logic", () => {
     const monday = "2026-09-07"; // Monday (ISO weekday 1)
     const inputs: ScheduleInputs = {
       timeZone: "Africa/Accra",
+      holidays: new Set(),
       shifts,
       assignments: [
         {
@@ -64,6 +67,7 @@ describe("weekly schedule resolution logic", () => {
 
     const inputs: ScheduleInputs = {
       timeZone: "Africa/Accra",
+      holidays: new Set(),
       shifts,
       assignments: [
         {
@@ -96,6 +100,7 @@ describe("weekly schedule resolution logic", () => {
 
     const inputs: ScheduleInputs = {
       timeZone: "Africa/Accra",
+      holidays: new Set(),
       shifts,
       assignments: [
         {
@@ -126,6 +131,7 @@ describe("weekly schedule resolution logic", () => {
 
     const inputs: ScheduleInputs = {
       timeZone: "Africa/Accra",
+      holidays: new Set(),
       shifts,
       assignments: [
         {

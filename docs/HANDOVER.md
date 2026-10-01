@@ -104,8 +104,13 @@ This is the exact list of remaining unbuilt code deliverables:
   * Scheduled background worker probe comparing terminal push timestamps against server time to alert on drifting physical clocks.
 
 #### 3. Advanced Scheduling & Overtime Workflow (Phase 7)
-* **Rotating Rotas (`shift_patterns`)**:
-  * Multi-week recurring schedules (e.g. 4 days on, 2 days off, alternating shifts).
+* **Public holidays and cover shifts — built (1 Oct 2026), not yet migrated in production.**
+  See register entry D4 for the rule and the three production steps.
+* **Rotating Rotas (`shift_patterns`)** — the next piece of work, design agreed:
+  * Shared patterns (e.g. `MMM EEE Off Off`) assigned to many people, each with their own start date so days off stagger. A cycle that is not 7 days long is what makes the week rotate.
+  * Per-branch *Auto rota* setting: on, patterns resolve live and the Weekly Rota grid shows them; off, patterns only fill a week when a manager presses Generate.
+  * Patterns run on public holidays (branch shifts); the existing Weekly Rota grid and one-day overrides stay the place managers adjust.
+  * Minimum staffing per shift deliberately left out until real numbers exist; the grid already counts people per shift per day.
 * **Overtime Formal Approval Workflow**:
   * Overtime request queue with partial approval, mandatory rejection reasons, and escalation rules.
 * **Dispute Submission**:

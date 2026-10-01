@@ -15,6 +15,8 @@ export type DayColumn = {
   dayName: string;
   formattedDay: string;
   isoWeekday: number;
+  /** Set when the day is a public holiday. */
+  holidayName: string | null;
 };
 
 export type EmployeeDaySchedule = {
@@ -27,6 +29,13 @@ export type EmployeeDaySchedule = {
   exceptionId?: string;
   exceptionType?: ScheduleExceptionType;
   exceptionReason?: string;
+  /**
+   * A cover shift away from the row's home branch, or, on a visitor's row, the
+   * branch this grid is for. Null for an ordinary day.
+   */
+  coverBranchName?: string | null;
+  /** True on a home-staff row when the person is covering elsewhere that day. */
+  isAway?: boolean;
 };
 
 export type EmployeeScheduleRow = {
@@ -35,6 +44,9 @@ export type EmployeeScheduleRow = {
   employeeCode: string | null;
   jobTitle: string | null;
   days: Record<string, EmployeeDaySchedule>;
+  /** Someone from another branch with a cover shift here this week. */
+  isVisitor: boolean;
+  homeBranchName: string | null;
 };
 
 export type DailyCoverage = {
@@ -91,11 +103,26 @@ export async function getWeeklyBranchSchedule(
     const dayName = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(dateObj);
     const formattedDay = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(dateObj);
     const isoWeekday = offset + 1; // 1 = Mon ... 7 = Sun
-    return { dateKey, dayName, formattedDay, isoWeekday };
+    return { dateKey, dayName, formattedDay, isoWeekday, holidayName: null as string | null };
   });
 
   const weekStartDate = new Date(`${days[0].dateKey}T00:00:00.000Z`);
   const weekEndDate = new Date(`${days[6].dateKey}T23:59:59.999Z`);
+
+  const holidayRows = await prisma.publicHoliday.findMany({ select: { date: true, name: true } });
+  const holidays = new Set(holidayRows.map((h) => h.date.toISOString().slice(0, 10)));
+  for (const h of holidayRows) {
+    const day = days.find((d) => d.dateKey === h.date.toISOString().slice(0, 10));
+    if (day) day.holidayName = h.name;
+  }
+
+  const employeeSelect = {
+    id: true,
+    firstName: true,
+    lastName: true,
+    employeeCode: true,
+    jobTitle: true,
+  } as const;
 
   // Active employees assigned to this branch
   const branchAssignments = await prisma.employeeBranchAssignment.findMany({
@@ -104,24 +131,41 @@ export async function getWeeklyBranchSchedule(
       validTo: null,
       employee: { status: "ACTIVE" },
     },
-    include: {
-      employee: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          employeeCode: true,
-          jobTitle: true,
-        },
-      },
-    },
+    include: { employee: { select: employeeSelect } },
     orderBy: [
       { employee: { lastName: "asc" } },
       { employee: { firstName: "asc" } },
     ],
   });
 
-  const employeeIds = branchAssignments.map((ba) => ba.employee.id);
+  const homeIds = new Set(branchAssignments.map((ba) => ba.employee.id));
+
+  // People from elsewhere with a cover shift at this branch this week. They
+  // appear on this grid for the week, with only their cover days filled in.
+  const visitorCovers = await prisma.scheduleException.findMany({
+    where: {
+      branchId,
+      date: { gte: weekStartDate, lte: weekEndDate },
+      employeeId: { notIn: [...homeIds] },
+    },
+    select: { employeeId: true },
+  });
+  const visitorRows = await prisma.employee.findMany({
+    where: { id: { in: [...new Set(visitorCovers.map((v) => v.employeeId))] }, status: "ACTIVE" },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    select: {
+      ...employeeSelect,
+      branchAssignments: {
+        where: { validTo: null },
+        orderBy: { isPrimary: "desc" },
+        take: 1,
+        select: { branch: { select: { name: true } } },
+      },
+    },
+  });
+  const visitors = new Map(visitorRows.map((v) => [v.id, v]));
+
+  const employeeIds = [...homeIds, ...visitors.keys()];
 
   // Available shifts for this branch (branch-specific + global)
   const shifts = await prisma.shift.findMany({
@@ -135,17 +179,12 @@ export async function getWeeklyBranchSchedule(
       startMinute: true,
       endMinute: true,
       unpaidBreakMinutes: true,
+      offOnPublicHolidays: true,
     },
     orderBy: { startMinute: "asc" },
   });
 
-  const shiftTemplates: ShiftTemplate[] = shifts.map((s) => ({
-    id: s.id,
-    name: s.name,
-    startMinute: s.startMinute,
-    endMinute: s.endMinute,
-    unpaidBreakMinutes: s.unpaidBreakMinutes,
-  }));
+  const shiftTemplates: ShiftTemplate[] = shifts;
 
   // Recurring shift assignments for these employees
   const shiftAssignments = await prisma.employeeShiftAssignment.findMany({
@@ -169,7 +208,7 @@ export async function getWeeklyBranchSchedule(
       employeeId: { in: employeeIds },
       date: { gte: weekStartDate, lte: weekEndDate },
     },
-    include: { shift: true },
+    include: { shift: true, branch: { select: { name: true } } },
   });
 
   // Coverage tracker per dateKey
@@ -186,9 +225,11 @@ export async function getWeeklyBranchSchedule(
     }
   }
 
-  // Resolve schedule for each employee for each day
-  const employees: EmployeeScheduleRow[] = branchAssignments.map((ba) => {
-    const emp = ba.employee;
+  const rowFor = (
+    emp: { id: string; firstName: string; lastName: string; employeeCode: string; jobTitle: string | null },
+    isVisitor: boolean,
+    homeBranchName: string | null,
+  ): EmployeeScheduleRow => {
     const empAssignments = shiftAssignments.filter((sa) => sa.employeeId === emp.id);
     const empExceptions = exceptions.filter((ex) => ex.employeeId === emp.id);
 
@@ -200,14 +241,33 @@ export async function getWeeklyBranchSchedule(
         dateKey: ex.date.toISOString().slice(0, 10),
         type: ex.type,
         shiftId: ex.shiftId,
+        branchId: ex.branchId,
       })),
+      holidays,
     };
 
     const daySchedules: Record<string, EmployeeDaySchedule> = {};
+    const empty = (dateKey: string): EmployeeDaySchedule => ({
+      dateKey,
+      shiftId: null,
+      shiftName: null,
+      startMinute: null,
+      endMinute: null,
+      isException: false,
+    });
 
     for (const d of days) {
-      const resolved = resolveScheduleForDate(d.dateKey, scheduleInputs);
       const ex = empExceptions.find((e) => e.date.toISOString().slice(0, 10) === d.dateKey);
+      const coverHere = ex?.branchId === branchId;
+      const coverElsewhere = Boolean(ex?.branchId) && !coverHere;
+
+      // A visitor's other days belong to their own branch's grid.
+      if (isVisitor && !coverHere) {
+        daySchedules[d.dateKey] = empty(d.dateKey);
+        continue;
+      }
+
+      const resolved = resolveScheduleForDate(d.dateKey, scheduleInputs);
 
       if (resolved) {
         daySchedules[d.dateKey] = {
@@ -220,18 +280,19 @@ export async function getWeeklyBranchSchedule(
           exceptionId: ex?.id,
           exceptionType: ex?.type,
           exceptionReason: ex?.reason,
+          coverBranchName: ex?.branchId ? (ex.branch?.name ?? null) : null,
+          isAway: coverElsewhere,
         };
 
-        coverage[d.dateKey].totalScheduled += 1;
-        coverage[d.dateKey].shiftCounts[resolved.shiftId] =
-          (coverage[d.dateKey].shiftCounts[resolved.shiftId] || 0) + 1;
+        // Someone covering elsewhere is not on this branch's floor that day.
+        if (!coverElsewhere) {
+          coverage[d.dateKey].totalScheduled += 1;
+          coverage[d.dateKey].shiftCounts[resolved.shiftId] =
+            (coverage[d.dateKey].shiftCounts[resolved.shiftId] || 0) + 1;
+        }
       } else if (ex?.type === ScheduleExceptionType.DAY_OFF) {
         daySchedules[d.dateKey] = {
-          dateKey: d.dateKey,
-          shiftId: null,
-          shiftName: null,
-          startMinute: null,
-          endMinute: null,
+          ...empty(d.dateKey),
           isException: true,
           exceptionId: ex.id,
           exceptionType: ScheduleExceptionType.DAY_OFF,
@@ -239,14 +300,7 @@ export async function getWeeklyBranchSchedule(
         };
         coverage[d.dateKey].totalDayOff += 1;
       } else {
-        daySchedules[d.dateKey] = {
-          dateKey: d.dateKey,
-          shiftId: null,
-          shiftName: null,
-          startMinute: null,
-          endMinute: null,
-          isException: false,
-        };
+        daySchedules[d.dateKey] = empty(d.dateKey);
       }
     }
 
@@ -256,8 +310,15 @@ export async function getWeeklyBranchSchedule(
       employeeCode: emp.employeeCode,
       jobTitle: emp.jobTitle,
       days: daySchedules,
+      isVisitor,
+      homeBranchName,
     };
-  });
+  };
+
+  const employees: EmployeeScheduleRow[] = [
+    ...branchAssignments.map((ba) => rowFor(ba.employee, false, null)),
+    ...[...visitors.values()].map((v) => rowFor(v, true, v.branchAssignments[0]?.branch.name ?? null)),
+  ];
 
   return {
     branchId: branch.id,

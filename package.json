@@ -39,6 +39,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.2.6",
+    "date-holidays": "^3.37.0",
     "exceljs": "^4.4.0",
     "firebase-admin": "^14.5.0",
     "jose": "^5.9.6",

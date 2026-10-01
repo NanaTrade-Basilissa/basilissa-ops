@@ -9,7 +9,7 @@
 > policy, and that is worse than a hard-coded value because it looks
 > deliberate. This is the list that prevents that.
 >
-> **Last reviewed:** 2026-09-29 · against `develop`
+> **Last reviewed:** 2026-10-01 · against `develop`
 >
 > Related: [Architecture Assessment](./attendance-platform.md) ·
 > [Implementation Plan](./implementation-plan.md) ·
@@ -594,6 +594,53 @@ asks later.
 **Still SQL-only:** branch-scoped overrides. The column and resolution order
 exist (see B5); the editor writes the platform-wide policy only.
 
+### 🟠 D4 — Public holidays and cover shifts
+
+**Status: built, not yet in production.** Migration
+`20261001120000_add_public_holidays_and_cover_shifts`.
+
+**Holidays** live in `public_holidays`, managed at `/admin/holidays` under the
+attendance-policy permission (`policy:read` / `policy:write`): holidays decide
+who is scheduled, which is a policy question, and a separate permission would
+be one more grant to forget. "Load {year} Ghana holidays" pre-fills from the
+`date-holidays` package and never overwrites a date already in the list.
+
+- **Every row applies, confirmed or not.** `confirmed` only flags a date for
+  checking. Pre-filled Eid dates are stored unconfirmed because the government
+  announces them days ahead; leaving them unapplied until someone confirms
+  would mark the office absent if nobody got round to it.
+- **Republic Day (1 July) is not in the package's Ghana calendar**, while the
+  Nager.Date API lists it. HR has to decide whether it is observed and add it
+  by hand. Recorded here so nobody assumes the calendar is authoritative.
+- **The rule is per shift template, not per person:** a template marked
+  `offOnPublicHolidays` stops on a holiday when it comes from a recurring
+  assignment. Branch shifts leave it off and keep running. A one-day override
+  (including a cover shift) applies on a holiday regardless, which is how
+  someone is rostered to work one. Holiday *pay* is not modelled.
+- Adding or removing a holiday re-settles attendance already recorded on that
+  date, so lateness and overtime follow the change.
+
+**Cover shifts** are one-day overrides with a `branchId`: "work this shift at
+this branch on this day", including staff from other branches or Head Office
+(the 21 Sep case: HR supervising branches, IT at West Hills). The cover is what
+lets the punch be accepted at a branch the person is not assigned to, both in
+the mobile pre-check and in the ingest pipeline, and only inside the shift's
+anchoring window (four hours before the start to eight after the end).
+Assigning one needs `schedule:write` on the receiving branch **and** on one of
+each person's own branches: naming the receiving branch alone must not let its
+manager take staff from anywhere.
+
+**To do in production, in order:**
+1. Run the migration (`prisma migrate deploy`).
+2. Shifts → Shift Templates → edit **Day (08:00-17:00)** → turn on *Off on
+   public holidays*. Until then the 8-5 default ignores holidays.
+3. Public holidays → **Load 2026 Ghana holidays** (and 2027), confirm the Eid
+   dates when announced, and decide on Republic Day.
+
+**Not built yet:** rota patterns (shared patterns with a per-person start, a
+per-branch *Auto rota* setting, Generate for branches with it off). Agreed
+design; next piece of work.
+
 ---
 
 ## E. Follow-ups found along the way
@@ -694,6 +741,17 @@ problems, now fixed:
 authentication and allows any origin. Anyone who finds the URL can send mail as
 `noreply@basilissagh.com`, which is also a plausible cause of Google
 restricting the account.
+
+---
+
+### 🟠 E6 — Single-day overrides trust the submitted branch
+
+`saveScheduleOverride` and `clearScheduleOverride` check `schedule:write` for
+the `branchId` in the form, but never check that the employee belongs to that
+branch. A branch manager can post their own branch id with another branch's
+employee and change that person's day. Cover shifts (D4) check both sides; the
+override actions should do the same: require the permission on one of the
+employee's current branches.
 
 ---
 
