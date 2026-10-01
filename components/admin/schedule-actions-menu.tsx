@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft, ChevronDown, Copy, Repeat, Settings2, Sparkles, Users, Zap, ZapOff } from "lucide-react";
+import { ArrowRightLeft, CalendarSync, ChevronDown, Copy, Settings2, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -70,34 +73,47 @@ export function ScheduleActionsMenu({
             </Button>
           }
         />
-        <DropdownMenuContent align="end" className="min-w-52">
-          <DropdownMenuItem onClick={() => setOpen("copy")}>
-            <Copy className="size-4" />
-            Copy week
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setOpen("cover")}>
-            <ArrowRightLeft className="size-4" />
-            Cover shift
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setOpen("bulk")}>
-            <Users className="size-4" />
-            Bulk assign
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setOpen("pattern")}>
-            <Repeat className="size-4" />
-            Assign rota pattern
-          </DropdownMenuItem>
-          {!autoRota && (
-            <DropdownMenuItem onClick={() => setOpen("generate")}>
-              <Sparkles className="size-4" />
-              Generate week from patterns
+        {/* w-auto lifts the default "as wide as the button" so labels stay on one line. */}
+        <DropdownMenuContent align="end" className="w-auto min-w-48 [&_[role=menuitem]]:whitespace-nowrap">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>This week</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setOpen("copy")}>
+              <Copy className="size-4" />
+              Copy week
             </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onClick={() => setOpen("auto")}>
-            {autoRota ? <ZapOff className="size-4" /> : <Zap className="size-4" />}
-            {autoRota ? "Turn Auto rota off" : "Turn Auto rota on"}
-          </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setOpen("cover")}>
+              <ArrowRightLeft className="size-4" />
+              Cover shift
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setOpen("bulk")}>
+              <Users className="size-4" />
+              Bulk assign
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Patterns</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setOpen("pattern")}>
+              <CalendarSync className="size-4" />
+              Assign pattern
+            </DropdownMenuItem>
+            {!autoRota && (
+              <DropdownMenuItem onClick={() => setOpen("generate")}>
+                <Sparkles className="size-4" />
+                Generate week
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          {/* A setting, so it shows its state; changing it still asks first. */}
+          <DropdownMenuCheckboxItem
+            checked={autoRota}
+            closeOnClick
+            onCheckedChange={() => setOpen("auto")}
+            className="whitespace-nowrap"
+          >
+            Auto rota
+          </DropdownMenuCheckboxItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
