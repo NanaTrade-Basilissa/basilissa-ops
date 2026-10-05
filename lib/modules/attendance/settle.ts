@@ -20,7 +20,7 @@ import { loadLivePatternsFor } from "./patterns";
  */
 
 /** Bump when projection logic changes, so older days can be found and replayed. */
-export const PROJECTION_VERSION = 1;
+export const PROJECTION_VERSION = 2;
 
 /** Loads the schedule inputs for one employee at one branch. */
 export async function loadScheduleInputs(
@@ -147,6 +147,14 @@ export async function settleDay(
     },
   }));
 
+  const workDate = new Date(`${workDateKey}T00:00:00.000Z`);
+
+  // What a manager already authorised, so recomputing never re-asks.
+  const existing = await tx.attendanceDay.findUnique({
+    where: { employeeId_workDate: { employeeId, workDate } },
+    select: { payableOvertimeMinutes: true },
+  });
+
   const projected = projectDay({
     workDateKey,
     events,
@@ -154,9 +162,9 @@ export async function settleDay(
     policy,
     asOf,
     correctionCount: corrections.length,
+    approvedOvertimeMinutes: existing?.payableOvertimeMinutes ?? 0,
   });
 
-  const workDate = new Date(`${workDateKey}T00:00:00.000Z`);
   const data = {
     branchId,
     status: projected.status,

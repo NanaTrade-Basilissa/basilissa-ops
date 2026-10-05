@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatCard } from "@/components/admin/stat-card";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
@@ -34,6 +35,21 @@ function formatHoursDecimal(minutes: number): string {
 
 type TimesheetRow = TimesheetSummaryData["rows"][number];
 
+/** A column title that explains itself on hover, since these figures become pay. */
+function ColumnHeader({ label, help }: { label: string; help: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<span />}
+        className="cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-4"
+      >
+        {label}
+      </TooltipTrigger>
+      <TooltipContent>{help}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 const columnHelper = createColumnHelper<typeof dataTableFeatures, TimesheetRow>();
 
 export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
@@ -46,6 +62,7 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
     totalWorkedMinutes,
     totalRegularMinutes,
     totalOvertimeMinutes,
+    totalPayableOvertimeMinutes,
     totalLateMinutes,
     totalExceptions,
     rows,
@@ -53,7 +70,7 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
 
   const columns = columnHelper.columns([
     columnHelper.accessor("name", {
-      header: "Employee",
+      header: () => <ColumnHeader label="Employee" help="Staff member and their employee code." />,
       cell: ({ row }) => (
         <div className="space-y-0.5">
           <span className="font-medium text-foreground">{row.original.name}</span>
@@ -66,12 +83,19 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       ),
     }),
     columnHelper.accessor("branchName", {
-      header: "Branch",
+      header: () => (
+        <ColumnHeader label="Branch" help="The branch the employee is assigned to for this period." />
+      ),
       cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue()}</span>,
     }),
     columnHelper.display({
       id: "days",
-      header: "Days (Work/Sched)",
+      header: () => (
+        <ColumnHeader
+          label="Days Worked / Scheduled"
+          help="Days the employee clocked in, out of the days they were scheduled to work in this period."
+        />
+      ),
       cell: ({ row }) => (
         <span className="text-sm">
           <span className="font-medium text-foreground">{row.original.daysWorked}</span>
@@ -80,27 +104,71 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       ),
     }),
     columnHelper.accessor("netWorkedMinutes", {
-      header: "Net Worked",
+      header: () => (
+        <ColumnHeader
+          label="Net Hours Worked"
+          help="Total time between clock-in and clock-out, minus breaks. Includes any time worked beyond the shift."
+        />
+      ),
       cell: (info) => <span className="font-medium text-foreground">{formatDuration(info.getValue())}</span>,
     }),
     columnHelper.accessor("regularMinutes", {
-      header: "Regular",
+      header: () => (
+        <ColumnHeader
+          label="Regular Hours"
+          help="Hours worked within the scheduled shift. Never more than the shift length, so overtime is not included."
+        />
+      ),
       cell: (info) => <span className="text-muted-foreground">{formatDuration(info.getValue())}</span>,
     }),
     columnHelper.accessor("overtimeMinutes", {
-      header: "Overtime",
+      header: () => (
+        <ColumnHeader
+          label="Overtime"
+          help="Time worked beyond the scheduled shift, once past the overtime threshold. This is what was worked, not what will be paid. Only Payable Overtime is paid."
+        />
+      ),
       cell: (info) =>
         info.getValue() > 0 ? (
-          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-            +{formatDuration(info.getValue())}
-          </Badge>
+          <span className="font-medium text-foreground">{formatDuration(info.getValue())}</span>
         ) : (
           <span className="text-muted-foreground">-</span>
         ),
     }),
+    columnHelper.accessor("payableOvertimeMinutes", {
+      header: () => (
+        <ColumnHeader
+          label="Payable Overtime"
+          help="Overtime a manager has approved for payment. Overtime that is still waiting for approval is not paid and shows as Pending."
+        />
+      ),
+      cell: ({ row }) => {
+        const { overtimeMinutes, payableOvertimeMinutes } = row.original;
+        if (payableOvertimeMinutes > 0) {
+          return (
+            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+              {formatDuration(payableOvertimeMinutes)}
+            </Badge>
+          );
+        }
+        if (overtimeMinutes > 0) {
+          return (
+            <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+              Pending
+            </Badge>
+          );
+        }
+        return <span className="text-muted-foreground">-</span>;
+      },
+    }),
     columnHelper.display({
       id: "late",
-      header: "Late",
+      header: () => (
+        <ColumnHeader
+          label="Late"
+          help="Number of days the employee clocked in after the grace period, with the total minutes late in brackets."
+        />
+      ),
       cell: ({ row }) =>
         row.original.lateCount > 0 ? (
           <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
@@ -111,7 +179,12 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
         ),
     }),
     columnHelper.accessor("exceptionsCount", {
-      header: "Exceptions",
+      header: () => (
+        <ColumnHeader
+          label="Days to Review"
+          help="Days that cannot be finalised until a manager reviews them, such as a missing clock-out or overtime awaiting approval."
+        />
+      ),
       cell: (info) =>
         info.getValue() > 0 ? (
           <Badge variant="destructive">{info.getValue()} need review</Badge>
@@ -150,10 +223,11 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       "Scheduled Hours",
       "Net Worked Hours",
       "Regular Hours",
-      "Overtime Hours",
-      "Late Occurrences",
+      "Overtime Worked Hours",
+      "Payable Overtime Hours",
+      "Late Days",
       "Total Late Minutes",
-      "Unresolved Exceptions",
+      "Days To Review",
     ];
 
     const csvRows = [
@@ -171,6 +245,7 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
           formatHoursDecimal(r.netWorkedMinutes),
           formatHoursDecimal(r.regularMinutes),
           formatHoursDecimal(r.overtimeMinutes),
+          formatHoursDecimal(r.payableOvertimeMinutes),
           r.lateCount,
           r.lateMinutes,
           r.exceptionsCount,
@@ -206,7 +281,7 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
   return (
     <div className="space-y-6">
       {/* Summary Stat Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <StatCard label="Total staff" value={String(totalEmployees)} icon={Users} />
         <StatCard
           label="Net worked"
@@ -224,12 +299,18 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
           icon={CalendarClock}
         />
         <StatCard
+          label="Payable overtime"
+          value={formatDuration(totalPayableOvertimeMinutes)}
+          icon={CalendarClock}
+          tone="good"
+        />
+        <StatCard
           label="Total late"
           value={formatDuration(totalLateMinutes)}
           icon={AlertTriangle}
         />
         <StatCard
-          label="Exceptions"
+          label="Days to review"
           value={String(totalExceptions)}
           icon={TriangleAlert}
         />

@@ -61,11 +61,11 @@ export async function buildPayrollTimesheetWorkbook(
     { header: "Sched. (Hrs)", key: "schedHrs", width: 14 },
     { header: "Net Worked (Hrs)", key: "workedHrs", width: 16 },
     { header: "Regular (Hrs)", key: "regHrs", width: 14 },
-    { header: "Overtime (Hrs)", key: "otHrs", width: 15 },
-    { header: "Payable OT (Hrs)", key: "payableOtHrs", width: 16 },
+    { header: "Overtime Worked (Hrs)", key: "otHrs", width: 15 },
+    { header: "Payable Overtime (Hrs)", key: "payableOtHrs", width: 16 },
     { header: "Late (Count)", key: "lateCount", width: 13 },
     { header: "Late (Mins)", key: "lateMins", width: 13 },
-    { header: "Exceptions", key: "exceptions", width: 13 },
+    { header: "Days to Review", key: "exceptions", width: 13 },
   ];
 
   summarySheet.getRow(5).values = summaryHeaders.map((h) => h.header);
@@ -215,8 +215,8 @@ export async function buildPayrollTimesheetWorkbook(
     { header: "Actual Out", width: 11 },
     { header: "Net (Hrs)", width: 12 },
     { header: "Regular (Hrs)", width: 13 },
-    { header: "Overtime (Hrs)", width: 14 },
-    { header: "Payable OT", width: 13 },
+    { header: "Overtime Worked (Hrs)", width: 14 },
+    { header: "Payable Overtime (Hrs)", width: 13 },
     { header: "Late (Mins)", width: 12 },
     { header: "Status", width: 15 },
     { header: "Flags / Exceptions", width: 34 },

@@ -122,7 +122,7 @@ describe("buildPayrollTimesheetWorkbook", () => {
     // Check header row 5
     expect(sheet.getCell("A5").value).toBe("Emp Code");
     expect(sheet.getCell("B5").value).toBe("Employee Name");
-    expect(sheet.getCell("L5").value).toBe("Payable OT (Hrs)");
+    expect(sheet.getCell("L5").value).toBe("Payable Overtime (Hrs)");
 
     // Check row 6 (first employee: Akosua Mensah)
     expect(sheet.getCell("A6").value).toBe("EMP-001");

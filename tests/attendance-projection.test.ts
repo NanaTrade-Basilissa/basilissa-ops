@@ -180,6 +180,42 @@ describe("overtime", () => {
     expect(day.regularMinutes).toBe(540);
   });
 
+  it("sends overtime nobody has approved to review", () => {
+    const day = projectDay({
+      workDateKey: WORK_DATE,
+      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("18:00"))],
+      schedule: DAY_SHIFT,
+      policy: policy({ overtimeThresholdMinutes: 10 }),
+      asOf: AFTER,
+    });
+    expect(day.flags).toContain("OVERTIME_PENDING_APPROVAL");
+    expect(day.status).toBe("NEEDS_REVIEW");
+  });
+
+  it("settles once overtime has been approved", () => {
+    const day = projectDay({
+      workDateKey: WORK_DATE,
+      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("18:00"))],
+      schedule: DAY_SHIFT,
+      policy: policy({ overtimeThresholdMinutes: 10 }),
+      asOf: AFTER,
+      approvedOvertimeMinutes: 60,
+    });
+    expect(day.flags).not.toContain("OVERTIME_PENDING_APPROVAL");
+    expect(day.status).toBe("SETTLED");
+  });
+
+  it("does not ask for approval when there is no overtime", () => {
+    const day = projectDay({
+      workDateKey: WORK_DATE,
+      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("17:08"))],
+      schedule: DAY_SHIFT,
+      policy: policy({ overtimeThresholdMinutes: 10 }),
+      asOf: AFTER,
+    });
+    expect(day.flags).not.toContain("OVERTIME_PENDING_APPROVAL");
+  });
+
   it("computes no overtime at all without a schedule to exceed", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,

@@ -160,7 +160,9 @@ a day was settled under; and **flags**:
 
 `UNSCHEDULED`, `MISSING_CLOCK_IN`, `MISSING_CLOCK_OUT`, `DUPLICATE_CLOCK_IN`,
 `UNPAIRED_BREAK`, `MULTIPLE_SEGMENTS`, `MANUAL_ENTRY`, `AUTO_CLOSED`,
-`LOW_IDENTITY_ASSURANCE`, `CORRECTED`, `NO_EVENTS`.
+`LOW_IDENTITY_ASSURANCE`, `CORRECTED`, `OVERTIME_PENDING_APPROVAL`, `NO_EVENTS`.
+
+`OVERTIME_PENDING_APPROVAL` is raised when calculated overtime exists and no payable overtime has been authorised (`settleDay` passes the stored `payableOvertimeMinutes` in, so recomputing never re-asks). It blocks `SETTLED`, so the day reaches the manager's review dialog, where approving sets payable overtime. Only payable overtime is meant to be paid; calculated overtime is what was worked.
 
 Any flag that implies a human decision lands the day in the manager's
 **Exceptions** queue (`?view=exceptions`).

@@ -29,6 +29,7 @@ export type DayFlag =
   | "AUTO_CLOSED"
   | "LOW_IDENTITY_ASSURANCE"
   | "CORRECTED"
+  | "OVERTIME_PENDING_APPROVAL"
   | "NO_EVENTS";
 
 export type DayStatus = "PENDING" | "SETTLED" | "NEEDS_REVIEW";
@@ -57,6 +58,12 @@ export type ProjectionInput = {
    * something would trap it in review forever.
    */
   correctionCount?: number;
+  /**
+   * Overtime a manager has already authorised for this day. Calculated overtime
+   * is what happened; only authorised overtime is payable, so any calculated
+   * overtime with nothing authorised against it waits for a decision.
+   */
+  approvedOvertimeMinutes?: number;
 };
 
 export type ProjectedDay = {
@@ -270,6 +277,12 @@ export function projectDay(input: ProjectionInput): ProjectedDay {
     if (flags.has("AUTO_CLOSED")) overtimeMinutes = 0;
   }
 
+  // Overtime nobody has authorised yet. Raised after the AUTO_CLOSED zeroing
+  // above, so an auto-closed day is not asked to approve time it never earns.
+  if (overtimeMinutes > 0 && (input.approvedOvertimeMinutes ?? 0) <= 0) {
+    flags.add("OVERTIME_PENDING_APPROVAL");
+  }
+
   // A day nobody can finish calculating must never look settled. Anything
   // flagged needs a person; anything still running is simply not done yet.
   const blocking: DayFlag[] = [
@@ -281,6 +294,7 @@ export function projectDay(input: ProjectionInput): ProjectedDay {
     "UNSCHEDULED",
     "AUTO_CLOSED",
     "LOW_IDENTITY_ASSURANCE",
+    "OVERTIME_PENDING_APPROVAL",
   ];
 
   let status: DayStatus;

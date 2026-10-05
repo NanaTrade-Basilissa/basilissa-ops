@@ -26,6 +26,7 @@ export const BLOCKING_FLAGS = [
   "AUTO_CLOSED",
   "UNSCHEDULED",
   "LOW_IDENTITY_ASSURANCE",
+  "OVERTIME_PENDING_APPROVAL",
 ] as const;
 
 function scopeWhere(scope: BranchScope) {
