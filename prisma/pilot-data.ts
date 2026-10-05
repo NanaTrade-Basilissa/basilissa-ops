@@ -1,10 +1,14 @@
 /**
  * Fixtures for the Dawhenya attendance pilot. Script-only, like `seed-data.ts`.
  *
- * Source: the branch's six printed rotas (supervisors, chefs, cooks,
- * frontliners, riders, cleaner) for Monday 28 September to Sunday 4 October
- * 2026. Everyone on them, 24 people. The week of 21 to 27 September was
- * dropped: nobody clocked in.
+ * Source: the branch's five printed rotas (supervisors, chefs, cooks,
+ * frontliners, riders) for Monday 5 to Sunday 11 October 2026. No cleaner's
+ * sheet this week.
+ *
+ * Written as one-day overrides, not week-long shift assignments: since
+ * 5 October everyone also has the open-ended 8-5 default, starting the same
+ * Monday, and two assignments starting on one day leave resolution to pick
+ * either. An override always wins.
  *
  * A name on both the morning and evening column of a day is FULL_DAY, as on
  * the sheets (the riders most days, the supervisors and chefs once each).
@@ -25,18 +29,20 @@ export const PILOT_SHIFT_TEMPLATES: Record<
   // For anyone rostered on both the morning and the evening shift the same
   // day. The schedule resolver allows one shift per employee per day.
   FULL_DAY: { name: "Full Day (07:00-23:00)", startMinute: 7 * 60, endMinute: 23 * 60, unpaidBreakMinutes: 0 },
-  NINE_TO_FIVE: { name: "Day (09:00-17:00)", startMinute: 9 * 60, endMinute: 17 * 60, unpaidBreakMinutes: 0 },
+  // Renamed and moved to 08:00 with a 60-minute break in production; this is
+  // the open-ended default staff fall back to.
+  NINE_TO_FIVE: { name: "Day (08:00-17:00)", startMinute: 8 * 60, endMinute: 17 * 60, unpaidBreakMinutes: 60 },
 };
 
 export const PILOT_BRANCH_SLUG = "community-25-dawhenya";
 
 /** Local dates, inclusive. Monday to Sunday. */
-export const PILOT_WEEK = { from: "2026-09-28", to: "2026-10-04" } as const;
+export const PILOT_WEEK = { from: "2026-10-05", to: "2026-10-11" } as const;
 
 /**
- * `null` is a day the rota leaves open (Josephine from Thursday: not decided
- * yet). Nothing is written for it, so the day falls through to whatever else
- * the employee has, which is normally nothing.
+ * `null` is a day the rota leaves open. Nothing is written for it, so the day
+ * falls through to whatever else the employee has: the 8-5 default on
+ * weekdays.
  */
 type Day = PilotShiftKey | "OFF" | null;
 
@@ -74,49 +80,59 @@ export const PILOT_ROTA: ReadonlyArray<{
   expectFirstName: string;
   rotaName: string;
   week: readonly [Day, Day, Day, Day, Day, Day, Day];
+  /** Reason recorded on this person's days off, when it is not an ordinary one. */
+  offReason?: string;
 }> = [
-  // Supervisors. Both on record as Supervisor at Accra Mall.
-  { employeeCode: "EMP0032", expectFirstName: "ISSABELLE", rotaName: "Issabelle (Supervisor)", week: [M, F, O, M, M, M, M] },
-  { employeeCode: "EMP0006", expectFirstName: "DOREEN", rotaName: "Doreen (Supervisor)", week: [E, O, F, E, E, E, E] },
+  // Supervisors.
+  { employeeCode: "EMP0006", expectFirstName: "DOREEN", rotaName: "Doreen (Supervisor)", week: [F, O, E, E, E, E, E] },
+  { employeeCode: "EMP0032", expectFirstName: "ISSABELLE", rotaName: "Issabelle (Supervisor)", week: [O, F, M, M, M, M, M] },
 
-  // Chefs. Gilbert is the only Gilbert on record as a chef (at Afienya).
-  { employeeCode: "EMP0090", expectFirstName: "GILBERT", rotaName: "Gilbert (Chef)", week: [M, F, O, M, M, M, M] },
-  { employeeCode: "EMP0125", expectFirstName: "COMFORT", rotaName: "Comfort (Chef)", week: [E, O, F, E, E, E, E] },
+  // Chefs.
+  { employeeCode: "EMP0125", expectFirstName: "COMFORT", rotaName: "Comfort (Chef)", week: [F, O, M, M, M, M, M] },
+  { employeeCode: "EMP0090", expectFirstName: "GILBERT", rotaName: "Gilbert (Chef)", week: [O, F, E, E, E, E, E] },
 
   // Cooks.
-  { employeeCode: "EMP0108", expectFirstName: "ABRAHAM", rotaName: "Abraham (Cook)", week: [M, O, M, M, M, M, M] },
-  { employeeCode: "EMP0111", expectFirstName: "PATIENCE", rotaName: "Patience (Cook)", week: [M, M, O, M, M, M, M] },
-  { employeeCode: "EMP0117", expectFirstName: "JENNIFER", rotaName: "Jennifer (Cook)", week: [M, M, M, O, M, M, M] },
-  { employeeCode: "EMP0112", expectFirstName: "THEODORA", rotaName: "Theodora (Cook)", week: [O, M, M, M, M, M, M] },
-  { employeeCode: "EMP0124", expectFirstName: "SAMPSON", rotaName: "Sampson (Cook)", week: [E, E, O, E, E, E, E] },
-  { employeeCode: "EMP0106", expectFirstName: "JOANA", rotaName: "Joana (Cook)", week: [E, O, E, E, E, E, E] },
+  { employeeCode: "EMP0124", expectFirstName: "SAMPSON", rotaName: "Sampson (Cook)", week: [M, O, M, M, M, M, M] },
   // Recorded as "Ofori Sylvia Boadu".
-  { employeeCode: "EMP0119", expectFirstName: "SYLVIA", rotaName: "Sylvia (Cook)", week: [E, E, E, O, E, E, E] },
-  { employeeCode: "EMP0107", expectFirstName: "COMFORT", rotaName: "Comfort (Cook)", week: [O, E, E, E, E, E, E] },
+  { employeeCode: "EMP0119", expectFirstName: "SYLVIA", rotaName: "Sylvia (Cook)", week: [M, M, O, M, M, M, M] },
+  { employeeCode: "EMP0107", expectFirstName: "COMFORT", rotaName: "Comfort (Cook)", week: [M, M, M, O, M, M, M] },
+  { employeeCode: "EMP0106", expectFirstName: "JOANA", rotaName: "Joana (Cook)", week: [O, M, M, M, M, M, M] },
+  { employeeCode: "EMP0108", expectFirstName: "ABRAHAM", rotaName: "Abraham (Cook)", week: [E, E, O, E, E, E, E] },
+  { employeeCode: "EMP0111", expectFirstName: "PATIENCE", rotaName: "Patience (Cook)", week: [E, O, E, E, E, E, E] },
+  { employeeCode: "EMP0112", expectFirstName: "THEODORA", rotaName: "Theodora (Cook)", week: [E, E, E, O, E, E, E] },
+  { employeeCode: "EMP0117", expectFirstName: "JENNIFER", rotaName: "Jennifer (Cook)", week: [O, E, E, E, E, E, E] },
   // First and last name are swapped on this record: "Peprah-Sarfo Clara".
   { employeeCode: "EMP0120", expectFirstName: "PEPRAH-SARFO", rotaName: "Clara (Cook)", week: [O, E, E, E, E, E, E] },
 
   // Frontliners.
-  { employeeCode: "EMP0129", expectFirstName: "HELLEN", rotaName: "Hellen (Frontliner)", week: [M, O, M, M, M, M, M] },
-  { employeeCode: "PILOT-MARTIN", expectFirstName: "MARTIN", rotaName: "Martin (Frontliner)", week: [M, M, O, M, M, M, M] },
-  // "Everlove" on the rota.
-  { employeeCode: "EMP0109", expectFirstName: "REBECCA", rotaName: "Everlove (Frontliner)", week: [M, M, M, O, E, E, E] },
-  { employeeCode: "EMP0116", expectFirstName: "MARY", rotaName: "Mary (Frontliner)", week: [O, M, M, M, M, M, M] },
-  { employeeCode: "EMP0115", expectFirstName: "ROSINA", rotaName: "Rosina (Frontliner)", week: [E, E, O, E, E, E, E] },
-  // The only Josephine on record (Frontliner at Afienya). Thursday on is not
-  // decided yet.
-  { employeeCode: "EMP0084", expectFirstName: "JOSEPHINE", rotaName: "Josephine (Frontliner)", week: [E, E, E, null, null, null, null] },
-  // Frontliner on the rota, "Cook" on the record.
-  { employeeCode: "EMP0128", expectFirstName: "RASHID", rotaName: "Rashid (Frontliner)", week: [E, O, E, E, E, E, E] },
   // The only Randy on record (Frontliner at Achimota Mall).
-  { employeeCode: "EMP0058", expectFirstName: "RANDY", rotaName: "Randy (Frontliner)", week: [O, E, E, E, E, E, E] },
+  { employeeCode: "EMP0058", expectFirstName: "RANDY", rotaName: "Randy (Frontliner)", week: [M, M, O, M, M, M, M] },
+  { employeeCode: "EMP0115", expectFirstName: "ROSINA", rotaName: "Rosina (Frontliner)", week: [M, O, M, M, M, M, M] },
+  // "Everlove" on the rota.
+  { employeeCode: "EMP0109", expectFirstName: "REBECCA", rotaName: "Everlove (Frontliner)", week: [O, M, M, M, M, M, M] },
+  { employeeCode: "EMP0129", expectFirstName: "HELLEN", rotaName: "Hellen (Frontliner)", week: [E, E, O, E, E, E, E] },
+  { employeeCode: "EMP0116", expectFirstName: "MARY", rotaName: "Mary (Frontliner)", week: [E, O, E, E, E, E, E] },
+  // Friday off is excused but unpaid, per the sheet.
+  {
+    employeeCode: "EMP0128",
+    expectFirstName: "RASHID",
+    rotaName: "Rashid (Frontliner)",
+    week: [E, E, E, O, O, E, E],
+  },
+  // New on the rota this week. Recorded as "Elizabeth Adomaa Gyimah".
+  { employeeCode: "EMP0122", expectFirstName: "ELIZABETH", rotaName: "Elizabeth (Frontliner)", week: [O, E, E, E, E, E, E] },
+  // "Martin starts his leave Monday." Off all week, recorded as leave.
+  {
+    employeeCode: "PILOT-MARTIN",
+    expectFirstName: "MARTIN",
+    rotaName: "Martin (Frontliner)",
+    week: [O, O, O, O, O, O, O],
+    offReason: "On leave from 5 October (per the Dawhenya rota)",
+  },
 
   // Riders.
   { employeeCode: "PILOT-ATSU", expectFirstName: "ATSU", rotaName: "Atsu (Rider)", week: [F, O, F, F, F, F, F] },
   { employeeCode: "EMP0127", expectFirstName: "ELORM", rotaName: "Elorm (Rider)", week: [F, F, O, F, F, F, F] },
-
-  // Cleaner.
-  { employeeCode: "EMP0118", expectFirstName: "HELINA", rotaName: "Helina (Cleaner)", week: [M, M, O, M, M, M, M] },
 ];
 
 /** `--apply` writes; anything else is a dry run. */

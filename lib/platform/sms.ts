@@ -1,5 +1,5 @@
 import "server-only";
-import { getEnv, isSmsConfigured } from "@/lib/platform/env";
+import { getEnv } from "@/lib/platform/env";
 import { scoped } from "@/lib/platform/logger";
 import { notifyOtpFailure } from "@/lib/platform/slack";
 

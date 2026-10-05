@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import { branchScope, can, hasAnyPermission, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { createShift } from "@/lib/modules/employees/actions";
 import { getWeeklyBranchSchedule, listEmployees, listShifts } from "@/lib/modules/employees/server";
@@ -206,6 +206,18 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
                 </Link>
               )}
             </div>
+
+            {/* Export: anyone who can see the rota can take it away. A plain link, so the browser downloads it. */}
+            {weeklyData && (
+              <a
+                href={`/api/admin/shifts/export/excel?branchId=${encodeURIComponent(selectedBranchId)}&week=${weekStartKey}`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+                title={`Download ${formattedWeek} as an Excel file`}
+              >
+                <Download className="size-4" />
+                Export
+              </a>
+            )}
 
             {/* Rota actions, behind one menu */}
             {canManageBranch && weeklyData && (

@@ -5,13 +5,11 @@
  *   tsx prisma/pilot-dawhenya-rota.ts           # dry run
  *   tsx prisma/pilot-dawhenya-rota.ts --apply
  *
- * Shape, matching bulkAssignShiftAction: one assignment per employee per
- * template, bounded to the week. Existing open-ended assignments are left
- * alone; the resolver prefers the most recent validFrom, so the week's
- * assignments win while they apply.
- *
- * That is also why days off are DAY_OFF exceptions, not just gaps: a gap would
- * fall through to the employee's older assignment for that weekday.
+ * Shape, matching "Generate week": one override per person per day, a
+ * SHIFT_CHANGE for a working day and a DAY_OFF for a day off. Overrides beat
+ * every recurring schedule, including the open-ended 8-5 default, so a day
+ * off can never fall through to 8-5. A day that already has an override
+ * (approved leave, a cover shift, a manager's edit) is kept and reported.
  *
  * Before that it makes everyone schedulable: a PILOT_PLACEHOLDERS record is
  * created if missing, and anyone without a current Dawhenya assignment gets a
@@ -20,8 +18,8 @@
  *
  * A `null` day in the rota writes nothing, neither a shift nor a day off.
  *
- * Safe to re-run: an identical assignment or an existing exception on the same
- * date is skipped and reported.
+ * Safe to re-run: every day written becomes an existing override, which the
+ * next run keeps.
  */
 import { PrismaClient, ScheduleExceptionType } from "@prisma/client";
 import { loadEnvConfig } from "@next/env";
@@ -51,10 +49,8 @@ async function main() {
   const branch = await prisma.branch.findUnique({ where: { slug: PILOT_BRANCH_SLUG } });
   if (!branch) throw new Error(`No branch with slug ${PILOT_BRANCH_SLUG}.`);
 
-  // Local midnight of the Monday, to local midnight after the Sunday. The
-  // resolver treats validTo as exclusive.
+  // Local midnight of the Monday: when a new Dawhenya branch assignment starts.
   const validFrom = zonedMinutesToUtc(PILOT_WEEK.from, 0, branch.timezone);
-  const validTo = zonedMinutesToUtc(shiftDateKey(PILOT_WEEK.to, 1), 0, branch.timezone);
 
   const shiftIds = {} as Record<PilotShiftKey, string>;
   for (const [key, template] of Object.entries(PILOT_SHIFT_TEMPLATES) as [PilotShiftKey, (typeof PILOT_SHIFT_TEMPLATES)[PilotShiftKey]][]) {
@@ -136,97 +132,62 @@ async function main() {
 
   for (const { row, employee } of ready) {
     const label = `${row.rotaName.padEnd(24)} ${employee.employeeCode}`;
+    const days = row.week.map((day, index) => ({ day, dateKey: shiftDateKey(PILOT_WEEK.from, index) }));
+    const open = days.filter((d) => d.day === null).map((d) => d.dateKey);
+    if (open.length > 0) console.log(`${label}  open     ${open.join(", ")} (not decided, nothing written)`);
 
-    // ISO weekday (1 = Monday) per template.
-    const byShift = new Map<PilotShiftKey, number[]>();
-    const offDates: string[] = [];
-    const openDates: string[] = [];
-    row.week.forEach((day, index) => {
-      if (day === null) openDates.push(shiftDateKey(PILOT_WEEK.from, index));
-      else if (day === "OFF") offDates.push(shiftDateKey(PILOT_WEEK.from, index));
-      else byShift.set(day, [...(byShift.get(day) ?? []), index + 1]);
-    });
-
-    if (openDates.length > 0) console.log(`${label}  open     ${openDates.join(", ")} (not decided, nothing written)`);
+    const summary = days.map((d) => (d.day === null ? "." : d.day === "OFF" ? "-" : d.day.charAt(0))).join("");
 
     // A placeholder not created in a dry run has no rows to check against.
     if (!apply && employee.id.startsWith("(new ")) {
-      for (const [key, daysOfWeek] of byShift) {
-        console.log(`${label}  assign   ${key} days ${daysOfWeek.join(",")}`);
-        totals.assignments++;
-      }
-      for (const dateKey of offDates) {
-        console.log(`${label}  day off  ${dateKey}`);
-        totals.daysOff++;
-      }
+      console.log(`${label}  week     ${summary}`);
+      for (const d of days) if (d.day === "OFF") totals.daysOff++; else if (d.day) totals.assignments++;
       continue;
     }
 
+    const kept: string[] = [];
     await prisma.$transaction(async (tx) => {
-      for (const [key, daysOfWeek] of byShift) {
-        const shiftId = shiftIds[key];
-        const existing = await tx.employeeShiftAssignment.findFirst({
-          where: { employeeId: employee.id, shiftId, validFrom, validTo },
-        });
-        if (existing) {
-          console.log(`${label}  skip     ${key} ${daysOfWeek.join(",")} (already assigned)`);
-          totals.skipped++;
-          continue;
-        }
-        console.log(`${label}  assign   ${key} days ${daysOfWeek.join(",")}`);
-        totals.assignments++;
-        if (!apply) continue;
-
-        await tx.employeeShiftAssignment.create({
-          data: { employeeId: employee.id, shiftId, daysOfWeek, validFrom, validTo },
-        });
-        await tx.auditLog.create({
-          data: {
-            ...SYSTEM,
-            action: "employee.shift_assigned",
-            entityType: "Employee",
-            entityId: employee.id,
-            after: { shiftId, daysOfWeek, validFrom: validFrom.toISOString(), validTo: validTo.toISOString() },
-            metadata: { source: SOURCE },
-          },
-        });
-      }
-
-      for (const dateKey of offDates) {
+      for (const { day, dateKey } of days) {
+        if (day === null) continue;
         // Same date encoding as the override action: the calendar date at UTC midnight.
         const date = new Date(`${dateKey}T00:00:00.000Z`);
         const existing = await tx.scheduleException.findUnique({
           where: { employeeId_date: { employeeId: employee.id, date } },
         });
+        // Someone's own change for that day (leave, a cover, an edit) wins.
         if (existing) {
-          console.log(`${label}  skip     OFF ${dateKey} (exception exists: ${existing.type})`);
+          kept.push(`${dateKey} ${existing.type}`);
           totals.skipped++;
           continue;
         }
-        console.log(`${label}  day off  ${dateKey}`);
-        totals.daysOff++;
+
+        const data =
+          day === "OFF"
+            ? { type: ScheduleExceptionType.DAY_OFF, shiftId: null, reason: row.offReason ?? REASON }
+            : { type: ScheduleExceptionType.SHIFT_CHANGE, shiftId: shiftIds[day], reason: REASON };
+        if (day === "OFF") totals.daysOff++;
+        else totals.assignments++;
         if (!apply) continue;
 
-        const override = await tx.scheduleException.create({
-          data: { employeeId: employee.id, date, type: ScheduleExceptionType.DAY_OFF, reason: REASON },
-        });
+        const override = await tx.scheduleException.create({ data: { employeeId: employee.id, date, ...data } });
         await tx.auditLog.create({
           data: {
             ...SYSTEM,
             action: "schedule.override_created",
             entityType: "ScheduleException",
             entityId: override.id,
-            after: { type: ScheduleExceptionType.DAY_OFF, shiftId: null, reason: REASON, employeeId: employee.id, date: dateKey },
+            after: { ...data, employeeId: employee.id, date: dateKey },
             metadata: { source: SOURCE },
           },
         });
       }
-    });
+    }, { timeout: 60_000 });
+    console.log(`${label}  week     ${summary}${kept.length ? `   kept existing: ${kept.join(", ")}` : ""}`);
   }
 
   console.log(
     `\n${apply ? "Wrote" : "Would write"} ${totals.created} placeholder(s), ${totals.branched} Dawhenya branch assignment(s), ` +
-      `${totals.assignments} shift assignment(s), ${totals.daysOff} day(s) off; skipped ${totals.skipped}.`,
+      `${totals.assignments} shift day(s), ${totals.daysOff} day(s) off; kept ${totals.skipped} existing.`,
   );
 }
 
