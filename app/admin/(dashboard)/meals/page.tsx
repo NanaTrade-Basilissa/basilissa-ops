@@ -65,51 +65,54 @@ export default async function MealsPage({ searchParams }: { searchParams: Search
   return (
     <div className="space-y-6">
       {/* Top Header / Actions Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b">
+      <div className="flex flex-col gap-3 pb-3 border-b sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-            <UtensilsCrossed className="h-6 w-6 text-primary" />
-            Staff Meals & Kitchen Station
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <UtensilsCrossed className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
+            Staff Meals
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Plan daily staff dishes, publish menus for employee selection, and track portion counts.
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Plan daily staff dishes, set weekly cutoff, and track portions.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center">
           <WallQrDialog
             branchId={selectedBranch.id}
             branchName={selectedBranch.name}
             branchSlug={selectedBranch.slug}
+            triggerClassName="w-full justify-center text-xs sm:text-sm"
           />
 
           <Link
             href={`/admin/meals/station?branchId=${selectedBranch.id}`}
             className={cn(
               buttonVariants({ variant: "default", size: "sm" }),
-              "gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium",
+              "gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium justify-center text-xs sm:text-sm",
             )}
           >
-            <MonitorPlay className="h-4 w-4" />
-            Live Kitchen Screen
+            <MonitorPlay className="h-4 w-4 shrink-0" />
+            <span>Live Kitchen</span>
           </Link>
         </div>
       </div>
 
       {/* Filter and Navigation Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/20 p-3 rounded-xl border">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="flex flex-col gap-3 bg-muted/20 p-3 rounded-xl border sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-3 w-full sm:w-auto">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
             Branch:
           </span>
-          <MealsBranchSelect
-            branches={branches}
-            selectedBranchId={selectedBranch.id}
-            week={weekStartKey}
-          />
+          <div className="flex-1 sm:flex-initial">
+            <MealsBranchSelect
+              branches={branches}
+              selectedBranchId={selectedBranch.id}
+              week={weekStartKey}
+            />
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto pt-2 border-t sm:pt-0 sm:border-t-0">
           <Link
             href={`/admin/meals?branchId=${selectedBranch.id}&week=${prevWeekKey}`}
             className={cn(buttonVariants({ variant: "outline", size: "icon-sm" }))}
@@ -118,7 +121,7 @@ export default async function MealsPage({ searchParams }: { searchParams: Search
             <ChevronLeft className="h-4 w-4" />
           </Link>
 
-          <span className="text-xs font-semibold px-2 py-1 bg-background rounded-md border min-w-44 text-center">
+          <span className="text-xs font-semibold px-2.5 py-1.5 bg-background rounded-md border flex-1 sm:flex-initial min-w-0 sm:min-w-44 text-center truncate">
             {weekLabel}
           </span>
 
@@ -133,7 +136,7 @@ export default async function MealsPage({ searchParams }: { searchParams: Search
           {weekStartKey !== currentWeekStart && (
             <Link
               href={`/admin/meals?branchId=${selectedBranch.id}&week=${currentWeekStart}`}
-              className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-xs")}
+              className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-xs shrink-0")}
             >
               This Week
             </Link>

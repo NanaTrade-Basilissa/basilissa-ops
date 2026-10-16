@@ -27,6 +27,8 @@ const ROUTE_LABELS: Record<string, string> = {
   leave: "Leave",
   holidays: "Public Holidays",
   announcements: "Announcements",
+  meals: "Staff Meals",
+  station: "Kitchen Station",
   new: "New",
   assessments: "Assessments",
   "aptitude-tests": "Aptitude Tests",

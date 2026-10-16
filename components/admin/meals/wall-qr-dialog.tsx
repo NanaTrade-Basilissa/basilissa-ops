@@ -12,13 +12,21 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
+import { cn } from "@/lib/utils";
+
 interface WallQrDialogProps {
   branchId: string;
   branchName: string;
   branchSlug: string;
+  triggerClassName?: string;
 }
 
-export function WallQrDialog({ branchId, branchName, branchSlug }: WallQrDialogProps) {
+export function WallQrDialog({
+  branchId,
+  branchName,
+  branchSlug,
+  triggerClassName,
+}: WallQrDialogProps) {
   const [open, setOpen] = useState(false);
   const qrEndpoint = `/api/admin/branches/${branchId}/meals/qr`;
 
@@ -139,7 +147,7 @@ export function WallQrDialog({ branchId, branchName, branchSlug }: WallQrDialogP
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button variant="outline" size="sm" className={cn("gap-2", triggerClassName)}>
             <QrCode className="h-4 w-4" />
             <span>Print Wall QR</span>
           </Button>
