@@ -29,6 +29,15 @@ function formatDuration(minutes: number): string {
   return `${h}h ${String(m).padStart(2, "0")}m`;
 }
 
+function formatLateDuration(minutes: number): string {
+  if (minutes <= 0) return "0m";
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 function formatHoursDecimal(minutes: number): string {
   return (minutes / 60).toFixed(2);
 }
@@ -121,20 +130,6 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       ),
       cell: (info) => <span className="text-muted-foreground">{formatDuration(info.getValue())}</span>,
     }),
-    columnHelper.accessor("overtimeMinutes", {
-      header: () => (
-        <ColumnHeader
-          label="Overtime"
-          help="Time worked beyond the scheduled shift, once past the overtime threshold. This is what was worked, not what will be paid. Only Payable Overtime is paid."
-        />
-      ),
-      cell: (info) =>
-        info.getValue() > 0 ? (
-          <span className="font-medium text-foreground">{formatDuration(info.getValue())}</span>
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        ),
-    }),
     columnHelper.accessor("payableOvertimeMinutes", {
       header: () => (
         <ColumnHeader
@@ -146,7 +141,7 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
         const { overtimeMinutes, payableOvertimeMinutes } = row.original;
         if (payableOvertimeMinutes > 0) {
           return (
-            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-medium">
               {formatDuration(payableOvertimeMinutes)}
             </Badge>
           );
@@ -166,13 +161,17 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       header: () => (
         <ColumnHeader
           label="Late"
-          help="Number of days the employee clocked in after the grace period, with the total minutes late in brackets."
+          help="Number of days the employee clocked in after the grace period, with total late time in brackets."
         />
       ),
       cell: ({ row }) =>
         row.original.lateCount > 0 ? (
-          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
-            {row.original.lateCount}x ({row.original.lateMinutes}m)
+          <Badge
+            variant="outline"
+            className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300 font-medium"
+            title={`${row.original.lateCount} late occurrence${row.original.lateCount > 1 ? "s" : ""} totaling ${formatLateDuration(row.original.lateMinutes)}`}
+          >
+            {row.original.lateCount}x ({formatLateDuration(row.original.lateMinutes)})
           </Badge>
         ) : (
           <span className="text-muted-foreground">-</span>
@@ -223,10 +222,9 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       "Scheduled Hours",
       "Net Worked Hours",
       "Regular Hours",
-      "Overtime Worked Hours",
       "Payable Overtime Hours",
       "Late Days",
-      "Total Late Minutes",
+      "Total Late Time",
       "Days To Review",
     ];
 
@@ -244,10 +242,9 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
           formatHoursDecimal(r.scheduledMinutes),
           formatHoursDecimal(r.netWorkedMinutes),
           formatHoursDecimal(r.regularMinutes),
-          formatHoursDecimal(r.overtimeMinutes),
           formatHoursDecimal(r.payableOvertimeMinutes),
           r.lateCount,
-          r.lateMinutes,
+          `"${formatLateDuration(r.lateMinutes)}"`,
           r.exceptionsCount,
         ].join(","),
       ),
@@ -281,7 +278,7 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
   return (
     <div className="space-y-6">
       {/* Summary Stat Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Total staff" value={String(totalEmployees)} icon={Users} />
         <StatCard
           label="Net worked"
@@ -294,11 +291,6 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
           icon={Clock}
         />
         <StatCard
-          label="Overtime"
-          value={formatDuration(totalOvertimeMinutes)}
-          icon={CalendarClock}
-        />
-        <StatCard
           label="Payable overtime"
           value={formatDuration(totalPayableOvertimeMinutes)}
           icon={CalendarClock}
@@ -306,7 +298,7 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
         />
         <StatCard
           label="Total late"
-          value={formatDuration(totalLateMinutes)}
+          value={formatLateDuration(totalLateMinutes)}
           icon={AlertTriangle}
         />
         <StatCard
