@@ -134,41 +134,31 @@ export function LiveStationScreen({
   return (
     <div className="space-y-6">
       {/* Station Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b">
-        <div className="flex items-center gap-3">
-          <Link href={`/admin/meals?branchId=${branchId}`}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b w-full min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href={`/admin/meals?branchId=${branchId}`} className="shrink-0">
             <Button variant="outline" size="icon" title="Back to Meal Planner">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
                 Kitchen Serving Station
               </h1>
-              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 gap-1 text-xs">
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 gap-1 text-xs shrink-0">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 Live
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">
               {data.branchName} Branch &bull; {data.dateKey}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <Button
-            size="sm"
-            onClick={handleNotifyFoodReady}
-            disabled={isNotifying || !data.hasPlan}
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
-          >
-            <BellRing className={`h-3.5 w-3.5 ${isNotifying ? "animate-bounce" : ""}`} />
-            <span>{isNotifying ? "Sending..." : "Food is Ready (Notify Staff)"}</span>
-          </Button>
-
-          <span className="text-xs text-muted-foreground font-mono hidden sm:inline">
+        <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1 sm:pt-0">
+          <span className="text-xs text-muted-foreground font-mono">
             Updated {lastRefreshedAt.toLocaleTimeString()}
           </span>
           <Button
@@ -176,10 +166,10 @@ export function LiveStationScreen({
             size="sm"
             onClick={refreshData}
             disabled={isRefreshing}
-            className="gap-2"
+            className="gap-1.5"
           >
             <RotateCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">Refresh</span>
+            <span>Refresh</span>
           </Button>
         </div>
       </div>
@@ -187,11 +177,11 @@ export function LiveStationScreen({
       {/* Main Counter Display */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Today's Dish */}
-        <Card className="bg-primary/5 border-primary/20 shadow-xs flex flex-col justify-between">
+        <Card className="shadow-xs flex flex-col justify-between">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1.5">
-                <UtensilsCrossed className="h-4 w-4" />
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <UtensilsCrossed className="h-4 w-4 text-foreground" />
                 Today&apos;s Staff Dish
               </CardTitle>
               {lastNotifiedAt && (
@@ -228,23 +218,23 @@ export function LiveStationScreen({
         </Card>
 
         {/* Portions Served */}
-        <Card className="border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-xs">
+        <Card className="shadow-xs">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-              <CheckCircle2 className="h-4 w-4" />
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               Portions Served
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-extrabold text-emerald-700 dark:text-emerald-400">
+              <span className="text-4xl font-extrabold text-emerald-600 dark:text-emerald-400">
                 {data.claimedCount}
               </span>
               <span className="text-lg font-medium text-muted-foreground">
                 / {data.totalPortions}
               </span>
             </div>
-            <div className="mt-2 w-full bg-emerald-200 dark:bg-emerald-900 h-2 rounded-full overflow-hidden">
+            <div className="mt-2 w-full bg-muted h-2 rounded-full overflow-hidden">
               <div
                 className="bg-emerald-600 h-full rounded-full transition-all duration-500"
                 style={{ width: `${percentServed}%` }}
