@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   UtensilsCrossed,
   ArrowLeft,
@@ -12,6 +13,7 @@ import {
   Search,
   Sparkles,
   Wifi,
+  BellRing,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,8 +56,42 @@ export function LiveStationScreen({
 }) {
   const [data, setData] = useState<StationData>(initialData);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isNotifying, setIsNotifying] = useState(false);
+  const [lastNotifiedAt, setLastNotifiedAt] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
+
+  const handleNotifyFoodReady = async () => {
+    if (!data.hasPlan || !data.dishName) {
+      toast.error("No active meal plan is scheduled for today.");
+      return;
+    }
+
+    setIsNotifying(true);
+    try {
+      const res = await fetch("/api/admin/meals/station", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branchId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error(json.error || "Failed to broadcast notifications.");
+        return;
+      }
+
+      const timeStr = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      setLastNotifiedAt(timeStr);
+      toast.success(
+        `Staff Notified! Alert sent to ${json.recipientCount} staff members for ${json.dishName}.`,
+        { description: `${json.pushCount} mobile push notifications delivered.` }
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to broadcast notification.");
+    } finally {
+      setIsNotifying(false);
+    }
+  };
 
   const refreshData = useCallback(async () => {
     setIsRefreshing(true);
@@ -121,8 +157,18 @@ export function LiveStationScreen({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground font-mono">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <Button
+            size="sm"
+            onClick={handleNotifyFoodReady}
+            disabled={isNotifying || !data.hasPlan}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
+          >
+            <BellRing className={`h-3.5 w-3.5 ${isNotifying ? "animate-bounce" : ""}`} />
+            <span>{isNotifying ? "Sending..." : "Food is Ready (Notify Staff)"}</span>
+          </Button>
+
+          <span className="text-xs text-muted-foreground font-mono hidden sm:inline">
             Updated {lastRefreshedAt.toLocaleTimeString()}
           </span>
           <Button
@@ -133,7 +179,7 @@ export function LiveStationScreen({
             className="gap-2"
           >
             <RotateCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
       </div>
@@ -141,20 +187,43 @@ export function LiveStationScreen({
       {/* Main Counter Display */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Today's Dish */}
-        <Card className="bg-primary/5 border-primary/20 shadow-xs">
+        <Card className="bg-primary/5 border-primary/20 shadow-xs flex flex-col justify-between">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1.5">
-              <UtensilsCrossed className="h-4 w-4" />
-              Today&apos;s Staff Dish
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-foreground line-clamp-2">
-              {data.dishName || "No Dish Scheduled Today"}
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                <UtensilsCrossed className="h-4 w-4" />
+                Today&apos;s Staff Dish
+              </CardTitle>
+              {lastNotifiedAt && (
+                <Badge variant="outline" className="text-[10px] bg-emerald-100 text-emerald-800 border-emerald-300">
+                  Notified {lastNotifiedAt}
+                </Badge>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {data.hasPlan ? "Cook according to reserved count" : "Menu draft pending"}
-            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <div className="text-xl font-bold text-foreground line-clamp-2">
+                {data.dishName || "No Dish Scheduled Today"}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {data.hasPlan ? `${data.totalPortions} staff portions reserved` : "Menu draft pending"}
+              </p>
+            </div>
+
+            <Button
+              size="sm"
+              onClick={handleNotifyFoodReady}
+              disabled={isNotifying || !data.hasPlan}
+              className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs"
+            >
+              <BellRing className={`h-3.5 w-3.5 ${isNotifying ? "animate-bounce" : ""}`} />
+              {isNotifying
+                ? "Broadcasting alert to staff..."
+                : lastNotifiedAt
+                ? `Re-send "Food is Ready" Alert (Notified ${lastNotifiedAt})`
+                : "Notify Staff: Food is Ready"}
+            </Button>
           </CardContent>
         </Card>
 

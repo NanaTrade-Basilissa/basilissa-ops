@@ -147,9 +147,10 @@ export function WallQrDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button variant="outline" size="sm" className={cn("gap-1.5 min-w-0", triggerClassName)}>
+          <Button variant="outline" size="sm" className={cn("gap-1.5 shrink-0 whitespace-nowrap", triggerClassName)}>
             <QrCode className="h-4 w-4 shrink-0" />
-            <span className="truncate">Print QR</span>
+            <span className="sm:hidden">Print QR</span>
+            <span className="hidden sm:inline">Print Wall QR</span>
           </Button>
         }
       />

@@ -5,7 +5,8 @@ import { recordAuditBestEffort } from "@/lib/platform/audit";
 import { isMealCutoffPassed, DEFAULT_MEAL_CUTOFF_HOUR } from "./constants";
 import type { Actor } from "@/lib/modules/identity/authorization";
 import { can } from "@/lib/modules/identity/authorization";
-import type { MealDecision } from "@prisma/client";
+import { NotificationKind, ProviderType, type MealDecision } from "@prisma/client";
+import { sendPushNotification, parseDeviceMetadata } from "@/lib/platform/push";
 
 export interface SaveDayInput {
   date: string;
@@ -464,5 +465,121 @@ export async function getLiveServingStation(branchId: string, targetDateKey?: st
     remainingCount: Math.max(0, totalPortions - claimedCount),
     claims,
     pending,
+  };
+}
+
+/**
+ * Broadcasts a push notification & in-app alert to staff when today's food is ready.
+ */
+export async function broadcastMealReadyNotification(branchId: string) {
+  const branch = await prisma.branch.findUnique({
+    where: { id: branchId },
+    select: { id: true, name: true, timezone: true },
+  });
+  if (!branch) throw new Error("Branch not found");
+
+  const todayKey = dateKeyInZone(new Date(), branch.timezone);
+  const todayDate = new Date(`${todayKey}T00:00:00.000Z`);
+
+  const plan = await prisma.mealPlan.findUnique({
+    where: { branchId_date: { branchId, date: todayDate } },
+    include: {
+      selections: {
+        where: { decision: "EATING" },
+        select: { employeeId: true, claimedAt: true },
+      },
+    },
+  });
+
+  if (!plan || !plan.isEnabled) {
+    return {
+      ok: false,
+      error: "No active staff meal is scheduled for today at this branch.",
+    };
+  }
+
+  const dishName = plan.dishName.trim() || "Staff Lunch";
+
+  // Target employees: those who reserved "EATING" today
+  let targetEmployeeIds: string[] = plan.selections.map((s) => s.employeeId);
+
+  // If no pre-orders were made (e.g. ad-hoc meal), notify all active employees assigned to this branch
+  if (targetEmployeeIds.length === 0) {
+    const branchEmployees = await prisma.employeeBranchAssignment.findMany({
+      where: { branchId, validTo: null },
+      select: { employeeId: true },
+    });
+    targetEmployeeIds = branchEmployees.map((b) => b.employeeId);
+  }
+
+  if (targetEmployeeIds.length === 0) {
+    return {
+      ok: false,
+      error: "No active employees found to notify for this branch.",
+    };
+  }
+
+  // Find push tokens for target employees
+  const devices = await prisma.employeeDeviceIdentity.findMany({
+    where: {
+      employeeId: { in: targetEmployeeIds },
+      providerType: ProviderType.MOBILE_APP,
+      revokedAt: null,
+    },
+    select: { label: true, employeeId: true },
+  });
+
+  const tokens: string[] = [];
+  for (const device of devices) {
+    const meta = parseDeviceMetadata(device.label);
+    if (meta.pushToken) {
+      tokens.push(meta.pushToken);
+    }
+  }
+
+  const title = "🍽️ Food is Ready!";
+  const body = `${dishName} is now ready and being served at the ${branch.name} kitchen counter. Come collect your meal!`;
+
+  // 1. Send push notifications to devices
+  let pushDispatched = 0;
+  if (tokens.length > 0) {
+    const receipts = await sendPushNotification(tokens, {
+      title,
+      body,
+      sound: "default",
+      priority: "high",
+      data: {
+        type: "STAFF_MEAL_READY",
+        branchId,
+        dishName,
+      },
+    });
+    pushDispatched = receipts.filter((r) => r.ok).length;
+  }
+
+  // 2. Insert in-app notifications
+  if (targetEmployeeIds.length > 0) {
+    await prisma.notification.createMany({
+      data: targetEmployeeIds.map((employeeId) => ({
+        employeeId,
+        kind: NotificationKind.ANNOUNCEMENT,
+        title,
+        body,
+        data: {
+          type: "STAFF_MEAL_READY",
+          branchId,
+          dishName,
+        },
+      })),
+    });
+  }
+
+  return {
+    ok: true,
+    recipientCount: targetEmployeeIds.length,
+    pushCount: pushDispatched,
+    dishName,
+    branchName: branch.name,
+    notifiedAt: new Date().toISOString(),
   };
 }

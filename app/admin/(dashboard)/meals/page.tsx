@@ -76,23 +76,23 @@ export default async function MealsPage({ searchParams }: { searchParams: Search
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center min-w-0">
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
           <WallQrDialog
             branchId={selectedBranch.id}
             branchName={selectedBranch.name}
             branchSlug={selectedBranch.slug}
-            triggerClassName="w-full min-w-0 justify-center text-xs sm:text-sm px-2.5 sm:px-3"
+            triggerClassName="flex-1 sm:flex-initial sm:w-auto justify-center text-xs sm:text-sm px-3 shrink-0"
           />
 
           <Link
             href={`/admin/meals/station?branchId=${selectedBranch.id}`}
             className={cn(
               buttonVariants({ variant: "default", size: "sm" }),
-              "gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium justify-center text-xs sm:text-sm w-full min-w-0 px-2.5 sm:px-3",
+              "gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium justify-center text-xs sm:text-sm flex-1 sm:flex-initial sm:w-auto px-3 shrink-0",
             )}
           >
-            <MonitorPlay className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-            <span className="truncate">Live Kitchen</span>
+            <MonitorPlay className="h-4 w-4 shrink-0" />
+            <span className="whitespace-nowrap">Live Kitchen</span>
           </Link>
         </div>
       </div>
