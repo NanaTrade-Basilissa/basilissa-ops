@@ -47,6 +47,7 @@ export function RoleDialog({
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const isEditing = Boolean(role);
+  const isSuperAdmin = role?.id === "super-admin" || role?.name === "Super Admin";
 
   const [name, setName] = useState(role?.name ?? "");
   const [description, setDescription] = useState(role?.description ?? "");
@@ -138,11 +139,19 @@ export function RoleDialog({
       ) : null}
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? `Edit Role: ${role?.name}` : "Create Custom Role"}</DialogTitle>
+          <DialogTitle>
+            {isSuperAdmin
+              ? "Role: Super Admin"
+              : isEditing
+                ? `Edit Role: ${role?.name}`
+                : "Create Role"}
+          </DialogTitle>
           <DialogDescription>
-            {isEditing
-              ? "Modify the role name, description, and permissions matrix."
-              : "Define a new custom role with explicit resource and action permissions."}
+            {isSuperAdmin
+              ? "Super Admin holds unrestricted access to all capabilities across all branches. Permissions are locked."
+              : isEditing
+                ? "Modify the role name, description, and permissions matrix."
+                : "Define a new role with explicit resource and action permissions."}
           </DialogDescription>
         </DialogHeader>
 
@@ -153,6 +162,14 @@ export function RoleDialog({
           {Array.from(selectedPermissions).map((permKey) => (
             <input key={permKey} type="hidden" name="permissions" value={permKey} />
           ))}
+
+          {isSuperAdmin && (
+            <Alert className="border-amber-500/20 bg-amber-500/5 text-foreground">
+              <AlertDescription className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                Super Admin permissions are fixed and locked by the system. All capabilities are granted by default.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {state?.error && (
             <Alert variant="destructive">
@@ -172,7 +189,7 @@ export function RoleDialog({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. HR Manager, Branch Manager, Operations Lead"
                 required
-                disabled={isPending}
+                disabled={isPending || isSuperAdmin}
               />
               {state?.fieldErrors?.name && (
                 <p className="text-xs text-destructive">{state.fieldErrors.name}</p>
@@ -187,7 +204,7 @@ export function RoleDialog({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Brief summary of duties and responsibilities"
-                disabled={isPending}
+                disabled={isPending || isSuperAdmin}
               />
             </div>
           </div>
@@ -196,7 +213,7 @@ export function RoleDialog({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">
-                  Permissions Matrix ({selectedPermissions.size} selected)
+                  Permissions Matrix ({isSuperAdmin ? "All" : `${selectedPermissions.size}`} selected)
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   Check the actions this role is authorized to perform. Authorization is deny-by-default.
@@ -208,7 +225,7 @@ export function RoleDialog({
                   variant="outline"
                   size="sm"
                   onClick={selectAll}
-                  disabled={isPending}
+                  disabled={isPending || isSuperAdmin}
                   className="h-8 text-xs gap-1"
                 >
                   <CheckSquare className="size-3.5" />
@@ -219,7 +236,7 @@ export function RoleDialog({
                   variant="outline"
                   size="sm"
                   onClick={clearAll}
-                  disabled={isPending}
+                  disabled={isPending || isSuperAdmin}
                   className="h-8 text-xs gap-1"
                 >
                   <Square className="size-3.5" />
@@ -280,21 +297,21 @@ export function RoleDialog({
                             );
                           }
 
-                          const isChecked = selectedPermissions.has(actionDef.key);
+                          const isChecked = isSuperAdmin ? true : selectedPermissions.has(actionDef.key);
 
                           return (
                             <td
                               key={actionCol.key}
-                              className="p-2.5 text-center align-middle cursor-pointer hover:bg-muted/40"
-                              onClick={() => togglePermission(actionDef.key)}
+                              className={`p-2.5 text-center align-middle ${isSuperAdmin ? "cursor-default bg-muted/20" : "cursor-pointer hover:bg-muted/40"}`}
+                              onClick={isSuperAdmin ? undefined : () => togglePermission(actionDef.key)}
                               title={`${actionDef.label} ${row.resourceLabel}`}
                             >
                               <div className="flex items-center justify-center">
                                 <Checkbox
                                   id={actionDef.key}
                                   checked={isChecked}
-                                  onCheckedChange={() => togglePermission(actionDef.key)}
-                                  disabled={isPending}
+                                  onCheckedChange={isSuperAdmin ? undefined : () => togglePermission(actionDef.key)}
+                                  disabled={isPending || isSuperAdmin}
                                   aria-label={`${actionDef.label} ${row.resourceLabel}`}
                                 />
                               </div>
@@ -308,7 +325,7 @@ export function RoleDialog({
                             variant="ghost"
                             size="sm"
                             onClick={() => toggleRow(row)}
-                            disabled={isPending}
+                            disabled={isPending || isSuperAdmin}
                             className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
                           >
                             {allInRowSelected ? "None" : "All"}
@@ -323,18 +340,26 @@ export function RoleDialog({
           </div>
 
           <DialogFooter className="pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="size-4 animate-spin mr-1.5" />}
-              {isEditing ? "Save Changes" : "Create Role"}
-            </Button>
+            {isSuperAdmin ? (
+              <Button type="button" onClick={() => setOpen(false)}>
+                Close
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                  disabled={isPending}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isPending}>
+                  {isPending && <Loader2 className="size-4 animate-spin mr-1.5" />}
+                  {isEditing ? "Save Changes" : "Create Role"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

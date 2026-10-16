@@ -384,13 +384,18 @@ export function can(actor: Actor, permission: Permission, resource?: ResourceSco
   if (actor.customRole?.permissions?.length) {
     if (actor.customRole.permissions.includes(permission)) return true;
 
-    // Single-purpose legacy alias check (e.g. employee:read <-> employees:read)
-    const legacyAliases = SYSTEM_TO_GRANULAR[permission];
+    // Check if role holds any of the granular actions corresponding to a coarse permission
+    const granularTargets = SYSTEM_TO_GRANULAR[permission];
     if (
-      legacyAliases &&
-      legacyAliases.length === 1 &&
-      actor.customRole.permissions.includes(legacyAliases[0]!)
+      granularTargets &&
+      granularTargets.some((target) => actor.customRole!.permissions.includes(target))
     ) {
+      return true;
+    }
+
+    // Check if role holds the coarse permission corresponding to a granular permission
+    const coarseTarget = GRANULAR_TO_SYSTEM[permission];
+    if (coarseTarget && actor.customRole.permissions.includes(coarseTarget)) {
       return true;
     }
   }
@@ -460,7 +465,7 @@ export function branchScope(actor: Actor, permission: Permission): BranchScope {
   if (actor.customRole?.permissions?.length) {
     if (actor.customRole.permissions.includes(permission)) return { kind: "all" };
     const legacy = SYSTEM_TO_GRANULAR[permission];
-    if (legacy && legacy.length === 1 && actor.customRole.permissions.includes(legacy[0]!)) {
+    if (legacy && legacy.some((target) => actor.customRole!.permissions.includes(target))) {
       return { kind: "all" };
     }
   }

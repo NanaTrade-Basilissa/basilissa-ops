@@ -14,6 +14,7 @@ import bcrypt from "bcryptjs";
 import { FEEDBACK_QUESTIONS } from "../lib/modules/feedback/constants";
 import { SAMPLE_BRANCHES } from "./seed-data";
 import { syncPermissionRegistry } from "../lib/modules/identity/permissions";
+import { ensureStandardRolesExist } from "../lib/modules/identity/standard-roles";
 
 const prisma = new PrismaClient();
 
@@ -120,6 +121,8 @@ async function main() {
   const synced = await syncPermissionRegistry(prisma);
   console.log(`synced ${synced} permissions from registry`);
   await seedAdmin();
+  const seededRoles = await ensureStandardRolesExist(prisma);
+  console.log(`ensured standard roles (${seededRoles} newly created)`);
   await seedAttendancePolicy();
   await seedQuestions();
   await seedBranches();

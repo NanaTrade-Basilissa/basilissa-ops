@@ -2,7 +2,8 @@ import "server-only";
 import { prisma } from "@/lib/platform/prisma";
 import { recordAudit, type AuditActor } from "@/lib/platform/audit";
 import { scoped } from "@/lib/platform/logger";
-import { isValidPermissionKey, syncPermissionRegistry } from "./permissions";
+import { Role } from "@prisma/client";
+import { getAllPermissions, isValidPermissionKey, syncPermissionRegistry } from "./permissions";
 
 const log = scoped("identity.custom-roles");
 
@@ -13,10 +14,32 @@ export type RoleOperationOutcome =
 import type { FormattedCustomRole } from "./constants";
 export type { FormattedCustomRole };
 
+async function getSuperAdminRole(): Promise<FormattedCustomRole> {
+  const superAdminCount = await prisma.roleAssignment
+    .count({ where: { role: Role.SUPER_ADMIN } })
+    .catch(() => 1);
+  const allPerms = getAllPermissions();
+
+  return {
+    id: "super-admin",
+    name: "Super Admin",
+    description: "Full system access. Unrestricted permissions across all modules and branches.",
+    isSystem: true,
+    userCount: superAdminCount,
+    permissionCount: allPerms.length,
+    permissions: allPerms.map((p) => p.key),
+    createdAt: new Date("2024-01-01T00:00:00Z"),
+    updatedAt: new Date(),
+    createdBy: null,
+  };
+}
+
 /**
  * Returns all custom roles with user count and assigned permissions.
  */
-export async function listCustomRoles(): Promise<FormattedCustomRole[]> {
+export async function listCustomRoles(
+  options: { includeSuperAdmin?: boolean } = {},
+): Promise<FormattedCustomRole[]> {
   const roles = await prisma.customRole.findMany({
     orderBy: { name: "asc" },
     include: {
@@ -39,7 +62,7 @@ export async function listCustomRoles(): Promise<FormattedCustomRole[]> {
     },
   });
 
-  return roles.map((r) => ({
+  const formatted = roles.map((r) => ({
     id: r.id,
     name: r.name,
     description: r.description,
@@ -51,12 +74,22 @@ export async function listCustomRoles(): Promise<FormattedCustomRole[]> {
     updatedAt: r.updatedAt,
     createdBy: r.createdBy,
   }));
+
+  if (options.includeSuperAdmin) {
+    const superAdminRole = await getSuperAdminRole();
+    return [superAdminRole, ...formatted];
+  }
+
+  return formatted;
 }
 
 /**
  * Returns a single custom role by ID with all permission keys.
  */
 export async function getCustomRoleById(id: string): Promise<FormattedCustomRole | null> {
+  if (id === "super-admin") {
+    return getSuperAdminRole();
+  }
   const r = await prisma.customRole.findUnique({
     where: { id },
     include: {
@@ -105,6 +138,10 @@ export async function createCustomRole(
   const name = input.name.trim();
   if (!name) {
     return { ok: false, reason: "ROLE_NAME_EXISTS", message: "Role name is required." };
+  }
+
+  if (name.toLowerCase() === "super admin") {
+    return { ok: false, reason: "ROLE_NAME_EXISTS", message: "Super Admin is a reserved system role." };
   }
 
   const existing = await prisma.customRole.findUnique({ where: { name } });
@@ -185,6 +222,10 @@ export async function updateCustomRole(
   const name = input.name.trim();
   if (!name) {
     return { ok: false, reason: "ROLE_NAME_EXISTS", message: "Role name is required." };
+  }
+
+  if (roleId === "super-admin" || name.toLowerCase() === "super admin") {
+    return { ok: false, reason: "SYSTEM_ROLE_PROTECTED", message: "Super Admin permissions are fixed and cannot be modified." };
   }
 
   const role = await prisma.customRole.findUnique({
@@ -291,6 +332,10 @@ export async function deleteCustomRole(
   roleId: string,
   actor: AuditActor,
 ): Promise<RoleOperationOutcome> {
+  if (roleId === "super-admin") {
+    return { ok: false, reason: "SYSTEM_ROLE_PROTECTED", message: "Super Admin role cannot be deleted." };
+  }
+
   const role = await prisma.customRole.findUnique({
     where: { id: roleId },
     select: { id: true, name: true, description: true, isSystem: true },

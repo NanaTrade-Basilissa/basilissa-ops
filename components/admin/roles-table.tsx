@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Edit2, RotateCcw, Search, Shield, Trash2, Users } from "lucide-react";
+import { Edit2, Lock, RotateCcw, Search, Shield, Trash2, Users } from "lucide-react";
 import type { FormattedCustomRole } from "@/lib/modules/identity/constants";
 import type { MatrixRow } from "@/lib/modules/identity/authorization";
 import { Badge } from "@/components/ui/badge";
@@ -70,9 +70,9 @@ export function RolesTable({
           <EmptyMedia variant="icon">
             <Shield className="size-4" />
           </EmptyMedia>
-          <EmptyTitle>No custom roles created</EmptyTitle>
+          <EmptyTitle>No roles created</EmptyTitle>
           <EmptyDescription>
-            Super Admin can create custom roles with tailored resource and action permissions.
+            Create and configure roles with tailored resource and action permissions.
           </EmptyDescription>
         </EmptyHeader>
         {canCreate && (
@@ -144,71 +144,83 @@ export function RolesTable({
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedRoles.map((role) => (
-                <TableRow
-                  key={role.id}
-                  onClick={() => handleRowClick(role)}
-                  className="cursor-pointer hover:bg-muted/30 transition-colors"
-                >
-                  <TableCell className="font-medium text-foreground">
-                    <div className="flex items-center gap-2">
-                      <Shield className="size-4 text-primary shrink-0" />
-                      <span className="font-medium underline-offset-4 hover:underline">
-                        {role.name}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground max-w-xs truncate text-xs">
-                    {role.description || <span className="italic text-muted-foreground/60">—</span>}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant={role.userCount > 0 ? "secondary" : "outline"} className="gap-1 font-normal text-xs">
-                      <Users className="size-3.5" />
-                      {role.userCount} {role.userCount === 1 ? "user" : "users"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant="outline" className="font-normal text-xs">
-                      {role.permissionCount} {role.permissionCount === 1 ? "permission" : "permissions"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                    {formatAccraDateTime(role.createdAt)}
-                  </TableCell>
-                  <TableCell className="text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                    <TableRowActions
-                      actions={[
-                        canUpdate && {
-                          id: "edit",
-                          label: "Edit role",
-                          icon: Edit2,
-                          dialog: (props) => (
-                            <RoleDialog
-                              open={props.open}
-                              onOpenChange={props.onOpenChange}
-                              role={role}
-                              matrix={matrix}
-                            />
-                          ),
-                        },
-                        canDelete && {
-                          id: "delete",
-                          label: "Delete role",
-                          icon: Trash2,
-                          variant: "destructive",
-                          dialog: (props) => (
-                            <DeleteRoleDialog
-                              open={props.open}
-                              onOpenChange={props.onOpenChange}
-                              role={{ id: role.id, name: role.name, userCount: role.userCount }}
-                            />
-                          ),
-                        },
-                      ]}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))
+              paginatedRoles.map((role) => {
+                const isSuperAdmin = role.id === "super-admin" || role.name === "Super Admin";
+                return (
+                  <TableRow
+                    key={role.id}
+                    onClick={() => handleRowClick(role)}
+                    className="cursor-pointer hover:bg-muted/30 transition-colors"
+                  >
+                    <TableCell className="font-medium text-foreground">
+                      <div className="flex items-center gap-2">
+                        {isSuperAdmin ? (
+                          <Lock className="size-4 text-amber-500 shrink-0" />
+                        ) : (
+                          <Shield className="size-4 text-primary shrink-0" />
+                        )}
+                        <span className="font-medium underline-offset-4 hover:underline">
+                          {role.name}
+                        </span>
+                        {isSuperAdmin && (
+                          <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-4 font-normal text-muted-foreground">
+                            System
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground max-w-xs truncate text-xs">
+                      {role.description || <span className="italic text-muted-foreground/60">—</span>}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={role.userCount > 0 ? "secondary" : "outline"} className="gap-1 font-normal text-xs">
+                        <Users className="size-3.5" />
+                        {role.userCount} {role.userCount === 1 ? "user" : "users"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className="font-normal text-xs">
+                        {role.permissionCount} {role.permissionCount === 1 ? "permission" : "permissions"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {isSuperAdmin ? "System Default" : formatAccraDateTime(role.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <TableRowActions
+                        actions={[
+                          canUpdate && {
+                            id: "edit",
+                            label: isSuperAdmin ? "View permissions" : "Edit role",
+                            icon: Edit2,
+                            dialog: (props) => (
+                              <RoleDialog
+                                open={props.open}
+                                onOpenChange={props.onOpenChange}
+                                role={role}
+                                matrix={matrix}
+                              />
+                            ),
+                          },
+                          canDelete && !isSuperAdmin && {
+                            id: "delete",
+                            label: "Delete role",
+                            icon: Trash2,
+                            variant: "destructive",
+                            dialog: (props) => (
+                              <DeleteRoleDialog
+                                open={props.open}
+                                onOpenChange={props.onOpenChange}
+                                role={{ id: role.id, name: role.name, userCount: role.userCount }}
+                              />
+                            ),
+                          },
+                        ]}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

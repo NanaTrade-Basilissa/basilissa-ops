@@ -113,6 +113,22 @@ describe("Custom Roles Service", () => {
       }
     });
 
+    it("rejects creating a role named Super Admin", async () => {
+      const result = await createCustomRole(
+        {
+          name: "Super Admin",
+          permissions: ["employees:read"],
+        },
+        ACTOR,
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("ROLE_NAME_EXISTS");
+        expect(result.message).toContain("reserved");
+      }
+    });
+
     it("rejects invalid or unknown permission strings", async () => {
       vi.spyOn(prisma.customRole, "findUnique").mockResolvedValueOnce(null);
 
@@ -242,6 +258,15 @@ describe("Custom Roles Service", () => {
       } as never);
 
       const result = await deleteCustomRole("role_system", ACTOR);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe("SYSTEM_ROLE_PROTECTED");
+      }
+    });
+
+    it("BLOCKS deletion of super-admin virtual role (SYSTEM_ROLE_PROTECTED)", async () => {
+      const result = await deleteCustomRole("super-admin", ACTOR);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -384,6 +409,36 @@ describe("Custom Roles Service", () => {
       expect(roles[0].userCount).toBe(4);
       expect(roles[0].permissionCount).toBe(2);
       expect(roles[0].permissions).toEqual(["employees:read", "attendance:read"]);
+    });
+
+    it("includes Super Admin at index 0 when includeSuperAdmin is true", async () => {
+      vi.spyOn(prisma.customRole, "findMany").mockResolvedValueOnce([
+        {
+          id: "role_a",
+          name: "Manager",
+          description: "Branch manager custom role",
+          isSystem: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          createdById: "admin_1",
+          createdBy: { id: "admin_1", name: "Admin", email: "admin@basilissa.gh" },
+          _count: { users: 4, permissions: 2 },
+          permissions: [
+            { permission: { key: "employees:read" } },
+            { permission: { key: "attendance:read" } },
+          ],
+        },
+      ] as never);
+      vi.spyOn(prisma.roleAssignment, "count").mockResolvedValueOnce(2);
+
+      const roles = await listCustomRoles({ includeSuperAdmin: true });
+      expect(roles.length).toBe(2);
+      expect(roles[0].id).toBe("super-admin");
+      expect(roles[0].name).toBe("Super Admin");
+      expect(roles[0].isSystem).toBe(true);
+      expect(roles[0].userCount).toBe(2);
+      expect(roles[0].permissions.length).toBeGreaterThan(0);
+      expect(roles[1].name).toBe("Manager");
     });
   });
 });

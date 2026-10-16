@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { prisma } from "@/lib/platform/prisma";
 import {
   can,
   requirePermission,
   listCustomRoles,
   getPermissionMatrix,
+  ensureStandardRolesExist,
 } from "@/lib/modules/identity/server";
 import { RolesTable } from "@/components/admin/roles-table";
 
@@ -17,8 +19,10 @@ export default async function RolesPage() {
   const canUpdate = can(actor, "roles:update");
   const canDelete = can(actor, "roles:delete");
 
+  await ensureStandardRolesExist(prisma);
+
   const [roles, matrix] = await Promise.all([
-    listCustomRoles(),
+    listCustomRoles({ includeSuperAdmin: true }),
     Promise.resolve(getPermissionMatrix()),
   ]);
 

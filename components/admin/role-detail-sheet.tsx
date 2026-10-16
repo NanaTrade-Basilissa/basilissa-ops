@@ -47,6 +47,8 @@ export function RoleDetailSheet({
 
   if (!role) return null;
 
+  const isSuperAdmin = role.id === "super-admin" || role.name === "Super Admin";
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md lg:max-w-lg overflow-y-auto">
@@ -58,7 +60,7 @@ export function RoleDetailSheet({
             <div>
               <SheetTitle className="text-lg font-bold">{role.name}</SheetTitle>
               <SheetDescription className="text-xs">
-                {role.description || "Custom permission role"}
+                {role.description || (isSuperAdmin ? "Full system access across all modules" : "Standard role permissions")}
               </SheetDescription>
             </div>
           </div>
@@ -71,6 +73,11 @@ export function RoleDetailSheet({
             <Badge variant="outline" className="text-xs">
               {role.permissionCount} {role.permissionCount === 1 ? "permission" : "permissions"}
             </Badge>
+            {isSuperAdmin && (
+              <Badge variant="secondary" className="text-xs font-normal text-muted-foreground">
+                Locked
+              </Badge>
+            )}
           </div>
         </SheetHeader>
 
@@ -82,12 +89,14 @@ export function RoleDetailSheet({
                 <Calendar className="size-3.5" /> Created on
               </span>
               <span className="font-medium text-foreground">
-                {formatAccraDateTime(role.createdAt)}
+                {isSuperAdmin ? "System Default" : formatAccraDateTime(role.createdAt)}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Scope type</span>
-              <span className="font-mono font-medium text-foreground">System Custom Role</span>
+              <span className="text-muted-foreground">Classification</span>
+              <span className="font-mono font-medium text-foreground">
+                {isSuperAdmin ? "System Role (Locked)" : "Roles & Permissions"}
+              </span>
             </div>
           </div>
 
@@ -132,9 +141,9 @@ export function RoleDetailSheet({
           </div>
 
           {/* Actions */}
-          {(canUpdate || canDelete) && (
+          {(canUpdate || (canDelete && !isSuperAdmin)) && (
             <div className="pt-4 border-t border-border flex items-center justify-end gap-2">
-              {canDelete && (
+              {canDelete && !isSuperAdmin && (
                 <DeleteRoleDialog
                   role={{ id: role.id, name: role.name, userCount: role.userCount }}
                   trigger={
@@ -152,7 +161,7 @@ export function RoleDetailSheet({
                   trigger={
                     <Button variant="default" size="sm" className="gap-1.5 text-xs">
                       <Edit2 className="size-3.5" />
-                      Edit Role
+                      {isSuperAdmin ? "View Permissions" : "Edit Role"}
                     </Button>
                   }
                 />

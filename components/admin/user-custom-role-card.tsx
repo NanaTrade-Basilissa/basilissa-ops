@@ -50,10 +50,10 @@ export function UserCustomRoleCard({
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Shield className="size-4 text-primary" />
-          Custom Role &amp; Permissions
+          Role &amp; Permissions
         </CardTitle>
         <CardDescription className="text-xs">
-          Assign an administrator-defined custom role.
+          Assign an administrator-defined role with custom or standard permissions.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -77,7 +77,7 @@ export function UserCustomRoleCard({
               </div>
             ) : (
               <span className="text-xs text-muted-foreground italic mt-0.5 block">
-                None (No custom role assigned)
+                None (No role assigned)
               </span>
             )}
           </div>
@@ -89,7 +89,7 @@ export function UserCustomRoleCard({
 
             <div className="space-y-1.5">
               <Label htmlFor="customRoleId" className="text-xs">
-                Select Custom Role
+                Select Role
               </Label>
               <NativeSelect
                 id="customRoleId"
@@ -98,7 +98,7 @@ export function UserCustomRoleCard({
                 onChange={(e) => setSelectedRoleId(e.target.value)}
                 disabled={isPending}
               >
-                <option value="">None (Remove custom role)</option>
+                <option value="">None (Remove role)</option>
                 {availableCustomRoles.map((role) => (
                   <option key={role.id} value={role.id}>
                     {role.name}
@@ -114,7 +114,7 @@ export function UserCustomRoleCard({
               className="gap-1.5"
             >
               {isPending && <Loader2 className="size-3.5 animate-spin" />}
-              Save Custom Role
+              Save Role
             </Button>
           </form>
         )}

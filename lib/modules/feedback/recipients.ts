@@ -39,30 +39,45 @@ export async function getFeedbackRecipientsForBranch(branchId: string): Promise<
   const defaultManagers = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
-      roleAssignments: {
-        some: {
-          validFrom: { lte: now },
-          OR: [{ validTo: null }, { validTo: { gt: now } }],
-          AND: [
-            {
-              OR: [
+      OR: [
+        {
+          roleAssignments: {
+            some: {
+              validFrom: { lte: now },
+              OR: [{ validTo: null }, { validTo: { gt: now } }],
+              AND: [
                 {
-                  role: "BRANCH_MANAGER",
-                  scopeType: "BRANCH",
-                  scopeId: branchId,
-                },
-                {
-                  role: "AREA_MANAGER",
                   OR: [
-                    { scopeType: "BRANCH", scopeId: branchId },
-                    { scopeType: "GLOBAL" },
+                    {
+                      role: "BRANCH_MANAGER",
+                      scopeType: "BRANCH",
+                      scopeId: branchId,
+                    },
+                    {
+                      role: "AREA_MANAGER",
+                      OR: [
+                        { scopeType: "BRANCH", scopeId: branchId },
+                        { scopeType: "GLOBAL" },
+                      ],
+                    },
                   ],
                 },
               ],
             },
-          ],
+          },
         },
-      },
+        {
+          customRole: {
+            permissions: {
+              some: {
+                permission: {
+                  key: "feedback:read",
+                },
+              },
+            },
+          },
+        },
+      ],
     },
     select: { email: true },
   });

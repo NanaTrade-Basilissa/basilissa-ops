@@ -13,13 +13,28 @@ export async function getHrNotificationEmails(createdByUserId?: string | null): 
   const hrUsers = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
-      roleAssignments: {
-        some: {
-          role: "HR",
-          validFrom: { lte: now },
-          OR: [{ validTo: null }, { validTo: { gt: now } }],
+      OR: [
+        {
+          roleAssignments: {
+            some: {
+              role: "HR",
+              validFrom: { lte: now },
+              OR: [{ validTo: null }, { validTo: { gt: now } }],
+            },
+          },
         },
-      },
+        {
+          customRole: {
+            permissions: {
+              some: {
+                permission: {
+                  key: { in: ["assessments:read", "assessments:assign", "aptitude:read"] },
+                },
+              },
+            },
+          },
+        },
+      ],
     },
     select: { email: true },
   });
