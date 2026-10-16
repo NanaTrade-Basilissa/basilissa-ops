@@ -15,7 +15,7 @@ export function MealsBranchSelect({
   const router = useRouter();
 
   return (
-    <div className="min-w-44">
+    <div className="w-full sm:w-48 min-w-0">
       <NativeSelect
         id="mealsBranchSelect"
         value={selectedBranchId}
