@@ -222,22 +222,33 @@ export function projectDay(input: ProjectionInput): ProjectedDay {
     0,
   );
 
-  // Explicit punches use what was actually recorded; auto-deduct removes a
-  // fixed break once the shift is long enough to have had one.
-  const breakMinutes =
-    policy.breakPolicy === BreakPolicy.AUTO_DEDUCT
-      ? grossMinutes >= policy.autoDeductAfterMinutes
-        ? policy.autoDeductMinutes
-        : 0
-      : walk.breakMinutes;
+  // Break minutes: configured directly on the individual shift template (schedule.unpaidBreakMinutes).
+  // If the employee punched explicit breaks (walk.breakMinutes), those are respected.
+  // When an unpaid break is defined on the shift template, it is automatically deducted from worked time.
+  const templateBreak = schedule?.unpaidBreakMinutes ?? 0;
+  const breakThreshold = policy.autoDeductAfterMinutes > 0 ? policy.autoDeductAfterMinutes : 300;
+  let breakMinutes = walk.breakMinutes;
+
+  if (schedule) {
+    if (templateBreak > 0 && grossMinutes >= breakThreshold) {
+      breakMinutes = Math.max(walk.breakMinutes, templateBreak);
+    }
+  } else if (policy.breakPolicy === BreakPolicy.AUTO_DEDUCT) {
+    // Fallback for unscheduled days if an auto-deduct policy is active
+    if (grossMinutes >= policy.autoDeductAfterMinutes) {
+      breakMinutes = policy.autoDeductMinutes;
+    }
+  }
 
   const netBeforeRounding = Math.max(0, grossMinutes - breakMinutes);
   const netWorkedMinutes = applyRounding(netBeforeRounding, policy.roundingMinutes);
 
-  // Measured from the resolved instants rather than the template, so an
-  // overnight shift is simply end-minus-start with no special casing.
-  const scheduledMinutes = schedule
+  // Scheduled working minutes: shift duration minus scheduled unpaid break.
+  const scheduledSpan = schedule
     ? minutesBetween(schedule.scheduledStart, schedule.scheduledEnd)
+    : 0;
+  const scheduledMinutes = schedule
+    ? Math.max(0, scheduledSpan - templateBreak)
     : 0;
 
   let lateMinutes = 0;

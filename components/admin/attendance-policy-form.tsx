@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import Link from "next/link";
 import { CheckCircle2, Loader2, Save, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { PolicyFormState } from "@/lib/modules/attendance/actions";
@@ -92,7 +93,6 @@ export function AttendancePolicyForm({
     undefined,
   );
 
-  const [breakPolicy, setBreakPolicy] = useState(values.breakPolicy);
   const [autoCloseEnabled, setAutoCloseEnabled] = useState(values.autoCloseGraceMinutes >= 0);
   const errors = state?.fieldErrors ?? {};
 
@@ -197,57 +197,21 @@ export function AttendancePolicyForm({
         <Card>
           <CardHeader>
             <CardTitle>Breaks</CardTitle>
+            <CardDescription>
+              Breaks are managed directly on each individual shift template rather than globally.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="breakPolicy">How breaks are handled</Label>
-              <NativeSelect
-                id="breakPolicy"
-                name="breakPolicy"
-                value={breakPolicy}
-                onChange={(e) => setBreakPolicy(e.target.value as PolicyValues["breakPolicy"])}
-                className="max-w-xs"
-              >
-                <option value="EXPLICIT_PUNCH">Staff punch in and out of breaks</option>
-                <option value="AUTO_DEDUCT">Deduct a fixed break automatically</option>
-              </NativeSelect>
-            </div>
-
-            {breakPolicy === "AUTO_DEDUCT" && (
-              <div className="grid gap-5 sm:grid-cols-2">
-                <Field
-                  name="autoDeductMinutes"
-                  label="Break length"
-                  hint="Unpaid minutes removed from a qualifying shift."
-                  defaultValue={values.autoDeductMinutes}
-                  min={0}
-                  max={240}
-                  error={errors.autoDeductMinutes}
-                />
-                <Field
-                  name="autoDeductAfterMinutes"
-                  label="Only on shifts longer than"
-                  hint="Shorter shifts have nothing deducted."
-                  defaultValue={values.autoDeductAfterMinutes}
-                  min={0}
-                  max={1440}
-                  error={errors.autoDeductAfterMinutes}
-                />
-              </div>
-            )}
-
-            {/* Kept in the DOM when hidden so switching policy does not silently
-                reset values the form never submitted. */}
-            {breakPolicy !== "AUTO_DEDUCT" && (
-              <>
-                <input type="hidden" name="autoDeductMinutes" value={values.autoDeductMinutes} />
-                <input
-                  type="hidden"
-                  name="autoDeductAfterMinutes"
-                  value={values.autoDeductAfterMinutes}
-                />
-              </>
-            )}
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Unpaid break duration is configured per shift in{" "}
+              <Link href="/admin/shifts" className="font-medium text-primary underline underline-offset-4 hover:text-primary/80">
+                Shifts management
+              </Link>
+              . When staff work a scheduled shift, that shift&apos;s configured break is automatically deducted (e.g. 0m for 8-hour restaurant shifts, 60m for 9-hour day shifts).
+            </p>
+            <input type="hidden" name="breakPolicy" value="EXPLICIT_PUNCH" />
+            <input type="hidden" name="autoDeductMinutes" value="0" />
+            <input type="hidden" name="autoDeductAfterMinutes" value="0" />
           </CardContent>
         </Card>
 

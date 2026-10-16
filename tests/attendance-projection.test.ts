@@ -29,10 +29,15 @@ const DAY_SHIFT: ResolvedSchedule = {
   shiftName: "Day",
   scheduledStart: TZ_UTC("08:00"),
   scheduledEnd: TZ_UTC("17:00"),
-  unpaidBreakMinutes: 30,
+  unpaidBreakMinutes: 0,
   crossesMidnight: false,
   source: "assignment",
   coverBranchId: null,
+};
+
+const DAY_SHIFT_WITH_BREAK: ResolvedSchedule = {
+  ...DAY_SHIFT,
+  unpaidBreakMinutes: 30,
 };
 
 const NIGHT_SHIFT: ResolvedSchedule = {
@@ -269,10 +274,8 @@ describe("breaks", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,
       events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("17:00"))],
-      schedule: DAY_SHIFT,
+      schedule: DAY_SHIFT_WITH_BREAK,
       policy: policy({
-        breakPolicy: BreakPolicy.AUTO_DEDUCT,
-        autoDeductMinutes: 30,
         autoDeductAfterMinutes: 300,
       }),
       asOf: AFTER,
@@ -285,10 +288,8 @@ describe("breaks", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,
       events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("11:00"))],
-      schedule: DAY_SHIFT,
+      schedule: DAY_SHIFT_WITH_BREAK,
       policy: policy({
-        breakPolicy: BreakPolicy.AUTO_DEDUCT,
-        autoDeductMinutes: 30,
         autoDeductAfterMinutes: 300,
       }),
       asOf: AFTER,
@@ -296,20 +297,40 @@ describe("breaks", () => {
     expect(day.breakMinutes).toBe(0);
   });
 
-  it("ignores punched breaks when the policy auto-deducts", () => {
+  it("does not deduct any break when the shift template has 0 unpaidBreakMinutes", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,
-      events: [
-        ev(AttendanceDirection.IN, TZ_UTC("08:00")),
-        ev(AttendanceDirection.BREAK_START, TZ_UTC("12:00")),
-        ev(AttendanceDirection.BREAK_END, TZ_UTC("13:00")),
-        ev(AttendanceDirection.OUT, TZ_UTC("17:00")),
-      ],
-      schedule: DAY_SHIFT,
-      policy: policy({ breakPolicy: BreakPolicy.AUTO_DEDUCT, autoDeductMinutes: 30 }),
+      events: [ev(AttendanceDirection.IN, TZ_UTC("07:00")), ev(AttendanceDirection.OUT, TZ_UTC("15:00"))],
+      schedule: {
+        ...DAY_SHIFT,
+        scheduledStart: TZ_UTC("07:00"),
+        scheduledEnd: TZ_UTC("15:00"),
+        unpaidBreakMinutes: 0,
+      },
+      policy: policy(),
       asOf: AFTER,
     });
-    expect(day.breakMinutes).toBe(30);
+    expect(day.breakMinutes).toBe(0);
+    expect(day.grossMinutes).toBe(480);
+    expect(day.netWorkedMinutes).toBe(480);
+    expect(day.regularMinutes).toBe(480);
+  });
+
+  it("deducts the shift template unpaid break when configured", () => {
+    const day = projectDay({
+      workDateKey: WORK_DATE,
+      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("17:00"))],
+      schedule: {
+        ...DAY_SHIFT,
+        unpaidBreakMinutes: 60,
+      },
+      policy: policy(),
+      asOf: AFTER,
+    });
+    expect(day.breakMinutes).toBe(60);
+    expect(day.grossMinutes).toBe(540);
+    expect(day.netWorkedMinutes).toBe(480);
+    expect(day.regularMinutes).toBe(480);
   });
 });
 
