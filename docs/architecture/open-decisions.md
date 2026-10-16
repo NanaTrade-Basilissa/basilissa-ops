@@ -723,6 +723,22 @@ Everyone. There is no separate permission for urgent. **Also blocked on the
 business** for phases 3 and 4: SMS budget, how staff without the app are reached,
 acknowledgement deadlines and retention (the spec lists them).
 
+### 🟠 D7 — One kind of role
+
+**Status: specified, not built.** [specs/roles-and-permissions.md](../specs/roles-and-permissions.md).
+
+Today the six built-in roles live in code and cannot be edited, while custom roles
+live in the database, cannot be limited to a branch, and often cannot do what their
+ticked boxes say (a coarse code guard passes a custom role only when it maps to a
+single box). The plan makes every role except Super Admin a database role that is
+editable, deletable and scopable per assignment, in four shippable phases with a
+golden test that proves no built-in role's permissions change in the move.
+
+**Blocked on a decision:** whether the checkboxes should be as fine as the guards
+(recommended: move ~190 guard call sites to granular keys, area by area) or the
+boxes should be as coarse as the guards. Also: turning the role-name rules (overtime
+authority, who gets HR emails, who gets a branch's feedback alerts) into permissions.
+
 ---
 
 ## E. Follow-ups found along the way

@@ -6,6 +6,8 @@ This document is the authoritative summary of the current engineering state, wha
 
 **Announcements are built end to end** ([`specs/announcements.md`](./specs/announcements.md), 1 October 2026, branch `feat/announcements`): compose, audience rules, history, the staff inbox with its mobile endpoints, push, SMS and email, the urgent banner, acknowledgement with automatic reminders, retry of failed deliveries, and pruning of dead push tokens. The mobile app side is on `feat/notifications-inbox` in the app repo and needs a native build to test. What is left is rolling it out: run the two migrations on production, redeploy the web app and the worker, set the SMS and email gateway variables, and merge both branches. Nothing else is in flight.
 
+**Next: one kind of role** ([`specs/roles-and-permissions.md`](./specs/roles-and-permissions.md), register D7). Specified on branch `feat/roles-unified`; three decisions are needed before the build starts.
+
 **Built but not yet migrated in production:** public holidays and cover shifts (register D4), rota patterns (D5), and announcements (D6). Each register entry has its production steps; D6's includes redeploying the worker.
 
 ---

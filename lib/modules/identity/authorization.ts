@@ -102,7 +102,11 @@ export type SystemPermission =
   | "email_queue:manage"
   // Background Jobs Administration
   | "jobs:read"
-  | "jobs:manage";
+  | "jobs:manage"
+  // Staff meals and kitchen operations
+  | "meals:read"
+  | "meals:write"
+  | "meals:manage";
 
 export type Permission = SystemPermission | PermissionKey | (string & {});
 
@@ -173,6 +177,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "device:read",
     "announcement:read",
     "announcement:write",
+    "meals:read",
+    "meals:write",
   ],
 
   // Same powers as a branch manager, across every branch they hold an
@@ -193,6 +199,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "device:write",
     "announcement:read",
     "announcement:write",
+    "meals:read",
+    "meals:write",
   ],
 
   // Owns people, not systems. No branch or question configuration.
@@ -239,6 +247,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "device:write",
     "announcement:read",
     "announcement:write",
+    "meals:read",
+    "meals:write",
   ],
 
   // Everything, including granting roles. Should be one or two people.
@@ -273,6 +283,9 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "announcement:read",
     "announcement:write",
     "jobs:manage",
+    "meals:read",
+    "meals:write",
+    "meals:manage",
   ],
 };
 
@@ -319,6 +332,9 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "email_queue:manage": ["email_queue:manage"],
   "jobs:read": ["jobs:read"],
   "jobs:manage": ["jobs:manage"],
+  "meals:read": ["meals:read"],
+  "meals:write": ["meals:create", "meals:update", "meals:delete", "meals:publish"],
+  "meals:manage": ["meals:create", "meals:read", "meals:update", "meals:delete", "meals:publish"],
 };
 
 export const GRANULAR_TO_SYSTEM: Record<string, string> = {
@@ -336,6 +352,7 @@ export const GRANULAR_TO_SYSTEM: Record<string, string> = {
   "roles:read": "user:read",
   "jobs:read": "jobs:read",
   "jobs:manage": "jobs:manage",
+  "meals:read": "meals:read",
 };
 
 export type ResourceScope = {

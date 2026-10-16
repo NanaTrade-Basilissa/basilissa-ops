@@ -21,11 +21,12 @@
  * Safe to re-run: every day written becomes an existing override, which the
  * next run keeps.
  */
-import { PrismaClient, ScheduleExceptionType } from "@prisma/client";
+import { LeaveStatus, PrismaClient, ScheduleExceptionType } from "@prisma/client";
 import { loadEnvConfig } from "@next/env";
 import { shiftDateKey, zonedMinutesToUtc } from "../lib/platform/date";
 import {
   PILOT_BRANCH_SLUG,
+  PILOT_LEAVE,
   PILOT_PLACEHOLDERS,
   PILOT_ROTA,
   PILOT_SHIFT_TEMPLATES,
@@ -59,7 +60,7 @@ async function main() {
     shiftIds[key] = shift.id;
   }
 
-  const totals = { created: 0, branched: 0, assignments: 0, daysOff: 0, skipped: 0 };
+  const totals = { created: 0, branched: 0, leave: 0, assignments: 0, daysOff: 0, skipped: 0 };
 
   // Resolve everyone before writing anything, so one bad row aborts the run.
   // A placeholder that does not exist yet resolves to a stand-in in a dry run.
@@ -130,6 +131,66 @@ async function main() {
     ready.push({ row, employee });
   }
 
+  // Leave first, so the rota below finds those days already decided and keeps them.
+  for (const leave of PILOT_LEAVE) {
+    const who = ready.find((r) => r.employee.employeeCode === leave.employeeCode);
+    if (!who) throw new Error(`Leave for ${leave.employeeCode}, who is not on the rota.`);
+    const label = `${who.row.rotaName.padEnd(24)} ${leave.employeeCode}`;
+    const start = new Date(`${leave.startDate}T00:00:00.000Z`);
+    const end = new Date(`${leave.endDate}T00:00:00.000Z`);
+    const overlapping = who.employee.id.startsWith("(new ")
+      ? null
+      : await prisma.leaveRequest.findFirst({
+          where: {
+            employeeId: who.employee.id,
+            status: { in: [LeaveStatus.PENDING, LeaveStatus.APPROVED] },
+            startDate: { lte: end },
+            endDate: { gte: start },
+          },
+        });
+    if (overlapping) {
+      console.log(`${label}  leave    kept existing ${overlapping.type} ${overlapping.status} request`);
+      continue;
+    }
+    const dates: string[] = [];
+    for (let d = leave.startDate; d <= leave.endDate; d = shiftDateKey(d, 1)) dates.push(d);
+    console.log(`${label}  leave    ${leave.type} ${leave.startDate} to ${leave.endDate}, approved (${dates.length} day off)`);
+    totals.leave++;
+    if (!apply) continue;
+
+    await prisma.$transaction(
+      async (tx) => {
+        const request = await tx.leaveRequest.create({
+          data: {
+            employeeId: who.employee.id,
+            branchId: branch.id,
+            type: leave.type,
+            startDate: start,
+            endDate: end,
+            reason: leave.reason,
+            status: LeaveStatus.APPROVED,
+            reviewedAt: new Date(),
+            managerNotes: "Recorded from the branch rota sheet",
+          },
+        });
+        await tx.auditLog.create({
+          data: { ...SYSTEM, action: "leave.approved", entityType: "LeaveRequest", entityId: request.id, after: { ...leave }, metadata: { source: SOURCE } },
+        });
+        // The same override approving a request writes (see reviewLeaveRequest).
+        const reason = `Approved Leave: ${leave.type} - ${leave.reason}`;
+        for (const dateKey of dates) {
+          const date = new Date(`${dateKey}T00:00:00.000Z`);
+          await tx.scheduleException.upsert({
+            where: { employeeId_date: { employeeId: who.employee.id, date } },
+            create: { employeeId: who.employee.id, date, type: ScheduleExceptionType.DAY_OFF, shiftId: null, reason },
+            update: { type: ScheduleExceptionType.DAY_OFF, shiftId: null, reason },
+          });
+        }
+      },
+      { timeout: 60_000 },
+    );
+  }
+
   for (const { row, employee } of ready) {
     const label = `${row.rotaName.padEnd(24)} ${employee.employeeCode}`;
     const days = row.week.map((day, index) => ({ day, dateKey: shiftDateKey(PILOT_WEEK.from, index) }));
@@ -163,7 +224,7 @@ async function main() {
 
         const data =
           day === "OFF"
-            ? { type: ScheduleExceptionType.DAY_OFF, shiftId: null, reason: row.offReason ?? REASON }
+            ? { type: ScheduleExceptionType.DAY_OFF, shiftId: null, reason: REASON }
             : { type: ScheduleExceptionType.SHIFT_CHANGE, shiftId: shiftIds[day], reason: REASON };
         if (day === "OFF") totals.daysOff++;
         else totals.assignments++;
@@ -186,7 +247,7 @@ async function main() {
   }
 
   console.log(
-    `\n${apply ? "Wrote" : "Would write"} ${totals.created} placeholder(s), ${totals.branched} Dawhenya branch assignment(s), ` +
+    `\n${apply ? "Wrote" : "Would write"} ${totals.created} placeholder(s), ${totals.branched} Dawhenya branch assignment(s), ${totals.leave} leave request(s), ` +
       `${totals.assignments} shift day(s), ${totals.daysOff} day(s) off; kept ${totals.skipped} existing.`,
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import Link from "next/link";
-import { KeyRound, Loader2 } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
 import { submitPasswordReset, type ResetPasswordState } from "@/lib/modules/identity/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
     submitPasswordReset,
     undefined,
   );
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const errors = state?.fieldErrors ?? {};
 
   return (
@@ -47,15 +49,27 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
         <Field data-invalid={Boolean(errors.password)}>
           <FieldLabel htmlFor="password">New password</FieldLabel>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-describedby="password-hint"
-            aria-invalid={errors.password ? true : undefined}
-          />
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              required
+              aria-describedby="password-hint"
+              aria-invalid={errors.password ? true : undefined}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center focus-visible:outline-hidden"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </div>
           <FieldDescription id="password-hint">
             At least 12 characters. Length beats punctuation. A phrase you will remember
             is stronger than a short password with a symbol bolted on.
@@ -65,14 +79,26 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
         <Field data-invalid={Boolean(errors.confirmPassword)}>
           <FieldLabel htmlFor="confirmPassword">Confirm new password</FieldLabel>
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            required
-            aria-invalid={errors.confirmPassword ? true : undefined}
-          />
+          <div className="relative">
+            <Input
+              id="confirmPassword"
+              name="confirmPassword"
+              type={showConfirm ? "text" : "password"}
+              autoComplete="new-password"
+              required
+              aria-invalid={errors.confirmPassword ? true : undefined}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirm((prev) => !prev)}
+              className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center focus-visible:outline-hidden"
+              aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
+              tabIndex={-1}
+            >
+              {showConfirm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </div>
           <FieldError errors={errors.confirmPassword ? [{ message: errors.confirmPassword }] : undefined} />
         </Field>
 

@@ -173,6 +173,17 @@ export const PERMISSION_REGISTRY = {
       manage: { label: "Manage", description: "Retry or cancel background jobs" },
     },
   },
+  meals: {
+    label: "Staff Meals",
+    description: "Weekly staff meal planning, portions tracking, and kitchen claiming",
+    actions: {
+      create: { label: "Create", description: "Create weekly meal plans and daily menus" },
+      read: { label: "View", description: "View meal menus, selections, and headcounts" },
+      update: { label: "Update", description: "Edit meal menus and manage order cutoffs" },
+      delete: { label: "Delete", description: "Delete meal plans" },
+      publish: { label: "Publish", description: "Publish weekly menus for staff ordering" },
+    },
+  },
 } as const;
 
 export type PermissionRegistryType = typeof PERMISSION_REGISTRY;

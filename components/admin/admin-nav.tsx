@@ -15,6 +15,7 @@ import {
   Store,
   UserCog,
   Users,
+  UtensilsCrossed,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -148,6 +149,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/admin/feedback/all", label: "All Submissions", icon: MessageSquareText, exact: false, permission: "feedback:read" },
       { href: "/admin/feedback/questions", label: "Questions", icon: ListChecks, exact: false, permission: "question:read" },
       { href: "/admin/announcements", label: "Announcements", icon: Megaphone, exact: false, permission: "announcement:read" },
+      { href: "/admin/meals", label: "Staff Meals", icon: UtensilsCrossed, exact: false, permission: "meals:read" },
     ],
   },
   {

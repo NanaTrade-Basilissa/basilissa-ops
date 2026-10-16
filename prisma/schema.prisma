@@ -300,6 +300,7 @@ model Branch {
   coverShifts ScheduleException[]
   shiftPatterns ShiftPattern[]
   patternAssignments EmployeePatternAssignment[]
+  mealPlans   MealPlan[]
 
   @@index([isActive])
   @@map("branches")
@@ -370,6 +371,7 @@ model Employee {
 
   announcementRecipients AnnouncementRecipient[]
   notifications          Notification[]
+  mealSelections         MealSelection[]
 
   @@index([status])
   @@index([masterSource])
@@ -2114,3 +2116,58 @@ model Notification {
   @@index([employeeId, readAt])
   @@map("notifications")
 }
+
+// --- Staff Meals & Kitchen Operations ---------------------------------------
+
+enum MealDecision {
+  EATING
+  NOT_EATING
+}
+
+/// Represents the scheduled staff meal for one branch on a specific date.
+model MealPlan {
+  id          String    @id @default(cuid())
+  branchId    String
+  date        DateTime  @db.Date
+  dishName    String
+  description String?
+  /// Whether food is served on this date (allows disabling a day without deleting its plan).
+  isEnabled   Boolean   @default(true)
+  /// Hour of the previous evening when selection locks (default 20 = 8:00 PM).
+  cutoffHour  Int       @default(20)
+  /// Explicit publication cutoff instant when staff meal selection closes for this plan.
+  cutoffAt    DateTime?
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  branch     Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  selections MealSelection[]
+
+  @@unique([branchId, date])
+  @@index([branchId, date])
+  @@map("meal_plans")
+}
+
+/// One employee's meal selection and claim status for a scheduled meal plan.
+model MealSelection {
+  id              String       @id @default(cuid())
+  mealPlanId      String
+  employeeId      String
+  decision        MealDecision @default(NOT_EATING)
+  claimedAt       DateTime?
+  claimVerifiedBy String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([mealPlanId, employeeId])
+  @@index([employeeId])
+  @@index([mealPlanId, decision])
+  @@index([mealPlanId, claimedAt])
+  @@map("meal_selections")
+}
+

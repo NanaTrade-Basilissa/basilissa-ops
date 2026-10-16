@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, useActionState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Loader2, LogIn } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2, LogIn } from "lucide-react";
 import { login, type LoginFormState } from "@/lib/modules/identity/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
  */
 export function LoginForm({ passwordWasReset = false }: { passwordWasReset?: boolean }) {
   const [state, formAction, isPending] = useActionState<LoginFormState, FormData>(login, undefined);
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <form action={formAction} noValidate>
@@ -60,7 +61,29 @@ export function LoginForm({ passwordWasReset = false }: { passwordWasReset?: boo
               Forgotten?
             </Link>
           </div>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required />
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center focus-visible:outline-hidden"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              tabIndex={-1}
+            >
+              {showPassword ? (
+                <EyeOff className="size-4" />
+              ) : (
+                <Eye className="size-4" />
+              )}
+            </button>
+          </div>
         </Field>
 
         <Field>
