@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ShieldCheck, Search, RotateCcw } from "lucide-react";
+import { ShieldCheck, Search, RotateCcw, Lock } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
@@ -50,44 +50,29 @@ const columns = columnHelper.columns([
   }),
   columnHelper.display({
     id: "roles",
-    header: "Roles",
+    header: "Role",
     cell: ({ row }) => {
+      const isSuperAdmin = row.original.isSuperAdmin;
       const customRole = row.original.customRoleName;
-      const roles = row.original.roles;
 
-      const allRoles: { label: string; variant: "secondary" | "outline" }[] = [];
+      if (isSuperAdmin) {
+        return (
+          <Badge variant="secondary" className="text-xs font-medium text-amber-700 dark:text-amber-400 gap-1 whitespace-nowrap">
+            <Lock className="size-3" />
+            Super Admin
+          </Badge>
+        );
+      }
 
       if (customRole) {
-        allRoles.push({ label: customRole, variant: "secondary" });
-      }
-
-      for (const a of roles) {
-        const branchSuffix = a.scopeType === "BRANCH" ? ` · ${a.branchName ?? "branch"}` : "";
-        allRoles.push({
-          label: `${a.role.toLowerCase().replace(/_/g, " ")}${branchSuffix}`,
-          variant: "outline",
-        });
-      }
-
-      if (allRoles.length === 0) {
-        return <span className="text-sm text-muted-foreground">None</span>;
-      }
-
-      const firstRole = allRoles[0];
-      const extraCount = allRoles.length - 1;
-
-      return (
-        <div className="flex items-center gap-1.5 whitespace-nowrap">
-          <Badge variant={firstRole.variant} className="text-xs">
-            {firstRole.label}
+        return (
+          <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
+            {customRole}
           </Badge>
-          {extraCount > 0 && (
-            <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
-              +{extraCount}
-            </Badge>
-          )}
-        </div>
-      );
+        );
+      }
+
+      return <span className="text-xs text-muted-foreground italic">None</span>;
     },
   }),
   columnHelper.display({

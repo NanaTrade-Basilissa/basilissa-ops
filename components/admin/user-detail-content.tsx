@@ -2,12 +2,9 @@ import { ShieldCheck } from "lucide-react";
 import { Role, ScopeType, type UserStatus } from "@prisma/client";
 import {
   changeUserStatus,
-  grantUserRole,
   resendInvite,
   resetUserMfa,
-  revokeUserRole,
 } from "@/lib/modules/identity/actions";
-import { RoleManager } from "@/components/admin/role-manager";
 import { UserCustomRoleCard } from "@/components/admin/user-custom-role-card";
 import { AccountStatusControls } from "@/components/admin/account-status-controls";
 import { ResetMfaButton } from "@/components/admin/reset-mfa-button";
@@ -22,7 +19,7 @@ const STATUS_LABEL: Record<UserStatus, string> = {
   TERMINATED: "Terminated",
 };
 
-type ActiveRole = {
+export type ActiveRole = {
   id: string;
   role: Role;
   scopeType: ScopeType;
@@ -30,7 +27,7 @@ type ActiveRole = {
   since: string;
   requiresMfa: boolean;
 };
-type RevokedRole = { id: string; role: Role; scopeLabel: string; endedAt: string };
+export type RevokedRole = { id: string; role: Role; scopeLabel: string; endedAt: string };
 
 /**
  * The actual user record view, shared by the full page (`users/[id]`, kept
@@ -41,10 +38,11 @@ export function UserDetailContent({
   user,
   canWrite,
   canAssign,
-  roles,
-  branches,
-  active,
-  revoked,
+  isSuperAdmin = false,
+  roles = [],
+  branches = [],
+  active = [],
+  revoked = [],
   isSelf,
   emailConfigured,
   customRole,
@@ -64,17 +62,18 @@ export function UserDetailContent({
   };
   canWrite: boolean;
   canAssign: boolean;
-  roles: Role[];
-  branches: { id: string; name: string }[];
-  active: ActiveRole[];
-  revoked: RevokedRole[];
+  isSuperAdmin?: boolean;
+  roles?: Role[];
+  branches?: { id: string; name: string }[];
+  active?: ActiveRole[];
+  revoked?: RevokedRole[];
   isSelf: boolean;
   emailConfigured: boolean;
   customRole?: { id: string; name: string; description?: string | null } | null;
   availableCustomRoles?: { id: string; name: string; description?: string | null }[];
   onMutated?: () => void;
 }) {
-  const requiresMfa = active.some((a) => a.requiresMfa);
+  const requiresMfa = isSuperAdmin || active.some((a) => a.requiresMfa);
   const neverSignedIn = user.passwordChangedAt === null;
 
   return (
@@ -115,30 +114,9 @@ export function UserDetailContent({
         customRole={customRole}
         availableCustomRoles={availableCustomRoles}
         canAssign={canAssign}
+        isSuperAdmin={isSuperAdmin}
         onMutated={onMutated}
       />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Roles</CardTitle>
-          <CardDescription className="text-xs">
-            Assigned system roles and access scopes.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <RoleManager
-            userId={user.id}
-            canAssign={canAssign}
-            grantAction={grantUserRole}
-            revokeAction={revokeUserRole}
-            roles={roles}
-            branches={branches}
-            active={active}
-            revoked={revoked}
-            onMutated={onMutated}
-          />
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>

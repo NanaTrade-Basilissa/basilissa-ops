@@ -31,6 +31,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         user={detail.user}
         canWrite={detail.canWrite}
         canAssign={detail.canAssign}
+        isSuperAdmin={detail.isSuperAdmin}
         roles={detail.roles}
         branches={detail.branches}
         active={detail.active}

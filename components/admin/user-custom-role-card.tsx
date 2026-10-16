@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { Loader2, Shield } from "lucide-react";
+import { Loader2, Lock, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { assignUserCustomRoleAction, type RoleFormState } from "@/lib/modules/identity/actions";
 import { Button } from "@/components/ui/button";
@@ -16,12 +16,14 @@ export function UserCustomRoleCard({
   customRole,
   availableCustomRoles,
   canAssign,
+  isSuperAdmin = false,
   onMutated,
 }: {
   userId: string;
   customRole?: { id: string; name: string; description?: string | null } | null;
   availableCustomRoles: { id: string; name: string; description?: string | null }[];
   canAssign: boolean;
+  isSuperAdmin?: boolean;
   onMutated?: () => void;
 }) {
   const [selectedRoleId, setSelectedRoleId] = useState<string>(customRole?.id ?? "");
@@ -63,10 +65,20 @@ export function UserCustomRoleCard({
           </Alert>
         )}
 
-        <div className="flex items-center justify-between gap-2 p-3 rounded-lg border border-border bg-muted/20">
+        <div className={`flex items-center justify-between gap-2 p-3 rounded-lg border border-border ${isSuperAdmin ? "bg-amber-500/5" : "bg-muted/20"}`}>
           <div>
             <span className="text-xs text-muted-foreground block">Currently Assigned:</span>
-            {customRole ? (
+            {isSuperAdmin ? (
+              <div className="mt-1 flex items-center gap-2">
+                <Badge variant="secondary" className="font-semibold text-xs text-amber-700 dark:text-amber-400 gap-1">
+                  <Lock className="size-3.5" />
+                  Super Admin
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  Unrestricted system access across all modules and branches.
+                </span>
+              </div>
+            ) : customRole ? (
               <div className="mt-1 flex items-center gap-2">
                 <Badge variant="secondary" className="font-semibold text-xs">
                   {customRole.name}
@@ -83,7 +95,7 @@ export function UserCustomRoleCard({
           </div>
         </div>
 
-        {canAssign && (
+        {canAssign && !isSuperAdmin && (
           <form action={formAction} className="space-y-3 pt-1">
             <input type="hidden" name="userId" value={userId} />
 

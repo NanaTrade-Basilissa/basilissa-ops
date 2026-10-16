@@ -727,6 +727,7 @@ export async function getUserDetailAction(userId: string) {
     },
     canWrite: can(actor, "user:write"),
     canAssign: can(actor, "role:assign") || isSuperAdmin(actor),
+    isSuperAdmin: isTargetSuperAdmin,
     roles: Object.values(Role),
     branches,
     availableCustomRoles,

@@ -88,6 +88,7 @@ export function UserDetailSheet({
               user={detail.user}
               canWrite={detail.canWrite}
               canAssign={detail.canAssign}
+              isSuperAdmin={detail.isSuperAdmin}
               roles={detail.roles}
               branches={detail.branches}
               active={detail.active}
