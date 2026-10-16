@@ -11,7 +11,6 @@ import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RoleDialog } from "@/components/admin/role-dialog";
 import { DeleteRoleDialog } from "@/components/admin/delete-role-dialog";
-import { RoleDetailSheet } from "@/components/admin/role-detail-sheet";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { formatAccraDateTime } from "@/lib/platform/date";
 import { FilterBar } from "@/components/admin/filter-bar";
@@ -189,18 +188,11 @@ export function RolesTable({
                     <TableCell className="text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <TableRowActions
                         actions={[
-                          canUpdate && {
+                          {
                             id: "edit",
-                            label: isSuperAdmin ? "View permissions" : "Edit role",
-                            icon: Edit2,
-                            dialog: (props) => (
-                              <RoleDialog
-                                open={props.open}
-                                onOpenChange={props.onOpenChange}
-                                role={role}
-                                matrix={matrix}
-                              />
-                            ),
+                            label: !canUpdate || isSuperAdmin ? "View permissions" : "Edit role",
+                            icon: !canUpdate || isSuperAdmin ? Shield : Edit2,
+                            onClick: () => setSelectedRole(role),
                           },
                           canDelete && !isSuperAdmin && {
                             id: "delete",
@@ -235,17 +227,19 @@ export function RolesTable({
         onPageChange={(newPage) => setPage(newPage)}
       />
 
-      {/* Role Detail Sheet */}
-      <RoleDetailSheet
-        role={selectedRole}
-        matrix={matrix}
-        canUpdate={canUpdate}
-        canDelete={canDelete}
-        open={selectedRole !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedRole(null);
-        }}
-      />
+      {/* Role Dialog (View or Edit) */}
+      {selectedRole && (
+        <RoleDialog
+          key={selectedRole.id}
+          role={selectedRole}
+          matrix={matrix}
+          readOnly={!canUpdate}
+          open={selectedRole !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelectedRole(null);
+          }}
+        />
+      )}
     </div>
   );
 }

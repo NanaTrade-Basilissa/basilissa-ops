@@ -35,6 +35,7 @@ export function RoleDialog({
   onSaved,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  readOnly: explicitReadOnly,
 }: {
   role?: FormattedCustomRole;
   matrix: MatrixRow[];
@@ -42,12 +43,14 @@ export function RoleDialog({
   onSaved?: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  readOnly?: boolean;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setInternalOpen;
   const isEditing = Boolean(role);
   const isSuperAdmin = role?.id === "super-admin" || role?.name === "Super Admin";
+  const isReadOnly = isSuperAdmin || Boolean(explicitReadOnly);
 
   const [name, setName] = useState(role?.name ?? "");
   const [description, setDescription] = useState(role?.description ?? "");
@@ -84,6 +87,18 @@ export function RoleDialog({
       toast.error(state.error);
     }
   }, [state, isEditing, name, onSaved, setOpen]);
+
+  const setPermission = (key: string, enabled: boolean) => {
+    setSelectedPermissions((prev) => {
+      const next = new Set(prev);
+      if (enabled) {
+        next.add(key);
+      } else {
+        next.delete(key);
+      }
+      return next;
+    });
+  };
 
   const togglePermission = (key: string) => {
     setSelectedPermissions((prev) => {
@@ -142,16 +157,20 @@ export function RoleDialog({
           <DialogTitle>
             {isSuperAdmin
               ? "Role: Super Admin"
-              : isEditing
-                ? `Edit Role: ${role?.name}`
-                : "Create Role"}
+              : isReadOnly
+                ? `Role: ${role?.name}`
+                : isEditing
+                  ? `Edit Role: ${role?.name}`
+                  : "Create Role"}
           </DialogTitle>
           <DialogDescription>
             {isSuperAdmin
               ? "Super Admin holds unrestricted access to all capabilities across all branches. Permissions are locked."
-              : isEditing
-                ? "Modify the role name, description, and permissions matrix."
-                : "Define a new role with explicit resource and action permissions."}
+              : isReadOnly
+                ? "View the permissions assigned to this role."
+                : isEditing
+                  ? "Modify the role name, description, and permissions matrix."
+                  : "Define a new role with explicit resource and action permissions."}
           </DialogDescription>
         </DialogHeader>
 
@@ -189,7 +208,7 @@ export function RoleDialog({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. HR Manager, Branch Manager, Operations Lead"
                 required
-                disabled={isPending || isSuperAdmin}
+                disabled={isPending || isReadOnly}
               />
               {state?.fieldErrors?.name && (
                 <p className="text-xs text-destructive">{state.fieldErrors.name}</p>
@@ -204,7 +223,7 @@ export function RoleDialog({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Brief summary of duties and responsibilities"
-                disabled={isPending || isSuperAdmin}
+                disabled={isPending || isReadOnly}
               />
             </div>
           </div>
@@ -225,7 +244,7 @@ export function RoleDialog({
                   variant="outline"
                   size="sm"
                   onClick={selectAll}
-                  disabled={isPending || isSuperAdmin}
+                  disabled={isPending || isReadOnly}
                   className="h-8 text-xs gap-1"
                 >
                   <CheckSquare className="size-3.5" />
@@ -236,7 +255,7 @@ export function RoleDialog({
                   variant="outline"
                   size="sm"
                   onClick={clearAll}
-                  disabled={isPending || isSuperAdmin}
+                  disabled={isPending || isReadOnly}
                   className="h-8 text-xs gap-1"
                 >
                   <Square className="size-3.5" />
@@ -302,16 +321,39 @@ export function RoleDialog({
                           return (
                             <td
                               key={actionCol.key}
-                              className={`p-2.5 text-center align-middle ${isSuperAdmin ? "cursor-default bg-muted/20" : "cursor-pointer hover:bg-muted/40"}`}
-                              onClick={isSuperAdmin ? undefined : () => togglePermission(actionDef.key)}
+                              className={`p-2.5 text-center align-middle ${
+                                isReadOnly
+                                  ? "cursor-default bg-muted/20"
+                                  : "cursor-pointer hover:bg-muted/40"
+                              }`}
+                              onClick={
+                                isReadOnly
+                                  ? undefined
+                                  : (e) => {
+                                      const target = e.target as HTMLElement;
+                                      if (
+                                        target.getAttribute("data-slot") === "checkbox" ||
+                                        target.closest('[data-slot="checkbox"]')
+                                      ) {
+                                        return;
+                                      }
+                                      setPermission(actionDef.key, !isChecked);
+                                    }
+                              }
                               title={`${actionDef.label} ${row.resourceLabel}`}
                             >
                               <div className="flex items-center justify-center">
                                 <Checkbox
                                   id={actionDef.key}
                                   checked={isChecked}
-                                  onCheckedChange={isSuperAdmin ? undefined : () => togglePermission(actionDef.key)}
-                                  disabled={isPending || isSuperAdmin}
+                                  onCheckedChange={
+                                    isReadOnly
+                                      ? undefined
+                                      : (checked) => {
+                                          setPermission(actionDef.key, !!checked);
+                                        }
+                                  }
+                                  disabled={isPending || isReadOnly}
                                   aria-label={`${actionDef.label} ${row.resourceLabel}`}
                                 />
                               </div>
@@ -325,7 +367,7 @@ export function RoleDialog({
                             variant="ghost"
                             size="sm"
                             onClick={() => toggleRow(row)}
-                            disabled={isPending || isSuperAdmin}
+                            disabled={isPending || isReadOnly}
                             className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
                           >
                             {allInRowSelected ? "None" : "All"}
@@ -340,7 +382,7 @@ export function RoleDialog({
           </div>
 
           <DialogFooter className="pt-2">
-            {isSuperAdmin ? (
+            {isReadOnly ? (
               <Button type="button" onClick={() => setOpen(false)}>
                 Close
               </Button>
