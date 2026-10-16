@@ -381,6 +381,19 @@ export async function claimMealByWallScan(employeeId: string, branchSlug: string
   }
 
   if (selection.claimedAt !== null) {
+    // If claimed within the last 15 seconds, return APPROVED idempotently (handles rapid re-scans / burst requests)
+    const elapsedMs = Date.now() - selection.claimedAt.getTime();
+    if (elapsedMs >= 0 && elapsedMs < 15000) {
+      return {
+        ok: true,
+        status: "APPROVED",
+        dishName: plan.dishName,
+        employeeName: `${employee.firstName} ${employee.lastName}`,
+        employeeCode: employee.employeeCode,
+        claimedAt: selection.claimedAt.toISOString(),
+      };
+    }
+
     return {
       ok: false,
       status: "ALREADY_CLAIMED",
