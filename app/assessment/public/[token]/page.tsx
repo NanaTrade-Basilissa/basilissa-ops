@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { ArrowRight, Timer } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { getPublicAssessment, hashInvitationToken } from "@/lib/modules/assessments/server";
@@ -58,10 +59,10 @@ export default async function PublicAssessmentEntryPage({
 
   const { assessment } = outcome;
 
-  // Check if this browser already has an active, unsubmitted attempt
+  // Check if this browser or employee already has an active, unsubmitted attempt
   const cookieStore = await cookies();
   const activeToken = cookieStore.get(`assessment_active_${assessment.id}`)?.value;
-  let hasActiveAttempt = false;
+  let resumeToken: string | null = null;
 
   if (activeToken) {
     const existing = await prisma.assessmentInvitation.findUnique({
@@ -82,8 +83,44 @@ export default async function PublicAssessmentEntryPage({
       existing.response &&
       !existing.response.submittedAt
     ) {
-      hasActiveAttempt = true;
+      resumeToken = activeToken;
     }
+  }
+
+  if (!resumeToken && defaultPhone && courseId) {
+    const cleanDigits = defaultPhone.replace(/\D/g, "");
+    const possible = [
+      defaultPhone,
+      cleanDigits,
+      cleanDigits.startsWith("233") ? "0" + cleanDigits.slice(3) : cleanDigits,
+      cleanDigits.startsWith("0") ? "233" + cleanDigits.slice(1) : cleanDigits,
+    ];
+    const emp = await prisma.employee.findFirst({
+      where: { phone: { in: possible } },
+      select: { id: true },
+    });
+    if (emp) {
+      const assignment = await prisma.trainingAssignment.findUnique({
+        where: { courseId_employeeId: { courseId, employeeId: emp.id } },
+        select: { quizAttemptToken: true },
+      });
+      if (assignment?.quizAttemptToken) {
+        const existing = await prisma.assessmentInvitation.findUnique({
+          where: { tokenHash: hashInvitationToken(assignment.quizAttemptToken) },
+          select: {
+            revokedAt: true,
+            response: { select: { submittedAt: true } },
+          },
+        });
+        if (existing && !existing.revokedAt && existing.response && !existing.response.submittedAt) {
+          resumeToken = assignment.quizAttemptToken;
+        }
+      }
+    }
+  }
+
+  if (resumeToken) {
+    redirect(`/assessment/${encodeURIComponent(resumeToken)}`);
   }
 
   return (
@@ -99,27 +136,6 @@ export default async function PublicAssessmentEntryPage({
             <p className="mt-1 text-sm text-muted-foreground">{assessment.description}</p>
           )}
         </div>
-
-        {hasActiveAttempt && activeToken && (
-          <Alert className="border-primary/40 bg-primary/5">
-            <Timer className="size-4 text-primary" />
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
-              <div>
-                <AlertTitle className="text-sm font-semibold">Assessment in progress</AlertTitle>
-                <AlertDescription className="text-xs text-muted-foreground">
-                  You already have an active session for this assessment.
-                </AlertDescription>
-              </div>
-              <Link
-                href={`/assessment/${encodeURIComponent(activeToken)}`}
-                className={cn(buttonVariants({ size: "sm" }), "gap-1.5 shrink-0")}
-              >
-                Resume assessment
-                <ArrowRight className="size-3.5" />
-              </Link>
-            </div>
-          </Alert>
-        )}
 
         <IdentityDeclaration
           action={startPublicAssessmentAction.bind(null, decodedToken)}

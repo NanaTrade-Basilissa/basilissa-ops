@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authenticateTrainingMobileRequest } from "../auth";
 import { prisma } from "@/lib/platform/prisma";
+import { hashInvitationToken, issueInvitation } from "@/lib/modules/assessments/invitations";
 
 export async function GET(
   request: NextRequest,
@@ -12,6 +13,7 @@ export async function GET(
   }
 
   const { id: courseId } = await params;
+  const isRetake = request.nextUrl.searchParams.get("retake") === "true";
 
   try {
     const assignment = await prisma.trainingAssignment.findUnique({
@@ -49,6 +51,77 @@ export async function GET(
       );
     }
 
+    let quizAttemptToken = assignment.quizAttemptToken;
+    let quizUrl: string | null = null;
+
+    if (assignment.course.quizAssessment) {
+      const assessmentId = assignment.course.quizAssessment.id;
+      let needsNewAttempt = isRetake || !quizAttemptToken;
+
+      if (quizAttemptToken && !isRetake) {
+        const existing = await prisma.assessmentInvitation.findUnique({
+          where: { tokenHash: hashInvitationToken(quizAttemptToken) },
+          select: {
+            revokedAt: true,
+            response: { select: { submittedAt: true } },
+          },
+        });
+
+        // If existing attempt was already submitted, or revoked, need a new attempt unless passed
+        if (!existing || existing.revokedAt || existing.response?.submittedAt) {
+          needsNewAttempt = !assignment.quizPassed;
+        }
+      }
+
+      if (needsNewAttempt) {
+        const emp = await prisma.employee.findUnique({
+          where: { id: auth.employeeId },
+          select: { firstName: true, lastName: true, phone: true, email: true },
+        });
+
+        const empName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : "Staff Member";
+
+        const outcome = await issueInvitation(
+          {
+            assessmentId,
+            employeeId: auth.employeeId,
+            name: empName,
+            email: emp?.email ?? null,
+            isPublic: false,
+          },
+          { userId: null, email: null, role: null }
+        );
+
+        if (outcome.ok) {
+          quizAttemptToken = outcome.invitation.token;
+          await prisma.$transaction([
+            prisma.assessmentInvitation.update({
+              where: { id: outcome.invitation.invitationId },
+              data: { openedAt: new Date() },
+            }),
+            prisma.assessmentResponse.create({
+              data: {
+                invitationId: outcome.invitation.invitationId,
+                declaredName: empName,
+                declaredEmail: emp?.email ?? null,
+                declaredPhone: emp?.phone ?? null,
+              },
+            }),
+            prisma.trainingAssignment.update({
+              where: { id: assignment.id },
+              data: { quizAttemptToken: outcome.invitation.token },
+            }),
+          ]);
+        }
+      }
+
+      if (quizAttemptToken) {
+        quizUrl = `/assessment/${encodeURIComponent(quizAttemptToken)}`;
+      } else if (assignment.course.quizAssessment.publicLinkToken) {
+        quizUrl = `/assessment/public/${assignment.course.quizAssessment.publicLinkToken}`;
+      }
+    }
+
     const progressMap = new Map(assignment.progress.map((p) => [p.materialId, p]));
 
     return NextResponse.json({
@@ -77,6 +150,7 @@ export async function GET(
               title: assignment.course.quizAssessment.title,
               description: assignment.course.quizAssessment.description,
               publicLinkToken: assignment.course.quizAssessment.publicLinkToken,
+              quizUrl,
             }
           : null,
         materials: assignment.course.materials.map((m) => {

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auditActorFrom, requirePermission } from "@/lib/modules/identity/server";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
+import { prisma } from "@/lib/platform/prisma";
 
 /**
  * `FormState` already includes undefined, so intersecting with it would make
@@ -40,6 +41,7 @@ import {
 } from "./authoring";
 import {
   getPublicAssessment,
+  hashInvitationToken,
   issueInvitation,
   issueInvitations,
   resendInvitation,
@@ -507,6 +509,60 @@ export async function startPublicAssessmentAction(
   const phone = formData.get("phone") ? String(formData.get("phone")).trim() : undefined;
   const courseId = formData.get("courseId") ? String(formData.get("courseId")).trim() : undefined;
 
+  const cookieStore = await cookies();
+  const existingActiveToken = cookieStore.get(`assessment_active_${assessmentOutcome.assessment.id}`)?.value;
+  if (existingActiveToken) {
+    const existing = await prisma.assessmentInvitation.findUnique({
+      where: { tokenHash: hashInvitationToken(existingActiveToken) },
+      select: {
+        revokedAt: true,
+        response: { select: { submittedAt: true } },
+      },
+    });
+    if (existing && !existing.revokedAt && existing.response && !existing.response.submittedAt) {
+      redirect(`/assessment/${encodeURIComponent(existingActiveToken)}`);
+    }
+  }
+
+  if (phone && courseId) {
+    const cleanDigits = phone.replace(/\D/g, "");
+    const possible = [
+      phone,
+      cleanDigits,
+      cleanDigits.startsWith("233") ? "0" + cleanDigits.slice(3) : cleanDigits,
+      cleanDigits.startsWith("0") ? "233" + cleanDigits.slice(1) : cleanDigits,
+    ];
+    const emp = await prisma.employee.findFirst({
+      where: { phone: { in: possible } },
+      select: { id: true },
+    });
+    if (emp) {
+      const assignment = await prisma.trainingAssignment.findUnique({
+        where: { courseId_employeeId: { courseId, employeeId: emp.id } },
+        select: { quizAttemptToken: true },
+      });
+      if (assignment?.quizAttemptToken) {
+        const existing = await prisma.assessmentInvitation.findUnique({
+          where: { tokenHash: hashInvitationToken(assignment.quizAttemptToken) },
+          select: {
+            revokedAt: true,
+            response: { select: { submittedAt: true } },
+          },
+        });
+        if (existing && !existing.revokedAt && existing.response && !existing.response.submittedAt) {
+          cookieStore.set(`assessment_active_${assessmentOutcome.assessment.id}`, assignment.quizAttemptToken, {
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+            path: "/",
+            maxAge: 60 * 60 * 24,
+          });
+          redirect(`/assessment/${encodeURIComponent(assignment.quizAttemptToken)}`);
+        }
+      }
+    }
+  }
+
   const outcome = await startPublicAttempt(publicLinkToken, {
     name: parsed.data.name,
     email: parsed.data.email || null,
@@ -515,7 +571,6 @@ export async function startPublicAssessmentAction(
   });
   if (!outcome.ok) return { error: outcome.message };
 
-  const cookieStore = await cookies();
   cookieStore.set(`assessment_active_${assessmentOutcome.assessment.id}`, outcome.token, {
     httpOnly: true,
     sameSite: "lax",
@@ -557,9 +612,30 @@ export type SubmitState =
 export async function submitAssessmentAction(
   token: string,
   _prev: SubmitState,
+  formData?: FormData,
 ): Promise<SubmitState> {
   const limit = await rateLimit(`assessment-submit:${await clientIp()}`, 20, 15 * 60 * 1000);
   if (!limit.success) return { error: "Too many attempts. Please try again shortly." };
+
+  if (formData) {
+    const rawPayload = formData.get("answersPayload");
+    if (typeof rawPayload === "string" && rawPayload.trim()) {
+      try {
+        const payload = JSON.parse(rawPayload) as Record<string, { options: string[]; text: string }>;
+        for (const [questionId, ans] of Object.entries(payload)) {
+          if (ans.options.length > 0 || (ans.text && ans.text.trim().length > 0)) {
+            await saveAnswer(token, {
+              questionId,
+              selectedOptionIds: ans.options,
+              text: ans.text,
+            });
+          }
+        }
+      } catch {
+        // Proceed to submitResponse
+      }
+    }
+  }
 
   const outcome = await submitResponse(token);
   if (!outcome.ok) {

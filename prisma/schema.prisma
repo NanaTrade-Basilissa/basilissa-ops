@@ -2274,6 +2274,7 @@ model TrainingAssignment {
   completedAt DateTime?
   quizScore   Int?
   quizPassed  Boolean?
+  quizAttemptToken String?
 
   progress    TrainingProgress[]
 

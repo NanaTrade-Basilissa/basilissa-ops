@@ -43,7 +43,7 @@ export function AssessmentRunner({
   sections: Section[];
   declaredName: string;
   saveAction: (prev: AnswerState, formData: FormData) => Promise<AnswerState>;
-  submitAction: (prev: SubmitState) => Promise<SubmitState>;
+  submitAction: (prev: SubmitState, formData?: FormData) => Promise<SubmitState>;
 }) {
   const [answers, setAnswers] = useState<Record<string, { options: string[]; text: string }>>(() =>
     Object.fromEntries(
@@ -210,7 +210,9 @@ export function AssessmentRunner({
         disabled={isSubmitting}
         onClick={() =>
           startSubmit(async () => {
-            setSubmitState(await submitAction(undefined));
+            const formData = new FormData();
+            formData.set("answersPayload", JSON.stringify(answers));
+            setSubmitState(await submitAction(undefined, formData));
           })
         }
       >
