@@ -153,8 +153,13 @@ export async function verifyMfaChallenge(
 
   if (!user?.mfaSecret || !user.mfaEnabledAt) return { ok: false, reason: "NOT_ENROLLED" };
 
-  if (verifyTotp(open(user.mfaSecret, SEAL_PURPOSE), code)) {
-    return { ok: true, usedRecoveryCode: false };
+  try {
+    const secret = open(user.mfaSecret, SEAL_PURPOSE);
+    if (verifyTotp(secret, code)) {
+      return { ok: true, usedRecoveryCode: false };
+    }
+  } catch (err) {
+    console.warn("[MFA] Failed to decrypt TOTP secret for user:", userId, err);
   }
 
   const candidateHash = hashRecoveryCode(code);
