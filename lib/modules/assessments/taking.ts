@@ -380,6 +380,8 @@ export async function submitResponse(token: string): Promise<SubmitOutcome> {
     where: { tokenHash: hashInvitationToken(token) },
     select: {
       id: true,
+      employeeId: true,
+      assessmentId: true,
       expiresAt: true,
       revokedAt: true,
       inviteeName: true,
@@ -409,6 +411,7 @@ export async function submitResponse(token: string): Promise<SubmitOutcome> {
         select: {
           id: true,
           submittedAt: true,
+          declaredPhone: true,
           answers: { select: { questionId: true, selectedOptionIds: true, text: true } },
         },
       },
@@ -498,6 +501,73 @@ export async function submitResponse(token: string): Promise<SubmitOutcome> {
       {},
       tx,
     );
+
+    // If this assessment is attached to a Training Course, update employee's TrainingAssignment
+    let targetEmployeeId = invitation.employeeId ?? null;
+    if (!targetEmployeeId && invitation.response?.declaredPhone) {
+      const p = invitation.response.declaredPhone.replace(/\D/g, "");
+      const possiblePhones = [
+        invitation.response.declaredPhone,
+        p,
+        p.startsWith("233") ? "0" + p.slice(3) : p,
+        p.startsWith("0") ? "233" + p.slice(1) : p,
+      ];
+      const match = await tx.employee.findFirst({
+        where: { phone: { in: possiblePhones } },
+        select: { id: true },
+      });
+      if (match) targetEmployeeId = match.id;
+    }
+
+    if (targetEmployeeId) {
+      const course = await tx.trainingCourse.findFirst({
+        where: { quizAssessmentId: invitation.assessmentId },
+        include: { materials: { select: { id: true } } },
+      });
+
+      if (course) {
+        const assignment = await tx.trainingAssignment.findUnique({
+          where: {
+            courseId_employeeId: {
+              courseId: course.id,
+              employeeId: targetEmployeeId,
+            },
+          },
+          include: {
+            progress: true,
+          },
+        });
+
+        if (assignment) {
+          const percent = score.percent !== null ? Math.round(score.percent) : 0;
+          const passThreshold = course.passScorePercent ?? 80;
+          const passed = percent >= passThreshold;
+
+          const completedMaterialCount = assignment.progress.filter((p) => p.isCompleted).length;
+          const allMaterialsDone =
+            course.materials.length === 0 ||
+            completedMaterialCount >= course.materials.length;
+
+          const isNowCompleted = allMaterialsDone && passed;
+
+          await tx.trainingAssignment.update({
+            where: { id: assignment.id },
+            data: {
+              quizScore: percent,
+              quizPassed: passed,
+              ...(isNowCompleted
+                ? {
+                    status: "COMPLETED",
+                    completedAt: assignment.completedAt ?? new Date(),
+                  }
+                : assignment.status === "NOT_STARTED"
+                ? { status: "IN_PROGRESS", startedAt: assignment.startedAt ?? new Date() }
+                : {}),
+            },
+          });
+        }
+      }
+    }
   }).catch((error) => {
     if (error instanceof AlreadySubmitted) return;
     throw error;

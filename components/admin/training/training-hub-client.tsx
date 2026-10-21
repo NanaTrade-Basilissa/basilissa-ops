@@ -21,9 +21,11 @@ import type { TrainingCourseListItem } from "@/lib/modules/training/types";
 export function TrainingHubClient({
   initialCourses = [],
   categories = [],
+  assessments = [],
 }: {
   initialCourses: TrainingCourseListItem[];
   categories: string[];
+  assessments?: { id: string; title: string; status: string }[];
 }) {
   const [courses, setCourses] = useState<TrainingCourseListItem[]>(initialCourses);
   const [search, setSearch] = useState("");
@@ -169,7 +171,7 @@ export function TrainingHubClient({
         </div>
 
         <div>
-          <CourseCreateDialog existingCategories={categories} />
+          <CourseCreateDialog existingCategories={categories} assessments={assessments} />
         </div>
       </div>
 
@@ -196,7 +198,7 @@ export function TrainingHubClient({
               : "No courses have been created yet. Create your first course to upload videos, documents, and train staff on mobile."}
           </p>
           <div className="mt-5">
-            <CourseCreateDialog existingCategories={categories} />
+            <CourseCreateDialog existingCategories={categories} assessments={assessments} />
           </div>
         </div>
       )}

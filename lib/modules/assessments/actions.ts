@@ -504,9 +504,14 @@ export async function startPublicAssessmentAction(
     return { error: parsed.error.issues[0]?.message ?? "Please check what you entered." };
   }
 
+  const phone = formData.get("phone") ? String(formData.get("phone")).trim() : undefined;
+  const courseId = formData.get("courseId") ? String(formData.get("courseId")).trim() : undefined;
+
   const outcome = await startPublicAttempt(publicLinkToken, {
     name: parsed.data.name,
     email: parsed.data.email || null,
+    phone,
+    courseId,
   });
   if (!outcome.ok) return { error: outcome.message };
 

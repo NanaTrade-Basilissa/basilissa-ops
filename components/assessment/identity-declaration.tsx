@@ -28,12 +28,18 @@ export function IdentityDeclaration({
   nameMode,
   emailMode,
   personal,
+  defaultName,
+  defaultPhone,
+  courseId,
 }: {
   action: (prev: DeclarationState, formData: FormData) => Promise<DeclarationState>;
   nameMode: IdentityFieldMode;
   emailMode: IdentityFieldMode;
   /** A personal, HR-issued link — shows the "please don't pass this on" note. */
   personal: boolean;
+  defaultName?: string;
+  defaultPhone?: string;
+  courseId?: string;
 }) {
   const [state, formAction, isPending] = useActionState<DeclarationState, FormData>(
     action,
@@ -45,24 +51,23 @@ export function IdentityDeclaration({
       <CardHeader>
         <CardTitle className="text-lg">Before you start</CardTitle>
         <CardDescription>
-          {nameMode === "HIDDEN" && emailMode === "HIDDEN"
+          {defaultPhone
+            ? "Your staff details are pre-filled below for training verification. Confirm your details to begin."
+            : nameMode === "HIDDEN" && emailMode === "HIDDEN"
             ? "One more moment before the questions."
             : "Confirm who you are so your answers are recorded against the right person."}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-5" noValidate>
+          {courseId && <input type="hidden" name="courseId" value={courseId} />}
+
           {state?.error && (
             <Alert variant="destructive">
               <AlertDescription>{state.error}</AlertDescription>
             </Alert>
           )}
 
-          {/*
-            The expected name is NOT pre-filled. Showing it and asking them to
-            type it turns the check into a copying exercise — and if this link
-            reached the wrong person, it would tell them exactly what to write.
-          */}
           {nameMode !== "HIDDEN" && (
             <div className="space-y-1.5">
               <Label htmlFor="name">
@@ -74,9 +79,30 @@ export function IdentityDeclaration({
               <Input
                 id="name"
                 name="name"
+                defaultValue={defaultName || ""}
                 required={nameMode === "REQUIRED"}
                 autoComplete="name"
-                autoFocus
+                autoFocus={!defaultName}
+              />
+            </div>
+          )}
+
+          {/* If phone is provided via URL or if name is shown, support phone verification */}
+          {(defaultPhone !== undefined || nameMode !== "HIDDEN") && (
+            <div className="space-y-1.5">
+              <Label htmlFor="phone">
+                Phone number
+                {defaultPhone && (
+                  <span className="text-xs text-primary font-medium"> (Employee App verified)</span>
+                )}
+              </Label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                defaultValue={defaultPhone || ""}
+                placeholder="e.g. 054XXXXXXX"
+                autoComplete="tel"
               />
             </div>
           )}

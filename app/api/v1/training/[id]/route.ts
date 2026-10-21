@@ -27,6 +27,15 @@ export async function GET(
             materials: {
               orderBy: { order: "asc" },
             },
+            quizAssessment: {
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                publicLinkToken: true,
+                publicLinkEnabled: true,
+              },
+            },
           },
         },
         progress: true,
@@ -60,6 +69,16 @@ export async function GET(
         category: assignment.course.category,
         estimatedMinutes: assignment.course.estimatedMinutes,
         isMandatory: assignment.course.isMandatory,
+        quizAssessmentId: assignment.course.quizAssessmentId,
+        passScorePercent: assignment.course.passScorePercent ?? 80,
+        quizAssessment: assignment.course.quizAssessment
+          ? {
+              id: assignment.course.quizAssessment.id,
+              title: assignment.course.quizAssessment.title,
+              description: assignment.course.quizAssessment.description,
+              publicLinkToken: assignment.course.quizAssessment.publicLinkToken,
+            }
+          : null,
         materials: assignment.course.materials.map((m) => {
           const prog = progressMap.get(m.id);
           return {

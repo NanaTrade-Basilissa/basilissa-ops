@@ -469,7 +469,7 @@ export type PublicAttemptOutcome =
  */
 export async function startPublicAttempt(
   publicLinkToken: string,
-  identity?: { name?: string; email?: string | null },
+  identity?: { name?: string; email?: string | null; phone?: string; courseId?: string },
 ): Promise<PublicAttemptOutcome> {
   const assessment = await prisma.assessment.findUnique({
     where: { publicLinkToken },
@@ -483,8 +483,27 @@ export async function startPublicAttempt(
   const inviteeName = identity?.name?.trim() || "Public respondent";
   const inviteeEmail = identity?.email?.trim() || null;
 
+  let employeeId: string | null = null;
+  if (identity?.phone?.trim()) {
+    const rawPhone = identity.phone.trim();
+    const cleanDigits = rawPhone.replace(/\D/g, "");
+    const possible = [
+      rawPhone,
+      cleanDigits,
+      cleanDigits.startsWith("233") ? "0" + cleanDigits.slice(3) : cleanDigits,
+      cleanDigits.startsWith("0") ? "233" + cleanDigits.slice(1) : cleanDigits,
+    ];
+    const emp = await prisma.employee.findFirst({
+      where: { phone: { in: possible } },
+      select: { id: true },
+    });
+    if (emp) {
+      employeeId = emp.id;
+    }
+  }
+
   const outcome = await issueInvitation(
-    { assessmentId: assessment.id, name: inviteeName, email: inviteeEmail, isPublic: true },
+    { assessmentId: assessment.id, employeeId, name: inviteeName, email: inviteeEmail, isPublic: true },
     { userId: null, email: null, role: null },
   );
   if (!outcome.ok) return outcome;
@@ -499,6 +518,7 @@ export async function startPublicAttempt(
         invitationId: outcome.invitation.invitationId,
         declaredName: identity?.name !== undefined ? identity.name.trim() : inviteeName,
         declaredEmail: inviteeEmail,
+        declaredPhone: identity?.phone?.trim() || null,
       },
     }),
   ]);

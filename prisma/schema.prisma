@@ -1654,6 +1654,7 @@ model AssessmentResponse {
   /// forwarded, and blocking on a misspelt name would lose a real submission.
   declaredName  String?
   declaredEmail String?
+  declaredPhone String?
   /// True when the declaration did not match the invitation. HR decides what
   /// that means; the system only notices.
   identityMismatch Boolean @default(false)

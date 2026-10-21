@@ -4,7 +4,7 @@ import { prisma } from "@/lib/platform/prisma";
 import { scoped } from "@/lib/platform/logger";
 import { createInboxNotifications } from "@/lib/platform/inbox";
 import { sendEmployeePushNotification } from "@/lib/platform/push";
-import { sendEmail, renderEmailLogo, escapeHtml } from "@/lib/platform/email";
+import { sendEmail } from "@/lib/platform/email";
 import { getEnv } from "@/lib/platform/env";
 
 const log = scoped("training:notifications");
@@ -114,119 +114,34 @@ export async function notifyTrainingAssignment({
       const fullName = `${emp.firstName} ${emp.lastName}`.trim();
       const appUrl = getEnv().NEXT_PUBLIC_APP_URL || "https://ops.basilissagh.com";
 
-      const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>New Training Course Assigned</title>
-</head>
-<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#f8fafc;color:#1e293b;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc;padding:32px 16px;">
-    <tr>
-      <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;background-color:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
-          <!-- Header -->
-          <tr>
-            <td style="background-color:#1e293b;padding:24px 32px;text-align:left;">
-              <table cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td>
-                    ${renderEmailLogo(36)}
-                  </td>
-                  <td align="right" style="color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:1px;font-weight:600;">
-                    Training Hub
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Body -->
-          <tr>
-            <td style="padding:32px;">
-              <h2 style="margin:0 0 12px 0;font-size:20px;font-weight:700;color:#0f172a;">
-                Hello ${escapeHtml(emp.firstName)},
-              </h2>
-              <p style="margin:0 0 24px 0;font-size:14px;line-height:22px;color:#475569;">
-                A new training course has been assigned to you by the HR & Operations team. Please review the course materials and complete the lessons on your Basilissa staff mobile app.
-              </p>
-
-              <!-- Course Detail Box -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;border-radius:12px;padding:20px;margin-bottom:24px;">
-                <tr>
-                  <td>
-                    <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">
-                      Course Title
-                    </div>
-                    <div style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:12px;">
-                      ${escapeHtml(courseTitle)}
-                    </div>
-
-                    ${
-                      category
-                        ? `<div style="font-size:12px;color:#475569;margin-bottom:4px;">
-                            <strong>Category:</strong> ${escapeHtml(category)}
-                           </div>`
-                        : ""
-                    }
-                    ${
-                      estimatedMinutes
-                        ? `<div style="font-size:12px;color:#475569;margin-bottom:4px;">
-                            <strong>Estimated Duration:</strong> ~${estimatedMinutes} minutes
-                           </div>`
-                        : ""
-                    }
-                    ${
-                      dueDateFormatted
-                        ? `<div style="font-size:12px;color:#dc2626;font-weight:600;margin-top:8px;">
-                            📅 Due Date: ${escapeHtml(dueDateFormatted)}
-                           </div>`
-                        : ""
-                    }
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Call to Action -->
-              <p style="margin:0 0 24px 0;font-size:13px;line-height:20px;color:#64748b;">
-                Open your <strong>Basilissa Staff Mobile App</strong> on your phone and tap on <strong>Profile &rarr; Staff Training Hub</strong> to start the lessons.
-              </p>
-
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td align="center">
-                    <a href="${appUrl}" style="display:inline-block;background-color:#0f172a;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:600;">
-                      Open Basilissa Staff
-                    </a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background-color:#f8fafc;padding:20px 32px;border-top:1px solid #e2e8f0;text-align:center;">
-              <p style="margin:0;font-size:11px;color:#94a3b8;">
-                &copy; ${new Date().getFullYear()} Basilissa Ghana. All rights reserved.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-      `.trim();
+      const lines: string[] = [
+        `Hello ${emp.firstName},`,
+        "",
+        `A new training course has been assigned to you by the HR & Operations team:`,
+        `Course: "${courseTitle}"`,
+      ];
+      if (category) lines.push(`Category: ${category}`);
+      if (estimatedMinutes) lines.push(`Estimated Duration: ~${estimatedMinutes} minutes`);
+      if (dueDateFormatted) lines.push(`Due Date: ${dueDateFormatted}`);
+      lines.push(
+        "",
+        `Please open your Basilissa Staff Mobile App, go to the Training Hub, and complete your learning materials and attached assessment.`,
+      );
 
       const sendResult = await sendEmail({
         to: [email],
-        from: "Basilissa Training <training@basilissagh.com>",
+        from: "Basilissa HR",
         recipientName: fullName,
-        subject: `New Training Assigned: ${courseTitle}`,
-        html,
+        subject: `New Training Course: ${courseTitle}`,
+        template: "generic",
+        data: {
+          heading: "NEW TRAINING ASSIGNED",
+          message: lines.join("\n"),
+          buttonText: "Open Training Hub",
+          buttonUrl: `${appUrl}/admin/training`,
+          from: "Basilissa HR & Training",
+        },
+        idempotencyKey: `training-assign:${courseId}:${emp.id}`,
         context: {
           courseId,
           employeeId: emp.id,

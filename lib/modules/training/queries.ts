@@ -80,6 +80,14 @@ export async function getTrainingCourse(courseId: string): Promise<TrainingCours
       materials: {
         orderBy: { order: "asc" },
       },
+      quizAssessment: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          publicLinkToken: true,
+        },
+      },
       assignments: {
         select: {
           status: true,
@@ -113,6 +121,14 @@ export async function getTrainingCourse(courseId: string): Promise<TrainingCours
     targetBranchIds: course.targetBranchIds,
     quizAssessmentId: course.quizAssessmentId,
     passScorePercent: course.passScorePercent,
+    quizAssessment: course.quizAssessment
+      ? {
+          id: course.quizAssessment.id,
+          title: course.quizAssessment.title,
+          status: course.quizAssessment.status,
+          publicLinkToken: course.quizAssessment.publicLinkToken,
+        }
+      : null,
     createdAt: course.createdAt,
     updatedAt: course.updatedAt,
     publishedAt: course.publishedAt,

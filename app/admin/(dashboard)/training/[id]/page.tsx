@@ -40,7 +40,7 @@ export default async function CourseDetailPage({
   await requirePermission("training:read");
   const { id } = await params;
 
-  const [course, assignments, rawEmployees] = await Promise.all([
+  const [course, assignments, rawEmployees, assessments] = await Promise.all([
     getTrainingCourse(id),
     getCourseAssignments(id),
     prisma.employee.findMany({
@@ -57,6 +57,11 @@ export default async function CourseDetailPage({
         },
       },
       orderBy: { firstName: "asc" },
+    }),
+    prisma.assessment.findMany({
+      where: { deletedAt: null },
+      select: { id: true, title: true, status: true },
+      orderBy: { title: "asc" },
     }),
   ]);
 
@@ -140,12 +145,18 @@ export default async function CourseDetailPage({
                   <span>Due in {course.dueDays} days</span>
                 </div>
               )}
+              {course.quizAssessment && (
+                <div className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+                  <GraduationCap className="size-3.5" />
+                  <span>Attached Quiz: {course.quizAssessment.title} (Pass: {course.passScorePercent ?? 80}%)</span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">
-            <CourseEditDialog course={course} />
+            <CourseEditDialog course={course} assessments={assessments} />
             <CourseHeaderActions
               courseId={course.id}
               courseTitle={course.title}

@@ -30,30 +30,31 @@ export default async function AssessmentDonePage({
     where: { tokenHash: hashInvitationToken(decodeURIComponent(token)) },
     select: {
       inviteeName: true,
-      assessment: { select: { title: true, showScoreToTaker: true, passMarkPercent: true } },
+      assessment: { select: { id: true, title: true, showScoreToTaker: true, passMarkPercent: true } },
       response: { select: { submittedAt: true, scoredPoints: true, maxPoints: true } },
     },
   });
 
+  const linkedCourse = invitation
+    ? await prisma.trainingCourse.findFirst({
+        where: { quizAssessmentId: invitation.assessment.id },
+        select: { id: true, title: true, passScorePercent: true },
+      })
+    : null;
+
   const submitted = invitation?.response?.submittedAt ?? null;
   const showScore =
-    invitation?.assessment.showScoreToTaker === true &&
+    (invitation?.assessment.showScoreToTaker === true || Boolean(linkedCourse)) &&
     submitted !== null &&
-    (invitation.response?.maxPoints ?? 0) > 0;
+    (invitation?.response?.maxPoints ?? 0) > 0;
 
   const percent = showScore
     ? Math.round((invitation!.response!.scoredPoints! / invitation!.response!.maxPoints!) * 100)
     : null;
 
-  /*
-    Tied to `showScore`, not evaluated on its own: whether a taker learns
-    "pass" or "fail" is a stricter question than whether they learn the
-    number, but the answer here is the same either way. Hiding the score is
-    meant to keep an assessment feeling like a diagnostic rather than an
-    exam people compare — a verdict people can still compare works just as
-    well as a number would, so it stays behind the same switch.
-  */
-  const passMark = showScore ? invitation!.assessment.passMarkPercent : null;
+  const passMark = showScore
+    ? linkedCourse?.passScorePercent ?? invitation!.assessment.passMarkPercent
+    : null;
   const passed = passMark !== null && percent !== null ? percent >= passMark : null;
 
   return (
@@ -101,6 +102,11 @@ export default async function AssessmentDonePage({
                   Your score is not shown here. Whoever sent this to you can discuss it with
                   you if that is useful.
                 </p>
+              )}
+              {linkedCourse && (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-primary font-medium">
+                  🎓 Result synced with your course "{linkedCourse.title}". You can now return to your Basilissa Employee App.
+                </div>
               )}
               <p className="text-muted-foreground">
                 You can close this page. The link will not work again.

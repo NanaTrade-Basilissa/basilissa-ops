@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Loader2, Sparkles, BookOpen } from "lucide-react";
+import { Plus, Loader2, Sparkles, BookOpen, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -33,9 +33,11 @@ const DEFAULT_CATEGORIES = [
 
 export function CourseCreateDialog({
   existingCategories = [],
+  assessments = [],
   triggerButton,
 }: {
   existingCategories?: string[];
+  assessments?: { id: string; title: string; status: string }[];
   triggerButton?: React.ReactNode;
 }) {
   const router = useRouter();
@@ -50,6 +52,8 @@ export function CourseCreateDialog({
   const [dueDays, setDueDays] = useState("7");
   const [isMandatory, setIsMandatory] = useState(true);
   const [targetAll, setTargetAll] = useState(true);
+  const [quizAssessmentId, setQuizAssessmentId] = useState("");
+  const [passScorePercent, setPassScorePercent] = useState("80");
 
   const allCategories = Array.from(
     new Set([...DEFAULT_CATEGORIES, ...existingCategories])
@@ -77,6 +81,10 @@ export function CourseCreateDialog({
       formData.set("isMandatory", isMandatory ? "true" : "false");
       formData.set("dueDays", dueDays || "7");
       formData.set("targetAll", targetAll ? "true" : "false");
+      if (quizAssessmentId) {
+        formData.set("quizAssessmentId", quizAssessmentId);
+        formData.set("passScorePercent", passScorePercent || "80");
+      }
 
       const res = await createCourseAction(formData);
 
@@ -237,6 +245,53 @@ export function CourseCreateDialog({
                   className="h-9"
                 />
               </div>
+            </div>
+
+            {/* Attached Assessment / Quiz Section */}
+            <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="quizAssessmentId" className="text-xs font-semibold flex items-center gap-1.5">
+                  <GraduationCap className="size-3.5 text-primary" />
+                  Attach Assessment / Quiz (Optional)
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Select an existing assessment. Staff will take this quiz after completing lesson materials.
+                </p>
+              </div>
+
+              <select
+                id="quizAssessmentId"
+                value={quizAssessmentId}
+                onChange={(e) => setQuizAssessmentId(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">None (No assessment required)</option>
+                {assessments.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.title} ({a.status})
+                  </option>
+                ))}
+              </select>
+
+              {quizAssessmentId && (
+                <div className="space-y-1.5 pt-1">
+                  <Label htmlFor="passScorePercent" className="text-xs font-medium">
+                    Pass Mark Percentage (%)
+                  </Label>
+                  <Input
+                    id="passScorePercent"
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={passScorePercent}
+                    onChange={(e) => setPassScorePercent(e.target.value)}
+                    className="h-9 w-32"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Staff must score at least this percentage to pass the training module.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="rounded-lg border border-border/80 bg-muted/30 p-3 space-y-3">

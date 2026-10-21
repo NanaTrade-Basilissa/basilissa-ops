@@ -288,6 +288,7 @@ export function CourseAssignmentsTable({
               <th className="px-4 py-3">Branch</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Progress</th>
+              <th className="px-4 py-3">Quiz Result</th>
               <th className="px-4 py-3">Assigned Date</th>
               <th className="px-4 py-3">Completed Date</th>
             </tr>
@@ -339,6 +340,20 @@ export function CourseAssignmentsTable({
                         </span>
                       </div>
                     </td>
+                    <td className="px-4 py-3">
+                      {row.quizScore !== null ? (
+                        <Badge
+                          variant={row.quizPassed ? "default" : "destructive"}
+                          className={`text-[10px] px-2 py-0.5 ${
+                            row.quizPassed ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+                          }`}
+                        >
+                          {row.quizPassed ? "Passed" : "Failed"} ({row.quizScore}%)
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {new Date(row.assignedAt).toLocaleDateString()}
                     </td>
@@ -350,7 +365,7 @@ export function CourseAssignmentsTable({
               })
             ) : (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   No employee assignments found for this filter.
                 </td>
               </tr>

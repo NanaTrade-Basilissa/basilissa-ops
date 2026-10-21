@@ -51,6 +51,12 @@ export type TrainingCourseDetail = {
   targetBranchIds: string[];
   quizAssessmentId: string | null;
   passScorePercent: number | null;
+  quizAssessment?: {
+    id: string;
+    title: string;
+    publicLinkToken: string | null;
+    status: string;
+  } | null;
   createdAt: Date;
   updatedAt: Date;
   publishedAt: Date | null;

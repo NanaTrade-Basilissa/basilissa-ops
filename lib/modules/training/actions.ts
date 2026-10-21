@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/platform/prisma";
 import { requirePermission } from "@/lib/modules/identity/server";
 import { deleteFromR2 } from "@/lib/platform/r2";
@@ -28,9 +29,28 @@ export async function createCourseAction(formData: FormData): Promise<ActionResp
     const dueDays = dueDaysRaw ? parseInt(String(dueDaysRaw), 10) : null;
     const targetAll = formData.get("targetAll") !== "false";
     const coverImageUrl = String(formData.get("coverImageUrl") ?? "").trim() || null;
+    const quizAssessmentId = String(formData.get("quizAssessmentId") ?? "").trim() || null;
+    const passScorePercentRaw = formData.get("passScorePercent");
+    const passScorePercent = passScorePercentRaw ? parseInt(String(passScorePercentRaw), 10) : 80;
 
     if (!title) {
       return { success: false, error: "Course title is required." };
+    }
+
+    if (quizAssessmentId) {
+      const assessment = await prisma.assessment.findUnique({
+        where: { id: quizAssessmentId },
+        select: { id: true, publicLinkToken: true, publicLinkEnabled: true },
+      });
+      if (assessment && (!assessment.publicLinkToken || !assessment.publicLinkEnabled)) {
+        await prisma.assessment.update({
+          where: { id: quizAssessmentId },
+          data: {
+            publicLinkEnabled: true,
+            publicLinkToken: assessment.publicLinkToken || randomBytes(24).toString("base64url"),
+          },
+        });
+      }
     }
 
     const course = await prisma.trainingCourse.create({
@@ -43,6 +63,8 @@ export async function createCourseAction(formData: FormData): Promise<ActionResp
         dueDays,
         targetAll,
         coverImageUrl,
+        quizAssessmentId,
+        passScorePercent,
         createdById: actor.userId,
       },
       select: { id: true },
@@ -73,9 +95,28 @@ export async function updateCourseAction(courseId: string, formData: FormData): 
     const dueDays = dueDaysRaw ? parseInt(String(dueDaysRaw), 10) : null;
     const targetAll = formData.get("targetAll") !== "false";
     const coverImageUrl = String(formData.get("coverImageUrl") ?? "").trim() || null;
+    const quizAssessmentId = String(formData.get("quizAssessmentId") ?? "").trim() || null;
+    const passScorePercentRaw = formData.get("passScorePercent");
+    const passScorePercent = passScorePercentRaw ? parseInt(String(passScorePercentRaw), 10) : 80;
 
     if (!title) {
       return { success: false, error: "Course title is required." };
+    }
+
+    if (quizAssessmentId) {
+      const assessment = await prisma.assessment.findUnique({
+        where: { id: quizAssessmentId },
+        select: { id: true, publicLinkToken: true, publicLinkEnabled: true },
+      });
+      if (assessment && (!assessment.publicLinkToken || !assessment.publicLinkEnabled)) {
+        await prisma.assessment.update({
+          where: { id: quizAssessmentId },
+          data: {
+            publicLinkEnabled: true,
+            publicLinkToken: assessment.publicLinkToken || randomBytes(24).toString("base64url"),
+          },
+        });
+      }
     }
 
     await prisma.trainingCourse.update({
@@ -89,6 +130,8 @@ export async function updateCourseAction(courseId: string, formData: FormData): 
         dueDays,
         targetAll,
         coverImageUrl,
+        quizAssessmentId,
+        passScorePercent,
       },
     });
 

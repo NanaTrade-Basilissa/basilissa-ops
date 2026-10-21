@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { GraduationCap } from "lucide-react";
+import { prisma } from "@/lib/platform/prisma";
 import { requirePermission } from "@/lib/modules/identity/server";
 import { listTrainingCourses, getTrainingCategories } from "@/lib/modules/training/queries";
 import { TrainingHubClient } from "@/components/admin/training/training-hub-client";
@@ -14,9 +15,14 @@ export const dynamic = "force-dynamic";
 export default async function TrainingHubPage() {
   await requirePermission("training:read");
 
-  const [courses, categories] = await Promise.all([
+  const [courses, categories, assessments] = await Promise.all([
     listTrainingCourses(),
     getTrainingCategories(),
+    prisma.assessment.findMany({
+      where: { deletedAt: null },
+      select: { id: true, title: true, status: true },
+      orderBy: { title: "asc" },
+    }),
   ]);
 
   return (
@@ -39,6 +45,7 @@ export default async function TrainingHubPage() {
       <TrainingHubClient
         initialCourses={courses}
         categories={categories}
+        assessments={assessments}
       />
     </div>
   );

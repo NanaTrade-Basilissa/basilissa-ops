@@ -20,12 +20,20 @@ export const dynamic = "force-dynamic";
 
 export default async function PublicAssessmentEntryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams?: Promise<{ name?: string; phone?: string; courseId?: string }>;
 }) {
-  const { token } = await params;
+  const [{ token }, search] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({} as { name?: string; phone?: string; courseId?: string }),
+  ]);
   const decodedToken = decodeURIComponent(token);
   const outcome = await getPublicAssessment(decodedToken);
+  const defaultName = search?.name ? decodeURIComponent(search.name) : undefined;
+  const defaultPhone = search?.phone ? decodeURIComponent(search.phone) : undefined;
+  const courseId = search?.courseId ? decodeURIComponent(search.courseId) : undefined;
 
   if (!outcome.ok) {
     return (
@@ -118,6 +126,9 @@ export default async function PublicAssessmentEntryPage({
           nameMode={assessment.identity.nameMode}
           emailMode={assessment.identity.emailMode}
           personal={false}
+          defaultName={defaultName}
+          defaultPhone={defaultPhone}
+          courseId={courseId}
         />
       </div>
     </main>
