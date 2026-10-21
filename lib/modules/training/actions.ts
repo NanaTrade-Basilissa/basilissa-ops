@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/platform/prisma";
 import { requirePermission } from "@/lib/modules/identity/server";
 import { deleteFromR2 } from "@/lib/platform/r2";
+import { notifyTrainingAssignment } from "./notifications";
 import type { TrainingMaterialType } from "@prisma/client";
 
 export type ActionResponse<T = unknown> =
@@ -271,6 +272,17 @@ export async function publishCourseAction(courseId: string): Promise<ActionRespo
       }
     });
 
+    // Multi-channel notifications: In-app inbox + Push notification + Email
+    const targetEmployeeIds = targetEmployees.map((e) => e.id);
+    notifyTrainingAssignment({
+      courseId,
+      courseTitle: course.title,
+      employeeIds: targetEmployeeIds,
+      dueAt,
+      category: course.category,
+      estimatedMinutes: course.estimatedMinutes,
+    }).catch((err) => console.warn("Background training notice failed:", err));
+
     revalidatePath("/admin/training");
     revalidatePath(`/admin/training/${courseId}`);
     return { success: true, message: `Course published and assigned to ${targetEmployees.length} employees.` };
@@ -354,7 +366,7 @@ export async function assignCourseEmployeesAction({
 
     const course = await prisma.trainingCourse.findUnique({
       where: { id: courseId },
-      select: { dueDays: true },
+      select: { title: true, dueDays: true, category: true, estimatedMinutes: true },
     });
 
     if (!course) return { success: false, error: "Course not found" };
@@ -380,6 +392,16 @@ export async function assignCourseEmployeesAction({
         update: {},
       });
     }
+
+    // Multi-channel notifications: In-app inbox + Push notification + Email
+    notifyTrainingAssignment({
+      courseId,
+      courseTitle: course.title,
+      employeeIds,
+      dueAt,
+      category: course.category,
+      estimatedMinutes: course.estimatedMinutes,
+    }).catch((err) => console.warn("Background training notice failed:", err));
 
     revalidatePath(`/admin/training/${courseId}`);
     return { success: true, message: `Successfully assigned ${employeeIds.length} employee(s).` };

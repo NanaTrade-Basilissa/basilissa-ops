@@ -1999,6 +1999,7 @@ enum NotificationKind {
   ANNOUNCEMENT
   LEAVE_DECISION
   SHIFT_REMINDER
+  TRAINING_ASSIGNED
 }
 
 /// A message sent from the dashboard to staff. Immutable once sent: there is no
