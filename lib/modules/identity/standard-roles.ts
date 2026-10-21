@@ -28,6 +28,7 @@ export const STANDARD_ROLES_DEFINITIONS: StandardRoleDefinition[] = [
       "roles:read",
       "announcements:read", "announcements:create",
       "meals:read", "meals:create", "meals:update", "meals:delete", "meals:publish",
+      "training:read",
     ],
   },
   {
@@ -37,6 +38,7 @@ export const STANDARD_ROLES_DEFINITIONS: StandardRoleDefinition[] = [
       "employees:read", "employees:create", "employees:update", "employees:delete", "employees:export",
       "assessments:read", "assessments:create", "assessments:update", "assessments:delete", "assessments:publish", "assessments:assign",
       "aptitude:read", "aptitude:create", "aptitude:update", "aptitude:delete", "aptitude:publish", "aptitude:assign",
+      "training:read", "training:create", "training:update", "training:delete", "training:publish", "training:assign",
       "attendance:read", "attendance:create", "attendance:update", "attendance:approve", "attendance:export",
       "policies:read", "policies:update",
       "branches:read",

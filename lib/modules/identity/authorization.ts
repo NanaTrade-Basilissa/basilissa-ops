@@ -83,6 +83,9 @@ export type SystemPermission =
   | "aptitude:read"
   /// Authoring, publishing and inviting.
   | "aptitude:write"
+  // Training Hub — staff learning courses, materials, and compliance.
+  | "training:read"
+  | "training:write"
   // Identity
   | "user:read"
   | "user:write"
@@ -224,6 +227,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "device:read",
     "announcement:read",
     "announcement:write",
+    "training:read",
+    "training:write",
   ],
 
   // Owns system configuration and user management (except Super Admin).
@@ -286,6 +291,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "meals:read",
     "meals:write",
     "meals:manage",
+    "training:read",
+    "training:write",
   ],
 };
 
@@ -335,6 +342,8 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "meals:read": ["meals:read"],
   "meals:write": ["meals:create", "meals:update", "meals:delete", "meals:publish"],
   "meals:manage": ["meals:create", "meals:read", "meals:update", "meals:delete", "meals:publish"],
+  "training:read": ["training:read"],
+  "training:write": ["training:create", "training:update", "training:delete", "training:publish", "training:assign"],
 };
 
 export const GRANULAR_TO_SYSTEM: Record<string, string> = {
@@ -353,6 +362,7 @@ export const GRANULAR_TO_SYSTEM: Record<string, string> = {
   "jobs:read": "jobs:read",
   "jobs:manage": "jobs:manage",
   "meals:read": "meals:read",
+  "training:read": "training:read",
 };
 
 export type ResourceScope = {

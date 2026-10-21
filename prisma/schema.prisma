@@ -89,6 +89,7 @@ model User {
   customRoleId        String?
   customRole          CustomRole?          @relation(fields: [customRoleId], references: [id], onDelete: Restrict)
   createdCustomRoles  CustomRole[]         @relation("CustomRoleCreatedBy")
+  createdTrainingCourses TrainingCourse[]  @relation("TrainingCourseCreatedBy")
 
   roleAssignments RoleAssignment[]
   sessions        Session[]
@@ -372,6 +373,7 @@ model Employee {
   announcementRecipients AnnouncementRecipient[]
   notifications          Notification[]
   mealSelections         MealSelection[]
+  trainingAssignments    TrainingAssignment[]
 
   @@index([status])
   @@index([masterSource])
@@ -1528,6 +1530,7 @@ model Assessment {
 
   sections    AssessmentSection[]
   invitations AssessmentInvitation[]
+  trainingCourses TrainingCourse[]
 
   @@index([status, createdAt])
   @@index([deletedAt])
@@ -2170,4 +2173,135 @@ model MealSelection {
   @@index([mealPlanId, claimedAt])
   @@map("meal_selections")
 }
+
+// =============================================================================
+// Training Hub: Employee learning management, materials (R2), and compliance
+// =============================================================================
+
+enum TrainingCourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum TrainingMaterialType {
+  VIDEO
+  IMAGE
+  PDF
+}
+
+enum TrainingAssignmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+model TrainingCourse {
+  id               String               @id @default(cuid())
+  title            String
+  description      String?
+  category         String               @default("General")
+  coverImageUrl    String?
+  estimatedMinutes Int                  @default(15)
+  isMandatory      Boolean              @default(false)
+  dueDays          Int?                 // e.g., 7 days from assignment
+  status           TrainingCourseStatus @default(DRAFT)
+
+  // Target audience scoping
+  targetAll        Boolean              @default(true)
+  targetRoles      String[]             @default([])
+  targetBranchIds  String[]             @default([])
+
+  // Optional quiz integration: link to an Assessment
+  quizAssessmentId String?
+  quizAssessment   Assessment?          @relation(fields: [quizAssessmentId], references: [id], onDelete: SetNull)
+  passScorePercent Int?                 @default(80)
+
+  createdById      String?
+  createdBy        User?                @relation("TrainingCourseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  publishedAt      DateTime?
+  archivedAt       DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  materials        TrainingMaterial[]
+  assignments      TrainingAssignment[]
+
+  @@index([status, createdAt])
+  @@map("training_courses")
+}
+
+model TrainingMaterial {
+  id              String               @id @default(cuid())
+  courseId        String
+  course          TrainingCourse       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String?
+  type            TrainingMaterialType
+  fileUrl         String               // Direct CDN / R2 public URL
+  fileKey         String               // R2 storage key (for deletion/presigned operations)
+  fileSize        Int?                 // File size in bytes
+  mimeType        String?              // e.g. "video/mp4", "image/png", "application/pdf"
+  durationSeconds Int?                 // For video
+  order           Int                  @default(0)
+
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  progressRecords TrainingProgress[]
+
+  @@unique([courseId, order])
+  @@index([courseId])
+  @@map("training_materials")
+}
+
+model TrainingAssignment {
+  id          String                   @id @default(cuid())
+  courseId    String
+  course      TrainingCourse           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  employeeId  String
+  employee    Employee                 @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  status      TrainingAssignmentStatus @default(NOT_STARTED)
+  assignedAt  DateTime                 @default(now())
+  dueAt       DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  quizScore   Int?
+  quizPassed  Boolean?
+
+  progress    TrainingProgress[]
+
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@unique([courseId, employeeId])
+  @@index([employeeId, status])
+  @@index([courseId, status])
+  @@map("training_assignments")
+}
+
+model TrainingProgress {
+  id             String             @id @default(cuid())
+  assignmentId   String
+  assignment     TrainingAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  materialId     String
+  material       TrainingMaterial   @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  isCompleted    Boolean            @default(false)
+  completedAt    DateTime?
+  watchedSeconds Int                @default(0)
+
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([assignmentId, materialId])
+  @@index([assignmentId])
+  @@map("training_progress")
+}
+
 

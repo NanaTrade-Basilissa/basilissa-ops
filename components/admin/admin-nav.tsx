@@ -4,6 +4,7 @@ import {
   CalendarRange,
   ClipboardCheck,
   ClipboardList,
+  GraduationCap,
   History,
   Layers,
   LayoutDashboard,
@@ -138,6 +139,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     // them lands.
     label: "HR",
     items: [
+      { href: "/admin/training", label: "Training Hub", icon: GraduationCap, exact: false, permission: "training:read" },
       { href: "/admin/assessments", label: "Assessments", icon: ClipboardCheck, exact: false, permission: "assessment:read" },
       { href: "/admin/aptitude-tests", label: "Aptitude Tests", icon: Brain, exact: false, permission: "aptitude:read" },
     ],

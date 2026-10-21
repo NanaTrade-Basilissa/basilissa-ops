@@ -58,6 +58,18 @@ export const PERMISSION_REGISTRY = {
       assign: { label: "Assign", description: "Issue and email assessment invitations" },
     },
   },
+  training: {
+    label: "Training Hub",
+    description: "Staff training courses, materials (R2), and completion tracking",
+    actions: {
+      create: { label: "Create", description: "Create training courses and upload materials" },
+      read: { label: "View", description: "View training courses, materials, and progress" },
+      update: { label: "Update", description: "Edit training details, materials, and settings" },
+      delete: { label: "Delete", description: "Archive or delete training courses" },
+      publish: { label: "Publish", description: "Publish or unpublish training courses" },
+      assign: { label: "Assign", description: "Assign courses to employees or branches" },
+    },
+  },
   aptitude: {
     label: "Aptitude Tests",
     description: "Candidate screening and aptitude testing",

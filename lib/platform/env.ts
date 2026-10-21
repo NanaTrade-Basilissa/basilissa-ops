@@ -100,6 +100,13 @@ const envSchema = z.object({
 
   // Optional: Slack incoming webhook URL for server error and operational notifications.
   SLACK_WEBHOOK_URL: optional(z.string().url("SLACK_WEBHOOK_URL must be a valid URL")),
+
+  // Cloudflare R2 object storage for Training Hub (videos, images, PDFs)
+  R2_ACCOUNT_ID: optional(z.string()),
+  R2_ACCESS_KEY_ID: optional(z.string()),
+  R2_SECRET_ACCESS_KEY: optional(z.string()),
+  R2_BUCKET_NAME: optional(z.string()),
+  R2_PUBLIC_DOMAIN: optional(z.string()),
 });
 
 export type Env = z.infer<typeof envSchema>;
