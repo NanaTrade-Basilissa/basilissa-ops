@@ -6,8 +6,6 @@ import {
   FileVideo,
   FileImage,
   FileText,
-  AlertCircle,
-  CheckCircle2,
   Loader2,
   X,
   FileUp,
@@ -193,9 +191,10 @@ export function CourseMaterialsUploader({
       toast.success(`"${title}" uploaded to Cloudflare R2 and added to course!`);
       resetState();
       onUploaded?.();
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      toast.error(err.message || "Failed to upload material. Please try again.");
+      const message = err instanceof Error ? err.message : "Failed to upload material. Please try again.";
+      toast.error(message);
     } finally {
       setUploading(false);
     }

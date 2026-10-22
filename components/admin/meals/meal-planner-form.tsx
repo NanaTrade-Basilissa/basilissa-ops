@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
@@ -99,19 +98,17 @@ export function MealPlannerForm({
     {},
   );
 
-  useEffect(() => {
+  const [prevDays, setPrevDays] = useState(initialDays);
+  if (initialDays !== prevDays) {
+    setPrevDays(initialDays);
     setDays(initialDays);
-  }, [initialDays]);
+  }
 
-  useEffect(() => {
-    if (initialCutoffAt) {
-      try {
-        setCutoffValue(new Date(initialCutoffAt).toISOString().slice(0, 16));
-      } catch {
-        // ignore
-      }
-    }
-  }, [initialCutoffAt]);
+  const [prevCutoff, setPrevCutoff] = useState(initialCutoffAt);
+  if (initialCutoffAt !== prevCutoff) {
+    setPrevCutoff(initialCutoffAt);
+    setCutoffValue(defaultCutoff());
+  }
 
   useEffect(() => {
     if (state?.success) {
@@ -124,7 +121,7 @@ export function MealPlannerForm({
   const updateDayField = (
     index: number,
     field: "dishName" | "description" | "cutoffHour" | "isEnabled",
-    value: any,
+    value: string | number | boolean,
   ) => {
     setDays((prev) => {
       const next = [...prev];

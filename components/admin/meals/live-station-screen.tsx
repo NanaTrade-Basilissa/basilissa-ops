@@ -11,8 +11,6 @@ import {
   Clock,
   Users,
   Search,
-  Sparkles,
-  Wifi,
   BellRing,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -86,8 +84,9 @@ export function LiveStationScreen({
         `Staff Notified! Alert sent to ${json.recipientCount} staff members for ${json.dishName}.`,
         { description: `${json.pushCount} mobile push notifications delivered.` }
       );
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to broadcast notification.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to broadcast notification.";
+      toast.error(message);
     } finally {
       setIsNotifying(false);
     }

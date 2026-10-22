@@ -105,7 +105,7 @@ export default async function AssessmentDonePage({
               )}
               {linkedCourse && (
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-primary font-medium">
-                  🎓 Result synced with your course "{linkedCourse.title}". You can now return to your Basilissa Employee App.
+                  🎓 Result synced with your course &quot;{linkedCourse.title}&quot;. You can now return to your Basilissa Employee App.
                 </div>
               )}
               <p className="text-muted-foreground">

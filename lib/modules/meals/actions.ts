@@ -52,7 +52,8 @@ export async function saveWeeklyMenuAction(
     return {
       success: publish ? "Weekly menu published successfully!" : "Weekly menu saved as draft.",
     };
-  } catch (err: any) {
-    return { error: err.message || "Failed to save weekly menu." };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to save weekly menu.";
+    return { error: message };
   }
 }

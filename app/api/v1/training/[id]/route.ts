@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authenticateTrainingMobileRequest } from "../auth";
 import { prisma } from "@/lib/platform/prisma";
-import { hashInvitationToken, issueInvitation } from "@/lib/modules/assessments/invitations";
+import { hashInvitationToken, issueInvitation } from "@/lib/modules/assessments/server";
 
 export async function GET(
   request: NextRequest,
