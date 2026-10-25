@@ -17,6 +17,35 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
 ]);
 
+function inferMimeType(fileName: string, providedType?: string): string {
+  const normProvided = (providedType || "").trim().toLowerCase();
+  if (normProvided && normProvided !== "application/octet-stream" && normProvided !== "binary/octet-stream") {
+    return normProvided;
+  }
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "pdf":
+      return "application/pdf";
+    case "mp4":
+      return "video/mp4";
+    case "mov":
+      return "video/quicktime";
+    case "webm":
+      return "video/webm";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    default:
+      return normProvided;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const actor = await requirePermission("training:create");
@@ -25,17 +54,19 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { fileName, fileType, courseId } = body;
+    const rawFileName = (body.fileName || body.filename || "").trim();
+    const courseId = body.courseId || "general";
 
-    if (!fileName || typeof fileName !== "string") {
+    if (!rawFileName) {
       return NextResponse.json({ error: "fileName is required" }, { status: 400 });
     }
+
+    const fileType = inferMimeType(rawFileName, body.fileType || body.contentType);
 
     if (!fileType || !ALLOWED_MIME_TYPES.has(fileType.toLowerCase())) {
       return NextResponse.json(
         {
-          error:
-            "Unsupported file type. Supported formats: Videos (.mp4, .mov, .webm), Pictures (.jpg, .png, .webp), and PDFs (.pdf).",
+          error: `Unsupported file type "${fileType || "unknown"}". Supported formats: Videos (.mp4, .mov, .webm), Pictures (.jpg, .png, .webp), and PDFs (.pdf).`,
         },
         { status: 400 }
       );
@@ -49,18 +80,19 @@ export async function POST(req: Request) {
       mediaCategory = "images";
     }
 
-    const sanitizedBase = fileName
+    const sanitizedBase = rawFileName
       .toLowerCase()
       .replace(/[^a-z0-9._-]/g, "-")
       .slice(0, 80);
     const uniqueSuffix = randomUUID().slice(0, 8);
-    const key = `training/${mediaCategory}/${courseId || "general"}/${Date.now()}-${uniqueSuffix}-${sanitizedBase}`;
+    const key = `training/${mediaCategory}/${courseId}/${Date.now()}-${uniqueSuffix}-${sanitizedBase}`;
 
     const r2Configured = isR2Configured();
 
     if (!r2Configured) {
       return NextResponse.json({
         configured: false,
+        useFallback: true,
         fileKey: key,
         message: "Object storage credentials (Neon Object Storage or Cloudflare R2) are not yet configured in environment.",
       });
@@ -78,6 +110,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       configured: true,
+      useFallback: false,
       uploadUrl: presigned.uploadUrl,
       publicUrl: presigned.publicUrl,
       fileKey: presigned.fileKey,

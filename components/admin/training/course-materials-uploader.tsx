@@ -32,6 +32,19 @@ const ALLOWED_MIME_TYPES = [
   "application/pdf",
 ];
 
+function inferMime(file: File): string {
+  if (file.type && ALLOWED_MIME_TYPES.includes(file.type)) return file.type;
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "mov") return "video/quicktime";
+  if (ext === "webm") return "video/webm";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  return file.type || "";
+}
+
 function getMaterialTypeFromMime(mime: string): TrainingMaterialType {
   if (mime.startsWith("video/")) return "VIDEO";
   if (mime.startsWith("image/")) return "IMAGE";
@@ -63,7 +76,8 @@ export function CourseMaterialsUploader({
   const [isDragging, setIsDragging] = useState(false);
 
   function handleFileSelected(file: File) {
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    const mime = inferMime(file);
+    if (!ALLOWED_MIME_TYPES.includes(mime)) {
       toast.error(
         `Unsupported format (${file.type || "unknown"}). Please select an MP4, MOV, WEBM video, PNG/JPG/WEBP image, or PDF document.`
       );
@@ -102,21 +116,26 @@ export function CourseMaterialsUploader({
     setUploadProgress(0);
 
     try {
-      const type = getMaterialTypeFromMime(selectedFile.type);
+      const mime = inferMime(selectedFile);
+      const type = getMaterialTypeFromMime(mime);
 
       // 1. Request presigned upload URL from API
       const presignedRes = await fetch("/api/admin/training/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          fileName: selectedFile.name,
           filename: selectedFile.name,
-          contentType: selectedFile.type,
+          fileType: mime,
+          contentType: mime,
           fileSize: selectedFile.size,
+          courseId,
         }),
       });
 
       if (!presignedRes.ok) {
-        throw new Error("Failed to initialize upload session.");
+        const errJson = await presignedRes.json().catch(() => ({}));
+        throw new Error(errJson.error || errJson.message || "Failed to initialize upload session.");
       }
 
       const presignedData = await presignedRes.json();
@@ -124,8 +143,8 @@ export function CourseMaterialsUploader({
       let finalFileUrl = "";
       let finalFileKey = "";
 
-      if (presignedData.useFallback) {
-        // Fallback for local dev when R2 is not configured
+      if (presignedData.useFallback || !presignedData.configured) {
+        // Fallback for local dev when R2/Neon is not configured
         const formData = new FormData();
         formData.append("file", selectedFile);
         formData.append("courseId", courseId);
@@ -135,17 +154,20 @@ export function CourseMaterialsUploader({
           body: formData,
         });
 
-        if (!fallbackRes.ok) throw new Error("Fallback upload failed.");
+        if (!fallbackRes.ok) {
+          const fbErr = await fallbackRes.json().catch(() => ({}));
+          throw new Error(fbErr.error || "Fallback upload failed.");
+        }
         const fallbackData = await fallbackRes.json();
-        finalFileUrl = fallbackData.fileUrl;
+        finalFileUrl = fallbackData.publicUrl || fallbackData.fileUrl;
         finalFileKey = fallbackData.fileKey;
         setUploadProgress(100);
       } else {
-        // Direct upload to Cloudflare R2 with XMLHttpRequest for real progress
+        // Direct upload to Object Storage (Neon / Cloudflare R2) with XMLHttpRequest for real progress
         await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open("PUT", presignedData.uploadUrl, true);
-          xhr.setRequestHeader("Content-Type", selectedFile.type);
+          xhr.setRequestHeader("Content-Type", mime);
 
           xhr.upload.onprogress = (evt) => {
             if (evt.lengthComputable) {
@@ -158,11 +180,11 @@ export function CourseMaterialsUploader({
             if (xhr.status >= 200 && xhr.status < 300) {
               resolve();
             } else {
-              reject(new Error(`R2 upload rejected with status ${xhr.status}`));
+              reject(new Error(`Storage upload rejected with status ${xhr.status}`));
             }
           };
 
-          xhr.onerror = () => reject(new Error("Network error during R2 upload."));
+          xhr.onerror = () => reject(new Error("Network error during file upload to storage."));
           xhr.onabort = () => reject(new Error("Upload aborted."));
 
           xhr.send(selectedFile);
