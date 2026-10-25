@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { authenticateTrainingMobileRequest } from "../auth";
 import { prisma } from "@/lib/platform/prisma";
 import { hashInvitationToken, issueInvitation } from "@/lib/modules/assessments/server";
+import { resolveStorageUrl } from "@/lib/platform/r2";
 
 export async function GET(
   request: NextRequest,
@@ -153,22 +154,25 @@ export async function GET(
               quizUrl,
             }
           : null,
-        materials: assignment.course.materials.map((m) => {
-          const prog = progressMap.get(m.id);
-          return {
-            id: m.id,
-            title: m.title,
-            description: m.description,
-            type: m.type,
-            fileUrl: m.fileUrl,
-            fileSize: m.fileSize,
-            mimeType: m.mimeType,
-            durationSeconds: m.durationSeconds,
-            order: m.order,
-            isCompleted: prog?.isCompleted ?? false,
-            watchedSeconds: prog?.watchedSeconds ?? 0,
-          };
-        }),
+        materials: await Promise.all(
+          assignment.course.materials.map(async (m) => {
+            const prog = progressMap.get(m.id);
+            const activeUrl = await resolveStorageUrl(m.fileUrl, m.fileKey);
+            return {
+              id: m.id,
+              title: m.title,
+              description: m.description,
+              type: m.type,
+              fileUrl: activeUrl,
+              fileSize: m.fileSize,
+              mimeType: m.mimeType,
+              durationSeconds: m.durationSeconds,
+              order: m.order,
+              isCompleted: prog?.isCompleted ?? false,
+              watchedSeconds: prog?.watchedSeconds ?? 0,
+            };
+          })
+        ),
       },
     });
   } catch (error) {

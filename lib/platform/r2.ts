@@ -168,13 +168,41 @@ export async function createPresignedDownloadUrl({
   const storage = getStorageClient();
   if (!storage) return null;
 
-  const { client, bucketName } = storage;
+  const { client, bucketName, defaultPrefix } = storage;
+  // If the key does not already start with defaultPrefix, prepend it
+  const objectKey = defaultPrefix && !key.startsWith(defaultPrefix) ? `${defaultPrefix}/${key}` : key;
+
   const command = new GetObjectCommand({
     Bucket: bucketName,
-    Key: key,
+    Key: objectKey,
   });
 
   return getSignedUrl(client, command, { expiresIn: expiresInSeconds });
+}
+
+/**
+ * Resolves a storage URL into a secure, time-limited presigned URL if it is stored in private object storage.
+ * If the file is an external public asset (e.g. sample video or Unsplash photo), it returns the original URL.
+ */
+export async function resolveStorageUrl(fileUrl: string, fileKey?: string | null): Promise<string> {
+  if (!fileKey) return fileUrl;
+
+  // External sample URLs that do not belong to our bucket
+  if (
+    fileUrl.startsWith("https://commondatastorage") ||
+    fileUrl.startsWith("https://images.unsplash") ||
+    fileUrl.startsWith("https://www.w3.org")
+  ) {
+    return fileUrl;
+  }
+
+  try {
+    const presigned = await createPresignedDownloadUrl({ key: fileKey, expiresInSeconds: 86400 });
+    return presigned || fileUrl;
+  } catch (error) {
+    log.error("Failed to generate presigned download URL", { fileKey, error });
+    return fileUrl;
+  }
 }
 
 /**

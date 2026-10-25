@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/platform/prisma";
-import type { TrainingCourseListItem, TrainingCourseDetail, TrainingMaterialItem } from "./types";
+import { resolveStorageUrl } from "@/lib/platform/r2";
+import type { TrainingCourseListItem, TrainingCourseDetail } from "./types";
 import type { TrainingCourseStatus } from "@prisma/client";
 
 export async function listTrainingCourses(options: {
@@ -132,20 +133,22 @@ export async function getTrainingCourse(courseId: string): Promise<TrainingCours
     createdAt: course.createdAt,
     updatedAt: course.updatedAt,
     publishedAt: course.publishedAt,
-    materials: course.materials.map((m) => ({
-      id: m.id,
-      courseId: m.courseId,
-      title: m.title,
-      description: m.description,
-      type: m.type,
-      fileUrl: m.fileUrl,
-      fileKey: m.fileKey,
-      fileSize: m.fileSize,
-      mimeType: m.mimeType,
-      durationSeconds: m.durationSeconds,
-      order: m.order,
-      createdAt: m.createdAt,
-    })),
+    materials: await Promise.all(
+      course.materials.map(async (m) => ({
+        id: m.id,
+        courseId: m.courseId,
+        title: m.title,
+        description: m.description,
+        type: m.type,
+        fileUrl: await resolveStorageUrl(m.fileUrl, m.fileKey),
+        fileKey: m.fileKey,
+        fileSize: m.fileSize,
+        mimeType: m.mimeType,
+        durationSeconds: m.durationSeconds,
+        order: m.order,
+        createdAt: m.createdAt,
+      }))
+    ),
     assignmentsSummary: {
       total,
       completed,
