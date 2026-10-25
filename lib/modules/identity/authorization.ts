@@ -86,6 +86,11 @@ export type SystemPermission =
   // Training Hub — staff learning courses, materials, and compliance.
   | "training:read"
   | "training:write"
+  | "training:create"
+  | "training:update"
+  | "training:delete"
+  | "training:publish"
+  | "training:assign"
   // Identity
   | "user:read"
   | "user:write"
@@ -363,6 +368,12 @@ export const GRANULAR_TO_SYSTEM: Record<string, string> = {
   "jobs:manage": "jobs:manage",
   "meals:read": "meals:read",
   "training:read": "training:read",
+  "training:write": "training:write",
+  "training:create": "training:write",
+  "training:update": "training:write",
+  "training:delete": "training:write",
+  "training:publish": "training:write",
+  "training:assign": "training:write",
 };
 
 export type ResourceScope = {

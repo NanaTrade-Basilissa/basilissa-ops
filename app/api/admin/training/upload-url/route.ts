@@ -48,7 +48,7 @@ function inferMimeType(fileName: string, providedType?: string): string {
 
 export async function POST(req: Request) {
   try {
-    const actor = await requirePermission("training:create");
+    const actor = await requirePermission("training:write");
     if (!actor) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

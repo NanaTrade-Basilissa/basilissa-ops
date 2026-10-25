@@ -156,6 +156,52 @@ export async function createPresignedUploadUrl({
 }
 
 /**
+ * Direct server-side upload of a file Buffer into Object Storage.
+ * Bypasses all browser CORS, signature mismatch, and client network issues.
+ */
+export async function uploadBufferToStorage({
+  key,
+  buffer,
+  contentType,
+}: {
+  key: string;
+  buffer: Buffer;
+  contentType: string;
+}): Promise<{ publicUrl: string; fileKey: string } | null> {
+  const storage = getStorageClient();
+  if (!storage) return null;
+
+  const { client, bucketName, defaultPrefix, isNeon } = storage;
+  const objectKey = defaultPrefix && !key.startsWith(defaultPrefix) ? `${defaultPrefix}/${key}` : key;
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: objectKey,
+      Body: buffer,
+      ContentType: contentType,
+    })
+  );
+
+  const customDomain = clean(process.env.R2_PUBLIC_DOMAIN || process.env.STORAGE_PUBLIC_DOMAIN).replace(/\/+$/, "");
+
+  let publicUrl: string;
+  if (customDomain) {
+    publicUrl = `${customDomain}/${objectKey}`;
+  } else if (isNeon) {
+    const endpoint = clean(process.env.AWS_ENDPOINT_URL_S3).replace(/\/+$/, "");
+    publicUrl = `${endpoint}/${bucketName}/${objectKey}`;
+  } else {
+    publicUrl = `https://${bucketName}.${clean(process.env.R2_ACCOUNT_ID)}.r2.cloudflarestorage.com/${objectKey}`;
+  }
+
+  return {
+    publicUrl,
+    fileKey: objectKey,
+  };
+}
+
+/**
  * Generates a presigned GET URL for temporary authorized downloading/streaming.
  */
 export async function createPresignedDownloadUrl({

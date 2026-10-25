@@ -142,9 +142,50 @@ export function CourseMaterialsUploader({
 
       let finalFileUrl = "";
       let finalFileKey = "";
+      let directSucceeded = false;
 
-      if (presignedData.useFallback || !presignedData.configured) {
-        // Fallback for local dev when R2/Neon is not configured
+      if (!presignedData.useFallback && presignedData.configured && presignedData.uploadUrl) {
+        try {
+          // Direct upload to Object Storage (Neon / Cloudflare R2) with XMLHttpRequest
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("PUT", presignedData.uploadUrl, true);
+            if (mime) {
+              xhr.setRequestHeader("Content-Type", mime);
+            }
+
+            xhr.upload.onprogress = (evt) => {
+              if (evt.lengthComputable) {
+                const percent = Math.round((evt.loaded / evt.total) * 100);
+                setUploadProgress(percent);
+              }
+            };
+
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve();
+              } else {
+                reject(new Error(`Storage rejected with status ${xhr.status}`));
+              }
+            };
+
+            xhr.onerror = () => reject(new Error("Network error during file upload to storage."));
+            xhr.onabort = () => reject(new Error("Upload aborted."));
+
+            xhr.send(selectedFile);
+          });
+
+          finalFileUrl = presignedData.publicUrl;
+          finalFileKey = presignedData.fileKey;
+          directSucceeded = true;
+        } catch (directErr) {
+          console.warn("Direct storage upload failed, attempting server upload fallback...", directErr);
+          setUploadProgress(0);
+        }
+      }
+
+      if (!directSucceeded) {
+        // Fallback / Server-mediated upload
         const formData = new FormData();
         formData.append("file", selectedFile);
         formData.append("courseId", courseId);
@@ -156,42 +197,12 @@ export function CourseMaterialsUploader({
 
         if (!fallbackRes.ok) {
           const fbErr = await fallbackRes.json().catch(() => ({}));
-          throw new Error(fbErr.error || "Fallback upload failed.");
+          throw new Error(fbErr.error || "Upload failed on server.");
         }
         const fallbackData = await fallbackRes.json();
         finalFileUrl = fallbackData.publicUrl || fallbackData.fileUrl;
         finalFileKey = fallbackData.fileKey;
         setUploadProgress(100);
-      } else {
-        // Direct upload to Object Storage (Neon / Cloudflare R2) with XMLHttpRequest for real progress
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", presignedData.uploadUrl, true);
-          xhr.setRequestHeader("Content-Type", mime);
-
-          xhr.upload.onprogress = (evt) => {
-            if (evt.lengthComputable) {
-              const percent = Math.round((evt.loaded / evt.total) * 100);
-              setUploadProgress(percent);
-            }
-          };
-
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve();
-            } else {
-              reject(new Error(`Storage upload rejected with status ${xhr.status}`));
-            }
-          };
-
-          xhr.onerror = () => reject(new Error("Network error during file upload to storage."));
-          xhr.onabort = () => reject(new Error("Upload aborted."));
-
-          xhr.send(selectedFile);
-        });
-
-        finalFileUrl = presignedData.publicUrl;
-        finalFileKey = presignedData.fileKey;
       }
 
       // 2. Persist material record in database via Server Action
@@ -203,7 +214,7 @@ export function CourseMaterialsUploader({
         fileUrl: finalFileUrl,
         fileKey: finalFileKey,
         fileSize: selectedFile.size,
-        mimeType: selectedFile.type,
+        mimeType: mime,
       });
 
       if (!actionRes.success) {

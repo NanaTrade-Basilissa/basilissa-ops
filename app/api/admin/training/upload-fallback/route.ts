@@ -3,10 +3,11 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { requirePermission } from "@/lib/modules/identity/server";
+import { isR2Configured, uploadBufferToStorage } from "@/lib/platform/r2";
 
 export async function POST(req: Request) {
   try {
-    const actor = await requirePermission("training:create");
+    const actor = await requirePermission("training:write");
     if (!actor) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -29,6 +30,35 @@ export async function POST(req: Request) {
     const uniqueSuffix = randomUUID().slice(0, 8);
     const fileName = `${Date.now()}-${uniqueSuffix}-${sanitizedBase}`;
 
+    // If Neon Object Storage or R2 is configured, save directly to cloud storage
+    if (isR2Configured()) {
+      let mediaCategory = "documents";
+      if (file.type.startsWith("video/")) {
+        mediaCategory = "videos";
+      } else if (file.type.startsWith("image/")) {
+        mediaCategory = "images";
+      }
+
+      const key = `training/${mediaCategory}/${courseId}/${fileName}`;
+      const storageResult = await uploadBufferToStorage({
+        key,
+        buffer,
+        contentType: file.type || "application/octet-stream",
+      });
+
+      if (storageResult) {
+        return NextResponse.json({
+          success: true,
+          publicUrl: storageResult.publicUrl,
+          fileKey: storageResult.fileKey,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type,
+        });
+      }
+    }
+
+    // Local disk fallback when storage credentials are not present
     const uploadDir = join(process.cwd(), "public", "uploads", "training", courseId);
     await mkdir(uploadDir, { recursive: true });
 
@@ -47,7 +77,10 @@ export async function POST(req: Request) {
       mimeType: file.type,
     });
   } catch (error) {
-    console.error("Fallback upload error:", error);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    console.error("Upload error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Upload failed" },
+      { status: 500 }
+    );
   }
 }
