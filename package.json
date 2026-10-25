@@ -20,6 +20,7 @@
     "db:seed:feedback": "tsx prisma/seed-feedback.ts",
     "db:seed:data-analyst": "tsx prisma/seed-data-analyst-test.ts",
     "db:seed:aptitude-test": "tsx prisma/seed-aptitude-assessment-test.ts",
+    "db:seed:assessments-oct2026": "tsx prisma/seed-lead-and-chef-assessments.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "worker": "tsx --conditions=react-server worker/index.ts"
