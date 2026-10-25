@@ -1,54 +1,101 @@
 import "server-only";
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { scoped } from "@/lib/platform/logger";
 
-const log = scoped("platform.r2");
+const log = scoped("platform.storage");
+
+function clean(val?: string): string {
+  if (!val) return "";
+  return val.trim().replace(/^["']|["']$/g, "");
+}
 
 /**
- * Cloudflare R2 Client (S3-compatible API).
- *
- * Requirements in environment:
- * - R2_ACCOUNT_ID: Cloudflare Account ID
- * - R2_ACCESS_KEY_ID: S3-compatible Access Key ID
- * - R2_SECRET_ACCESS_KEY: S3-compatible Secret Access Key
- * - R2_BUCKET_NAME: Target bucket name (e.g. basilissa-training-hub)
- * - R2_PUBLIC_DOMAIN: Public custom domain or r2.dev URL (e.g. https://pub-xxx.r2.dev or https://media.basilissagh.com)
+ * Universal S3-compatible Object Storage Client.
+ * Supports:
+ * 1. Neon Object Storage (AWS_ENDPOINT_URL_S3, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_BUCKET_NAME)
+ * 2. Cloudflare R2 (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME)
  */
 
-let r2ClientInstance: S3Client | null = null;
+let s3ClientInstance: S3Client | null = null;
 
-export function isR2Configured(): boolean {
-  return Boolean(
+export function isStorageConfigured(): boolean {
+  const hasNeon = Boolean(
+    process.env.AWS_ENDPOINT_URL_S3 &&
+    process.env.AWS_ACCESS_KEY_ID &&
+    process.env.AWS_SECRET_ACCESS_KEY
+  );
+
+  const hasR2 = Boolean(
     process.env.R2_ACCOUNT_ID &&
     process.env.R2_ACCESS_KEY_ID &&
     process.env.R2_SECRET_ACCESS_KEY &&
     process.env.R2_BUCKET_NAME
   );
+
+  return hasNeon || hasR2;
+}
+
+// Backward compatibility alias
+export const isR2Configured = isStorageConfigured;
+
+function parseBucketAndPrefix(rawBucket: string) {
+  const parts = rawBucket.split("/").map((p) => p.trim()).filter(Boolean);
+  const bucketName = parts[0] || "basilissaops";
+  const prefix = parts.slice(1).join("/");
+  return { bucketName, prefix };
+}
+
+export function getStorageClient(): { client: S3Client; bucketName: string; defaultPrefix: string; isNeon: boolean } | null {
+  const neonEndpoint = clean(process.env.AWS_ENDPOINT_URL_S3);
+  const neonAccessKey = clean(process.env.AWS_ACCESS_KEY_ID);
+  const neonSecretKey = clean(process.env.AWS_SECRET_ACCESS_KEY);
+  const neonRegion = clean(process.env.AWS_REGION) || "us-east-1";
+  const rawNeonBucket = clean(process.env.AWS_BUCKET_NAME) || "basilissaops";
+
+  if (neonEndpoint && neonAccessKey && neonSecretKey) {
+    const { bucketName, prefix } = parseBucketAndPrefix(rawNeonBucket);
+    if (!s3ClientInstance) {
+      s3ClientInstance = new S3Client({
+        region: neonRegion,
+        endpoint: neonEndpoint,
+        credentials: {
+          accessKeyId: neonAccessKey,
+          secretAccessKey: neonSecretKey,
+        },
+        forcePathStyle: true,
+      });
+    }
+    return { client: s3ClientInstance, bucketName, defaultPrefix: prefix, isNeon: true };
+  }
+
+  // Fallback to Cloudflare R2
+  const r2Account = clean(process.env.R2_ACCOUNT_ID);
+  const r2AccessKey = clean(process.env.R2_ACCESS_KEY_ID);
+  const r2SecretKey = clean(process.env.R2_SECRET_ACCESS_KEY);
+  const r2Bucket = clean(process.env.R2_BUCKET_NAME);
+
+  if (r2Account && r2AccessKey && r2SecretKey && r2Bucket) {
+    const { bucketName, prefix } = parseBucketAndPrefix(r2Bucket);
+    if (!s3ClientInstance) {
+      s3ClientInstance = new S3Client({
+        region: "auto",
+        endpoint: `https://${r2Account}.r2.cloudflarestorage.com`,
+        credentials: {
+          accessKeyId: r2AccessKey,
+          secretAccessKey: r2SecretKey,
+        },
+      });
+    }
+    return { client: s3ClientInstance, bucketName, defaultPrefix: prefix, isNeon: false };
+  }
+
+  return null;
 }
 
 export function getR2Client(): S3Client | null {
-  if (r2ClientInstance) return r2ClientInstance;
-
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-
-  if (!accountId || !accessKeyId || !secretAccessKey) {
-    log.warn("Cloudflare R2 is not fully configured; missing credentials.");
-    return null;
-  }
-
-  r2ClientInstance = new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
-  });
-
-  return r2ClientInstance;
+  const storage = getStorageClient();
+  return storage ? storage.client : null;
 }
 
 export type PresignedUploadResult = {
@@ -60,8 +107,7 @@ export type PresignedUploadResult = {
 
 /**
  * Generates a presigned PUT URL allowing the client (browser or mobile app)
- * to upload a video, picture, or PDF directly to Cloudflare R2 without passing
- * through serverless function memory or hitting payload limits.
+ * to upload directly to object storage without hitting server memory limits.
  */
 export async function createPresignedUploadUrl({
   key,
@@ -72,45 +118,73 @@ export async function createPresignedUploadUrl({
   contentType: string;
   expiresInSeconds?: number;
 }): Promise<PresignedUploadResult | null> {
-  const client = getR2Client();
-  const bucketName = process.env.R2_BUCKET_NAME;
-  const publicDomain = process.env.R2_PUBLIC_DOMAIN?.replace(/\/+$/, "");
-
-  if (!client || !bucketName) {
-    log.warn("Cannot generate presigned URL: R2 client or bucket name missing.");
+  const storage = getStorageClient();
+  if (!storage) {
+    log.warn("Cannot generate presigned upload URL: storage credentials missing.");
     return null;
   }
 
+  const { client, bucketName, defaultPrefix, isNeon } = storage;
+  const objectKey = defaultPrefix ? `${defaultPrefix}/${key}` : key;
+
   const command = new PutObjectCommand({
     Bucket: bucketName,
-    Key: key,
+    Key: objectKey,
     ContentType: contentType,
   });
 
   const uploadUrl = await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
 
-  // If public domain is configured (e.g. https://media.basilissagh.com or https://pub-xxx.r2.dev), use it.
-  // Otherwise, default to standard R2 URL structure.
-  const publicUrl = publicDomain
-    ? `${publicDomain}/${key}`
-    : `https://${bucketName}.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${key}`;
+  const customDomain = clean(process.env.R2_PUBLIC_DOMAIN || process.env.STORAGE_PUBLIC_DOMAIN).replace(/\/+$/, "");
+
+  let publicUrl: string;
+  if (customDomain) {
+    publicUrl = `${customDomain}/${objectKey}`;
+  } else if (isNeon) {
+    const endpoint = clean(process.env.AWS_ENDPOINT_URL_S3).replace(/\/+$/, "");
+    publicUrl = `${endpoint}/${bucketName}/${objectKey}`;
+  } else {
+    publicUrl = `https://${bucketName}.${clean(process.env.R2_ACCOUNT_ID)}.r2.cloudflarestorage.com/${objectKey}`;
+  }
 
   return {
     uploadUrl,
     publicUrl,
-    fileKey: key,
+    fileKey: objectKey,
     expiresInSeconds,
   };
 }
 
 /**
- * Deletes a file from Cloudflare R2.
+ * Generates a presigned GET URL for temporary authorized downloading/streaming.
+ */
+export async function createPresignedDownloadUrl({
+  key,
+  expiresInSeconds = 3600 * 24, // 24 hours
+}: {
+  key: string;
+  expiresInSeconds?: number;
+}): Promise<string | null> {
+  const storage = getStorageClient();
+  if (!storage) return null;
+
+  const { client, bucketName } = storage;
+  const command = new GetObjectCommand({
+    Bucket: bucketName,
+    Key: key,
+  });
+
+  return getSignedUrl(client, command, { expiresIn: expiresInSeconds });
+}
+
+/**
+ * Deletes a file from object storage.
  */
 export async function deleteFromR2(fileKey: string): Promise<boolean> {
-  const client = getR2Client();
-  const bucketName = process.env.R2_BUCKET_NAME;
+  const storage = getStorageClient();
+  if (!storage) return false;
 
-  if (!client || !bucketName) return false;
+  const { client, bucketName } = storage;
 
   try {
     await client.send(
@@ -121,7 +195,9 @@ export async function deleteFromR2(fileKey: string): Promise<boolean> {
     );
     return true;
   } catch (error) {
-    log.error("Failed to delete file from R2", { fileKey, error });
+    log.error("Failed to delete file from storage", { fileKey, error });
     return false;
   }
 }
+
+export const deleteFromStorage = deleteFromR2;

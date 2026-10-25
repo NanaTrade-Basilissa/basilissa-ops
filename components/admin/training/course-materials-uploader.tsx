@@ -188,7 +188,7 @@ export function CourseMaterialsUploader({
         throw new Error(actionRes.error || "Failed to save material in database.");
       }
 
-      toast.success(`"${title}" uploaded to Cloudflare R2 and added to course!`);
+      toast.success(`"${title}" uploaded successfully and added to course!`);
       resetState();
       onUploaded?.();
     } catch (err) {
