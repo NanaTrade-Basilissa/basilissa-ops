@@ -58,24 +58,45 @@ export async function POST(req: Request) {
       }
     }
 
-    // Local disk fallback when storage credentials are not present
-    const uploadDir = join(process.cwd(), "public", "uploads", "training", courseId);
-    await mkdir(uploadDir, { recursive: true });
+    // Local disk fallback when storage credentials are not present (development only)
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      return NextResponse.json(
+        {
+          error:
+            "Object storage credentials are missing in Vercel. Please add AWS_ENDPOINT_URL_S3, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_BUCKET_NAME to your Vercel Project Settings > Environment Variables and redeploy.",
+        },
+        { status: 500 }
+      );
+    }
 
-    const filePath = join(uploadDir, fileName);
-    await writeFile(filePath, buffer);
+    try {
+      const uploadDir = join(process.cwd(), "public", "uploads", "training", courseId);
+      await mkdir(uploadDir, { recursive: true });
 
-    const publicUrl = `/uploads/training/${courseId}/${fileName}`;
-    const fileKey = `local/training/${courseId}/${fileName}`;
+      const filePath = join(uploadDir, fileName);
+      await writeFile(filePath, buffer);
 
-    return NextResponse.json({
-      success: true,
-      publicUrl,
-      fileKey,
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType: file.type,
-    });
+      const publicUrl = `/uploads/training/${courseId}/${fileName}`;
+      const fileKey = `local/training/${courseId}/${fileName}`;
+
+      return NextResponse.json({
+        success: true,
+        publicUrl,
+        fileKey,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+      });
+    } catch (diskErr) {
+      console.error("Local disk write error:", diskErr);
+      return NextResponse.json(
+        {
+          error:
+            "Serverless filesystem is read-only and cloud storage credentials are not configured. Please add AWS_ENDPOINT_URL_S3, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_BUCKET_NAME in your environment.",
+        },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json(

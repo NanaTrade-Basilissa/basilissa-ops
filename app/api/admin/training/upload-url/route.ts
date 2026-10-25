@@ -90,11 +90,14 @@ export async function POST(req: Request) {
     const r2Configured = isR2Configured();
 
     if (!r2Configured) {
+      const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
       return NextResponse.json({
         configured: false,
         useFallback: true,
         fileKey: key,
-        message: "Object storage credentials (Neon Object Storage or Cloudflare R2) are not yet configured in environment.",
+        message: isServerless
+          ? "Object storage credentials (AWS_ENDPOINT_URL_S3, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_BUCKET_NAME) are missing in Vercel environment variables."
+          : "Object storage credentials (Neon Object Storage or Cloudflare R2) are not yet configured in environment.",
       });
     }
 
