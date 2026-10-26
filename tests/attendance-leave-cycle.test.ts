@@ -48,7 +48,8 @@ describe("Annual Leave & Anti-Collision Engine", () => {
     it("calculates exact 12-month probation anniversary", () => {
       const hireDate = new Date("2025-06-15T00:00:00.000Z");
       const probationEnd = calculateProbationEndDate(hireDate);
-      expect(probationEnd.toISOString().split("T")[0]).toBe("2026-06-15");
+      expect(probationEnd).not.toBeNull();
+      expect(probationEnd!.toISOString().split("T")[0]).toBe("2026-06-15");
     });
 
     it("evaluates probation clearance accurately", () => {
