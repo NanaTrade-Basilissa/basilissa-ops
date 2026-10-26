@@ -1,0 +1,33 @@
+steps:
+  # 1. Build the multi-stage Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'africa-south1-docker.pkg.dev/$PROJECT_ID/docker-repo/ac-ops-worker:$COMMIT_SHA'
+      - '-t'
+      - 'africa-south1-docker.pkg.dev/$PROJECT_ID/docker-repo/ac-ops-worker:latest'
+      - '.'
+
+  # 2. Push image to Google Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'africa-south1-docker.pkg.dev/$PROJECT_ID/docker-repo/ac-ops-worker:$COMMIT_SHA'
+
+  # 3. Update the Cloud Run Worker Pool
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'beta'
+      - 'run'
+      - 'worker-pools'
+      - 'update'
+      - 'basilissa-ops-worker'
+      - '--region=africa-south1'
+      - '--image=africa-south1-docker.pkg.dev/$PROJECT_ID/docker-repo/ac-ops-worker:$COMMIT_SHA'
+
+images:
+  - 'africa-south1-docker.pkg.dev/$PROJECT_ID/docker-repo/ac-ops-worker:$COMMIT_SHA'
+  - 'africa-south1-docker.pkg.dev/$PROJECT_ID/docker-repo/ac-ops-worker:latest'
+timeout: '1200s'

@@ -283,6 +283,21 @@ async function main(): Promise<void> {
     database: safeDatabaseTarget(),
   });
 
+  // If running on a platform that requires an HTTP health endpoint (e.g. Cloud Run Service),
+  // listen on PORT so container startup and liveness probes pass.
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : null;
+  let healthServer: import("node:http").Server | null = null;
+  if (port && !isNaN(port)) {
+    const http = await import("node:http");
+    healthServer = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("worker alive");
+    });
+    healthServer.listen(port, "0.0.0.0", () => {
+      logger.info(`worker health check listening on port ${port}`);
+    });
+  }
+
   while (!shuttingDown) {
     // A failure here is the loop itself breaking — a lost connection, say —
     // not a job failing. Log and keep polling; the next tick may well work.
@@ -294,6 +309,7 @@ async function main(): Promise<void> {
     await sleep(POLL_INTERVAL_MS);
   }
 
+  healthServer?.close();
   logger.info("worker stopped");
   await prisma.$disconnect();
 }
