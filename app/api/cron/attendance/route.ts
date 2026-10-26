@@ -4,6 +4,7 @@ import {
   dispatchMissedClockInReminders,
   dispatchUpcomingShiftReminders,
   runDailySettlementSweep,
+  dispatchAllLeaveLifecycleReminders,
 } from "@/lib/modules/attendance/jobs";
 import { scoped } from "@/lib/platform/logger";
 
@@ -38,7 +39,7 @@ async function handleCron(request: NextRequest) {
   log.info("Starting attendance cron sweep", { now: now.toISOString() });
 
   try {
-    const [autoClose, reminders, missedClockIn, settlement] = await Promise.all([
+    const [autoClose, reminders, missedClockIn, settlement, leaveReminders] = await Promise.all([
       autoCloseStaleDays(now).catch((err) => {
         log.error("Auto-close sweep error", { err });
         return { error: String(err) };
@@ -55,6 +56,10 @@ async function handleCron(request: NextRequest) {
         log.error("Daily settlement sweep error", { err });
         return { error: String(err) };
       }),
+      dispatchAllLeaveLifecycleReminders(now).catch((err) => {
+        log.error("Leave reminders sweep error", { err });
+        return { error: String(err) };
+      }),
     ]);
 
     log.info("Attendance cron sweep completed successfully", {
@@ -62,6 +67,7 @@ async function handleCron(request: NextRequest) {
       reminders,
       missedClockIn,
       settlement,
+      leaveReminders,
     });
 
     return NextResponse.json({
@@ -72,6 +78,7 @@ async function handleCron(request: NextRequest) {
         reminders,
         missedClockIn,
         settlement,
+        leaveReminders,
       },
     });
   } catch (error) {

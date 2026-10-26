@@ -10,6 +10,7 @@ import {
   runDailySettlementSweep,
   dispatchUpcomingShiftReminders,
   dispatchMissedClockInReminders,
+  dispatchAllLeaveLifecycleReminders,
 } from "@/lib/modules/attendance/jobs";
 import { purgeExpiredPasswordResets } from "@/lib/modules/identity/jobs";
 import { expireUrgentBanners, remindUnacknowledged } from "@/lib/modules/announcements/jobs";
@@ -176,6 +177,21 @@ async function runPeriodic(now: number): Promise<void> {
     }
   } catch (error) {
     logger.error("daily settlement sweep failed", { error });
+  }
+
+  try {
+    const leaveSummary = await dispatchAllLeaveLifecycleReminders(new Date());
+    const totalDispatched =
+      leaveSummary.upcoming14dDispatched +
+      leaveSummary.upcoming3dDispatched +
+      leaveSummary.activeTodayDispatched +
+      leaveSummary.returnTomorrowDispatched +
+      leaveSummary.windowCountdownDispatched;
+    if (totalDispatched > 0) {
+      logger.info("leave lifecycle reminders sweep", leaveSummary);
+    }
+  } catch (error) {
+    logger.error("leave lifecycle reminders sweep failed", { error });
   }
 
   // Expired password reset tokens, and the send jobs whose payloads carry the

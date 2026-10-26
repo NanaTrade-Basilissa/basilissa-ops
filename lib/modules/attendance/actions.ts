@@ -1101,3 +1101,108 @@ export async function generatePatternWeekAction(
   revalidateRota();
   return { ok: true, ...result };
 }
+
+export async function saveLeaveCycleAction(data: {
+  id?: string;
+  year: number;
+  title?: string;
+  windowStart: string;
+  windowEnd: string;
+  blackoutWeeks: string[];
+  status: "UPCOMING" | "OPEN" | "AUTO_SCHEDULING" | "FINALIZED";
+}): Promise<ActionResult> {
+  const actor = await requirePermission("attendance:write");
+  if (!actor) return { ok: false, error: "Unauthorized" };
+
+  try {
+    const windowStart = new Date(`${data.windowStart}T00:00:00.000Z`);
+    const windowEnd = new Date(`${data.windowEnd}T23:59:59.999Z`);
+
+    if (data.id) {
+      await prisma.leaveCycle.update({
+        where: { id: data.id },
+        data: {
+          title: data.title?.trim() || null,
+          windowStart,
+          windowEnd,
+          blackoutWeeks: data.blackoutWeeks,
+          status: data.status,
+        },
+      });
+    } else {
+      const cycle = await prisma.leaveCycle.create({
+        data: {
+          year: data.year,
+          title: data.title?.trim() || `${data.year} Annual Leave Planning`,
+          windowStart,
+          windowEnd,
+          blackoutWeeks: data.blackoutWeeks,
+          status: data.status,
+        },
+      });
+      // Sync allocations for active employees
+      const { syncLeaveAllocations } = await import("./leave-cycle");
+      await syncLeaveAllocations(cycle.id);
+    }
+
+    revalidatePath("/admin/leave");
+    return { ok: true };
+  } catch (err) {
+    console.error("saveLeaveCycleAction error:", err);
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to save leave cycle" };
+  }
+}
+
+export async function runAutoSchedulerAction(cycleId: string): Promise<ActionResult & { summary?: any }> {
+  const actor = await requirePermission("attendance:write");
+  if (!actor) return { ok: false, error: "Unauthorized" };
+
+  try {
+    const { runFairAutoScheduler } = await import("./leave-cycle");
+    const result = await runFairAutoScheduler(cycleId, false);
+
+    revalidatePath("/admin/leave");
+    revalidatePath("/admin/shifts");
+    return {
+      ok: true,
+      summary: result.summary,
+    };
+  } catch (err) {
+    console.error("runAutoSchedulerAction error:", err);
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to run auto-scheduler" };
+  }
+}
+
+export async function saveBranchQuotaAction(data: {
+  branchId: string;
+  jobCategory: string;
+  maxConcurrent: number;
+}): Promise<ActionResult> {
+  const actor = await requirePermission("attendance:write", { branchId: data.branchId });
+  if (!actor) return { ok: false, error: "Unauthorized" };
+
+  try {
+    await prisma.branchLeaveQuota.upsert({
+      where: {
+        branchId_jobCategory: {
+          branchId: data.branchId,
+          jobCategory: data.jobCategory,
+        },
+      },
+      create: {
+        branchId: data.branchId,
+        jobCategory: data.jobCategory,
+        maxConcurrent: Math.max(1, data.maxConcurrent),
+      },
+      update: {
+        maxConcurrent: Math.max(1, data.maxConcurrent),
+      },
+    });
+
+    revalidatePath("/admin/leave");
+    return { ok: true };
+  } catch (err) {
+    console.error("saveBranchQuotaAction error:", err);
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to save branch quota" };
+  }
+}

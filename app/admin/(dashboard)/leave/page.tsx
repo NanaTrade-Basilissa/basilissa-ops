@@ -4,6 +4,8 @@ import { prisma } from "@/lib/platform/prisma";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { StatCard } from "@/components/admin/stat-card";
 import { LeaveRequestsTable, type SerializedLeaveRequest } from "@/components/admin/leave-requests-table";
+import { AnnualLeaveAdminPanel } from "@/components/admin/annual-leave-admin-panel";
+import { getOrCreateCurrentLeaveCycle } from "@/lib/modules/attendance/server";
 
 export const metadata: Metadata = { title: "Leave" };
 export const dynamic = "force-dynamic";
@@ -16,11 +18,6 @@ function first(value: string | string[] | undefined): string | undefined {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/**
- * Leave requests, moved out of the attendance tabs onto their own page. Same
- * permission as before; reviewing re-checks `attendance:write` for the
- * request's branch inside the Server Action.
- */
 export default async function LeavePage({ searchParams }: { searchParams: SearchParams }) {
   const { actor, scope } = await requireAnyBranchPermission("attendance:read");
   const raw = await searchParams;
@@ -39,6 +36,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
       ? { branchId: { in: allowedBranchIds } }
       : {};
 
+  // Fetch Requests
   const requests = await prisma.leaveRequest.findMany({
     where: {
       ...branchFilter,
@@ -73,6 +71,8 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
     type: r.type,
     startDate: r.startDate.toISOString().slice(0, 10),
     endDate: r.endDate.toISOString().slice(0, 10),
+    isoWeek: r.isoWeek,
+    attachmentUrl: r.attachmentUrl,
     daysCount: Math.max(1, Math.round((r.endDate.getTime() - r.startDate.getTime()) / DAY_MS) + 1),
     reason: r.reason,
     status: r.status,
@@ -84,6 +84,58 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
 
   const count = (status: SerializedLeaveRequest["status"]) => requests.filter((r) => r.status === status).length;
 
+  // Load or initialize LeaveCycle
+  const cycle = await getOrCreateCurrentLeaveCycle();
+  const allocations = await prisma.leaveAllocation.findMany({
+    where: { cycleId: cycle.id },
+    select: { isEligible: true, scheduledDays: true },
+  });
+
+  const totalEligible = allocations.filter((a) => a.isEligible).length;
+  const fullyScheduledCount = allocations.filter((a) => a.isEligible && a.scheduledDays >= 15).length;
+  const partiallyScheduledCount = allocations.filter((a) => a.isEligible && a.scheduledDays > 0 && a.scheduledDays < 15).length;
+  const unscheduledCount = allocations.filter((a) => a.isEligible && a.scheduledDays === 0).length;
+
+  const currentCycleData = {
+    id: cycle.id,
+    year: cycle.year,
+    title: cycle.title,
+    status: cycle.status,
+    windowStartStr: cycle.windowStart.toISOString().slice(0, 10),
+    windowEndStr: cycle.windowEnd.toISOString().slice(0, 10),
+    blackoutWeeks: cycle.blackoutWeeks,
+    autoScheduledAt: cycle.autoScheduledAt?.toISOString() ?? null,
+    totalEligible,
+    fullyScheduledCount,
+    partiallyScheduledCount,
+    unscheduledCount,
+  };
+
+  // Load all branches and their quotas
+  const branches = await prisma.branch.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      leaveQuotas: {
+        select: { jobCategory: true, maxConcurrent: true },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const branchQuotaData = branches.map((b) => {
+    const quotaMap: Record<string, number> = {};
+    for (const q of b.leaveQuotas) {
+      quotaMap[q.jobCategory] = q.maxConcurrent;
+    }
+    return {
+      id: b.id,
+      name: b.name,
+      quotas: quotaMap,
+    };
+  });
+
   return (
     <div className="space-y-6 min-w-0 max-w-full">
       <div className="grid gap-4 sm:grid-cols-3">
@@ -91,7 +143,17 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
         <StatCard label="Approved Leave" value={String(count("APPROVED"))} icon={CalendarCheck} />
         <StatCard label="Declined" value={String(count("REJECTED"))} icon={AlertTriangle} />
       </div>
-      <LeaveRequestsTable requests={serialized} canReview={canWrite} />
+
+      <AnnualLeaveAdminPanel
+        currentCycle={currentCycleData}
+        branches={branchQuotaData}
+        canManage={canWrite}
+      />
+
+      <div className="space-y-2 pt-2">
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">All Staff Leave Records</h3>
+        <LeaveRequestsTable requests={serialized} canReview={canWrite} />
+      </div>
     </div>
   );
 }

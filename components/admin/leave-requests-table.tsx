@@ -7,7 +7,7 @@ import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { LeaveReviewDialog } from "@/components/admin/leave-review-dialog";
 import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
 import { TableRowActions } from "@/components/admin/table-row-actions";
-import { CheckCircle2, Clock, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, XCircle, FileText } from "lucide-react";
 
 export interface SerializedLeaveRequest {
   id: string;
@@ -20,6 +20,8 @@ export interface SerializedLeaveRequest {
   type: string;
   startDate: string;
   endDate: string;
+  isoWeek?: string | null;
+  attachmentUrl?: string | null;
   daysCount: number;
   reason: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
@@ -108,7 +110,30 @@ export function LeaveRequestsTable({
     }),
     columnHelper.accessor("type", {
       header: "Type",
-      cell: (info) => getLeaveTypeBadge(info.getValue()),
+      cell: ({ row }) => (
+        <div className="flex flex-col gap-1 items-start">
+          <div className="flex items-center gap-1">
+            {getLeaveTypeBadge(row.original.type)}
+            {row.original.isoWeek && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 font-mono">
+                {row.original.isoWeek}
+              </Badge>
+            )}
+          </div>
+          {row.original.attachmentUrl && (
+            <a
+              href={row.original.attachmentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[11px] text-rose-600 hover:underline font-medium"
+            >
+              <FileText className="size-3" />
+              <span>Medical Report</span>
+            </a>
+          )}
+        </div>
+      ),
     }),
     columnHelper.display({
       id: "dates",
@@ -181,6 +206,7 @@ export function LeaveRequestsTable({
                               daysCount={r.daysCount}
                               reason={r.reason}
                               branchName={r.branchName}
+                              attachmentUrl={r.attachmentUrl}
                             />
                           ),
                         },

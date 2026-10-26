@@ -22,6 +22,8 @@ export * from "./mobile-auth";
 export * from "./review-demo";
 export * from "./excel-export";
 export * from "./leave";
+export * from "./leave-cycle";
+export * from "./sick-leave";
 export * from "./reminders";
 export * from "./holidays";
 export * from "./cover";

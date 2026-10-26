@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, X, CalendarCheck, Clock } from "lucide-react";
+import { Check, X, CalendarCheck, Clock, FileText, ExternalLink } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,7 @@ interface LeaveReviewDialogProps {
   daysCount: number;
   reason: string;
   branchName?: string | null;
+  attachmentUrl?: string | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   trigger?: React.ReactElement;
@@ -42,6 +43,7 @@ export function LeaveReviewDialog({
   daysCount,
   reason,
   branchName,
+  attachmentUrl,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   trigger,
@@ -133,6 +135,27 @@ export function LeaveReviewDialog({
                 {reason}
               </p>
             </div>
+
+            {attachmentUrl && (
+              <div className="pt-1">
+                <span className="text-xs font-medium text-muted-foreground">Doctor&apos;s Report / Medical Document:</span>
+                <div className="mt-1 flex items-center justify-between rounded border border-border/80 bg-background p-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="size-4 text-rose-600" />
+                    <span className="text-xs font-medium">Doctor&apos;s Certificate</span>
+                  </div>
+                  <a
+                    href={attachmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+                  >
+                    <span>View / Download</span>
+                    <ExternalLink className="size-3" />
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">

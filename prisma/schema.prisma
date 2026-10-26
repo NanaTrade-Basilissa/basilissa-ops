@@ -296,6 +296,7 @@ model Branch {
   submissions FeedbackSubmission[]
   employees   EmployeeBranchAssignment[]
   leaveRequests LeaveRequest[]
+  leaveQuotas BranchLeaveQuota[]
   feedbackRecipients BranchFeedbackRecipient[]
   devices     Device[]
   coverShifts ScheduleException[]
@@ -357,6 +358,7 @@ model Employee {
   phone     String?
 
   hireDate        DateTime?
+  probationEndDate DateTime?
   terminationDate DateTime?
   status          EmploymentStatus @default(ACTIVE)
 
@@ -369,6 +371,7 @@ model Employee {
 
   assessmentInvitations AssessmentInvitation[]
   leaveRequests LeaveRequest[]
+  leaveAllocations LeaveAllocation[]
 
   announcementRecipients AnnouncementRecipient[]
   notifications          Notification[]
@@ -705,11 +708,20 @@ model LeaveRequest {
   branchId     String?
   branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
+  cycleId      String?
+  cycle        LeaveCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+
   type         LeaveType
   startDate    DateTime    @db.Date
   endDate      DateTime    @db.Date
+  isoWeek      String?     // e.g. "2027-W14" for annual weekly planning
   reason       String
   status       LeaveStatus @default(PENDING)
+
+  // Sick leave doctor report or supporting document
+  attachmentUrl String?
+  attachmentKey String?
+  isAutoScheduled Boolean @default(false)
 
   reviewedBy   String?
   reviewer     User?       @relation("LeaveReviewedBy", fields: [reviewedBy], references: [id], onDelete: SetNull)
@@ -722,7 +734,72 @@ model LeaveRequest {
   @@index([employeeId, status])
   @@index([startDate, endDate])
   @@index([branchId, status])
+  @@index([cycleId, status])
+  @@index([branchId, isoWeek, status])
   @@map("leave_requests")
+}
+
+enum LeaveCycleStatus {
+  UPCOMING
+  OPEN
+  AUTO_SCHEDULING
+  FINALIZED
+}
+
+/// Annual Planning Cycles (e.g. 2027 Annual Leave Window)
+model LeaveCycle {
+  id              String           @id @default(cuid())
+  year            Int              @unique
+  title           String?          // e.g. "2027 Annual Leave Selection"
+  windowStart     DateTime         @db.Date
+  windowEnd       DateTime         @db.Date
+  status          LeaveCycleStatus @default(UPCOMING)
+  blackoutWeeks   String[]         @default([]) // ISO weeks e.g. ["2027-W14", "2027-W51", "2027-W52"]
+  autoScheduledAt DateTime?
+
+  allocations     LeaveAllocation[]
+  requests        LeaveRequest[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@map("leave_cycles")
+}
+
+/// Tracks employee entitlement & booked weeks per cycle
+model LeaveAllocation {
+  id               String      @id @default(cuid())
+  employeeId       String
+  employee         Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cycleId          String
+  cycle            LeaveCycle  @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  entitledDays     Int         @default(15)
+  scheduledDays    Int         @default(0)
+  autoAssigned     Boolean     @default(false)
+  isEligible       Boolean     @default(true)
+  probationEndDate DateTime?   @db.Date
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@unique([employeeId, cycleId])
+  @@index([cycleId, isEligible])
+  @@map("leave_allocations")
+}
+
+/// Branch Staffing Concurrency Limits (Anti-Collision)
+model BranchLeaveQuota {
+  id            String   @id @default(cuid())
+  branchId      String
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  jobCategory   String   // "COOK", "FRONT_OF_HOUSE", "CLEANER", "SUPERVISOR", "OTHER"
+  maxConcurrent Int      @default(1)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([branchId, jobCategory])
+  @@map("branch_leave_quotas")
 }
 
 enum AttendanceDirection {
