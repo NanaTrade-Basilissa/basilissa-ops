@@ -6,6 +6,9 @@ import {
   runDailySettlementSweep,
   dispatchAllLeaveLifecycleReminders,
 } from "@/lib/modules/attendance/jobs";
+import { drainPendingJobs } from "@/lib/modules/identity/jobs-admin";
+import { autoSubmitExpiredAttempts } from "@/lib/modules/aptitude/jobs";
+import { expireUrgentBanners } from "@/lib/modules/announcements/jobs";
 import { scoped } from "@/lib/platform/logger";
 
 const log = scoped("api.cron.attendance");
@@ -39,7 +42,7 @@ async function handleCron(request: NextRequest) {
   log.info("Starting attendance cron sweep", { now: now.toISOString() });
 
   try {
-    const [autoClose, reminders, missedClockIn, settlement, leaveReminders] = await Promise.all([
+    const [autoClose, reminders, missedClockIn, settlement, leaveReminders, jobSweep, aptitudeSweep, bannerSweep] = await Promise.all([
       autoCloseStaleDays(now).catch((err) => {
         log.error("Auto-close sweep error", { err });
         return { error: String(err) };
@@ -60,14 +63,29 @@ async function handleCron(request: NextRequest) {
         log.error("Leave reminders sweep error", { err });
         return { error: String(err) };
       }),
+      drainPendingJobs(10).catch((err) => {
+        log.error("Job queue drain error", { err });
+        return { error: String(err) };
+      }),
+      autoSubmitExpiredAttempts(now).catch((err) => {
+        log.error("Aptitude auto-submit sweep error", { err });
+        return { error: String(err) };
+      }),
+      expireUrgentBanners(now).catch((err) => {
+        log.error("Banner expiry sweep error", { err });
+        return { error: String(err) };
+      }),
     ]);
 
-    log.info("Attendance cron sweep completed successfully", {
+    log.info("Cron sweep completed successfully", {
       autoClose,
       reminders,
       missedClockIn,
       settlement,
       leaveReminders,
+      jobSweep,
+      aptitudeSweep,
+      bannerSweep,
     });
 
     return NextResponse.json({
@@ -79,6 +97,9 @@ async function handleCron(request: NextRequest) {
         missedClockIn,
         settlement,
         leaveReminders,
+        jobSweep,
+        aptitudeSweep,
+        bannerSweep,
       },
     });
   } catch (error) {

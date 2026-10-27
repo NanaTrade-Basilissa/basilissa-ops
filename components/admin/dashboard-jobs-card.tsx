@@ -112,10 +112,10 @@ export function DashboardJobsCard({
       try {
         const res = await retryAnyJobAction(jobId);
         if (res.success) {
-          toast.success("Job re-queued for immediate execution");
+          toast.success("Job executed successfully");
           router.refresh();
         } else {
-          toast.error(res.error ?? "Failed to retry job");
+          toast.error(res.error ?? "Failed to execute job");
         }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Error retrying job");

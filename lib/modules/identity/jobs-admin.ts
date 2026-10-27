@@ -2,6 +2,8 @@ import "server-only";
 import { JobStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { recordAudit } from "@/lib/platform/audit";
+import { markFailed, markSucceeded } from "@/lib/platform/jobs";
+import { resolveHandler } from "@/worker/registry";
 import { auditActorFrom } from "./audit";
 import { can, type Actor } from "./authorization";
 import {
@@ -183,7 +185,7 @@ export async function listAllJobs(options: ListAllJobsOptions = {}): Promise<Lis
 }
 
 /**
- * Retries any failed, dead, or stalled job by resetting attempts and scheduling for immediate pickup.
+ * Retries or runs any job directly, executing its handler immediately.
  */
 export async function retryAnyJob(
   jobId: string,
@@ -198,28 +200,129 @@ export async function retryAnyJob(
     return { success: false, error: "Job not found" };
   }
 
+  const handler = resolveHandler(job.type);
+  if (!handler) {
+    // If no direct handler found, reset to PENDING for fallback worker pickup
+    await prisma.job.update({
+      where: { id: jobId },
+      data: {
+        status: JobStatus.PENDING,
+        runAt: new Date(),
+        attempts: 0,
+        lastError: null,
+        lockedAt: null,
+        lockedBy: null,
+        completedAt: null,
+      },
+    });
+    return { success: false, error: `No handler registered for job type: ${job.type}` };
+  }
+
+  // Claim for immediate direct execution
   await prisma.job.update({
     where: { id: jobId },
     data: {
-      status: JobStatus.PENDING,
-      runAt: new Date(),
-      attempts: 0,
+      status: JobStatus.RUNNING,
+      lockedAt: new Date(),
+      lockedBy: `admin:${actor.email ?? actor.userId ?? "direct"}`,
+      attempts: { increment: 1 },
       lastError: null,
-      lockedAt: null,
-      lockedBy: null,
-      completedAt: null,
     },
   });
 
-  await recordAudit({
-    actor: auditActorFrom(actor),
-    action: "jobs.retry",
-    entityType: "job",
-    entityId: jobId,
-    after: { status: "PENDING", attempts: 0, runAt: "immediate", type: job.type },
-  });
+  try {
+    await handler(job.payload, {
+      jobId: job.id,
+      retrying: job.attempts > 0 || job.lastError !== null,
+    });
+    await markSucceeded(job.id);
 
-  return { success: true };
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "jobs.retry",
+      entityType: "job",
+      entityId: jobId,
+      after: { status: "SUCCEEDED", runAt: "immediate", type: job.type },
+    });
+
+    return { success: true };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    await markFailed(
+      {
+        id: job.id,
+        type: job.type,
+        payload: job.payload,
+        attempts: job.attempts + 1,
+        maxAttempts: job.maxAttempts,
+        lastError: errorMsg,
+      },
+      err,
+    );
+
+    return { success: false, error: errorMsg };
+  }
+}
+
+/**
+ * Sweeps and executes up to `limit` pending background jobs directly.
+ * Useful for cron sweeps and serverless environments where a continuous
+ * long-running worker container is unavailable.
+ */
+export async function drainPendingJobs(
+  limit = 10,
+): Promise<{ examined: number; succeeded: number; failed: number }> {
+  type Claimed = {
+    id: string;
+    type: string;
+    payload: unknown;
+    attempts: number;
+    maxAttempts: number;
+    lastError: string | null;
+  };
+
+  const pending = await prisma.$queryRaw<Claimed[]>`
+    UPDATE "jobs" SET
+      "status"    = 'RUNNING',
+      "lockedAt"  = NOW(),
+      "lockedBy"  = 'cron-sweep',
+      "attempts"  = "attempts" + 1,
+      "updatedAt" = NOW()
+    WHERE "id" IN (
+      SELECT "id" FROM "jobs"
+      WHERE "status" = 'PENDING' AND "runAt" <= NOW()
+      ORDER BY "runAt" ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT ${limit}
+    )
+    RETURNING "id", "type", "payload", "attempts", "maxAttempts", "lastError"
+  `;
+
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const job of pending) {
+    const handler = resolveHandler(job.type);
+    if (!handler) {
+      await markFailed(job, new Error(`No handler registered for job type "${job.type}"`));
+      failed++;
+      continue;
+    }
+
+    try {
+      await handler(job.payload, {
+        jobId: job.id,
+        retrying: job.attempts > 1 || job.lastError !== null,
+      });
+      await markSucceeded(job.id);
+      succeeded++;
+    } catch (err) {
+      await markFailed(job, err);
+      failed++;
+    }
+  }
+
+  return { examined: pending.length, succeeded, failed };
 }
 
 /**
