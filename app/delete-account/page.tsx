@@ -29,8 +29,18 @@ export const metadata: Metadata = {
 export default function DeleteAccountPage() {
   return (
     <div className="flex min-h-screen flex-col bg-secondary/40">
-      <header className="flex items-center justify-center border-b border-border/60 bg-background px-4 py-4">
-        <Logo />
+      <header className="border-b border-border/60 bg-background px-4 py-4">
+        <div className="mx-auto flex max-w-4xl items-center justify-between">
+          <Logo />
+          <nav className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
+            <Link href="/support" className="hover:text-foreground transition-colors">
+              App Support
+            </Link>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">
+              Privacy Policy
+            </Link>
+          </nav>
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6 sm:py-10">
