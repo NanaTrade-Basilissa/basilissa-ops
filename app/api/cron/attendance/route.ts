@@ -6,7 +6,7 @@ import {
   runDailySettlementSweep,
   dispatchAllLeaveLifecycleReminders,
 } from "@/lib/modules/attendance/jobs";
-import { drainPendingJobs } from "@/lib/modules/identity/jobs";
+import { drainPendingJobs } from "@/lib/modules/identity/server";
 import { autoSubmitExpiredAttempts } from "@/lib/modules/aptitude/jobs";
 import { expireUrgentBanners } from "@/lib/modules/announcements/jobs";
 import { scoped } from "@/lib/platform/logger";

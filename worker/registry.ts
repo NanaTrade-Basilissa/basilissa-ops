@@ -1,43 +1,46 @@
 import type { JobContext } from "@/lib/platform/jobs";
-import { FEEDBACK_NOTIFY, handleFeedbackNotify } from "@/lib/modules/feedback/jobs";
-import { PASSWORD_RESET_SEND, handlePasswordResetSend } from "@/lib/modules/identity/jobs";
-import {
-  ASSESSMENT_INVITATION_SEND,
-  handleAssessmentInvitationSend,
-  ASSESSMENT_NOTIFY_HR,
-  handleAssessmentNotifyHr,
-} from "@/lib/modules/assessments/jobs";
-import {
-  APTITUDE_INVITATION_SEND,
-  handleAptitudeInvitationSend,
-  APTITUDE_NOTIFY_HR,
-  handleAptitudeNotifyHr,
-} from "@/lib/modules/aptitude/jobs";
-import { ANNOUNCEMENT_FANOUT, handleAnnouncementFanout } from "@/lib/modules/announcements/jobs";
 
 /**
  * Job type -> handler.
  *
- * Lives here rather than in `lib/platform/jobs.ts` because it imports from
- * domain modules, and platform must never depend on a module. The queue owns
- * the mechanism; this owns the vocabulary.
+ * Lives here rather than in `lib/platform/jobs.ts` because it connects the
+ * platform queue mechanism to domain modules.
  *
- * Adding a job type means adding a line here. A queued job whose type is
- * missing from this map is treated as a failure and retried, then dies: which
- * is the right outcome for a job enqueued by a newer deploy than the worker
- * running it, since the worker will be replaced shortly and the retry will
- * then succeed.
+ * Handlers are loaded dynamically on invocation so that importing the registry
+ * (e.g. from admin job management tools or cron sweeps) introduces zero static
+ * module dependencies, preventing circular import loops during bundle evaluation.
  */
 export type JobHandler = (payload: unknown, context: JobContext) => Promise<void>;
 
 export const HANDLERS: Record<string, JobHandler> = {
-  [FEEDBACK_NOTIFY]: handleFeedbackNotify,
-  [PASSWORD_RESET_SEND]: handlePasswordResetSend,
-  [ASSESSMENT_INVITATION_SEND]: handleAssessmentInvitationSend,
-  [ASSESSMENT_NOTIFY_HR]: handleAssessmentNotifyHr,
-  [APTITUDE_INVITATION_SEND]: handleAptitudeInvitationSend,
-  [APTITUDE_NOTIFY_HR]: handleAptitudeNotifyHr,
-  [ANNOUNCEMENT_FANOUT]: handleAnnouncementFanout,
+  "feedback.notify": async (payload, context) => {
+    const { handleFeedbackNotify } = await import("@/lib/modules/feedback/jobs");
+    return handleFeedbackNotify(payload, context);
+  },
+  "identity.password_reset_send": async (payload, context) => {
+    const { handlePasswordResetSend } = await import("@/lib/modules/identity/jobs");
+    return handlePasswordResetSend(payload, context);
+  },
+  "assessments.invitation_send": async (payload, context) => {
+    const { handleAssessmentInvitationSend } = await import("@/lib/modules/assessments/jobs");
+    return handleAssessmentInvitationSend(payload, context);
+  },
+  "assessments.notify_hr": async (payload, context) => {
+    const { handleAssessmentNotifyHr } = await import("@/lib/modules/assessments/jobs");
+    return handleAssessmentNotifyHr(payload, context);
+  },
+  "aptitude.invitation_send": async (payload, context) => {
+    const { handleAptitudeInvitationSend } = await import("@/lib/modules/aptitude/jobs");
+    return handleAptitudeInvitationSend(payload, context);
+  },
+  "aptitude.notify_hr": async (payload, context) => {
+    const { handleAptitudeNotifyHr } = await import("@/lib/modules/aptitude/jobs");
+    return handleAptitudeNotifyHr(payload, context);
+  },
+  "announcements.fanout": async (payload) => {
+    const { handleAnnouncementFanout } = await import("@/lib/modules/announcements/jobs");
+    return handleAnnouncementFanout(payload);
+  },
 };
 
 export function resolveHandler(type: string): JobHandler | undefined {
