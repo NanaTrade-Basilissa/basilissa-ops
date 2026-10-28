@@ -23,6 +23,7 @@ const log = scoped("identity.password-reset");
 
 export const PASSWORD_RESET_SEND = "identity.password_reset_send";
 export { getHrNotificationEmails } from "./hr-recipients";
+export { drainPendingJobs } from "./jobs-admin";
 
 /**
  * The token travels in the payload, unlike every other job in this codebase,

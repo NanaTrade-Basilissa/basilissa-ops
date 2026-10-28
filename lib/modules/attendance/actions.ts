@@ -1153,7 +1153,7 @@ export async function saveLeaveCycleAction(data: {
   }
 }
 
-export async function runAutoSchedulerAction(cycleId: string): Promise<ActionResult & { summary?: any }> {
+export async function runAutoSchedulerAction(cycleId: string): Promise<ActionResult & { summary?: unknown }> {
   const actor = await requirePermission("attendance:write");
   if (!actor) return { ok: false, error: "Unauthorized" };
 

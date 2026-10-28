@@ -6,7 +6,7 @@ import {
   getIsoWeekString,
   getDatesFromIsoWeek,
   getAllWeeksInYear,
-} from "@/lib/modules/attendance/leave-cycle";
+} from "@/lib/modules/attendance/policy";
 
 describe("Annual Leave & Anti-Collision Engine", () => {
   describe("Job Category Normalization (Anti-Collision grouping)", () => {

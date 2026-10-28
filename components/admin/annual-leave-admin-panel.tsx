@@ -381,7 +381,11 @@ export function AnnualLeaveAdminPanel({
               <select
                 id="status"
                 value={cycleStatus}
-                onChange={(e) => setCycleStatus(e.target.value as any)}
+                onChange={(e) =>
+                  setCycleStatus(
+                    e.target.value as "UPCOMING" | "OPEN" | "AUTO_SCHEDULING" | "FINALIZED"
+                  )
+                }
                 className="mt-1 w-full rounded border border-border bg-background p-2 text-xs"
               >
                 <option value="UPCOMING">UPCOMING (Not yet open to staff)</option>

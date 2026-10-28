@@ -356,7 +356,7 @@ async function checkJobDedupe(dedupeKey: string): Promise<boolean> {
 
 async function recordJobDedupe(
   dedupeKey: string,
-  meta: Record<string, any>,
+  meta: Record<string, unknown>,
   now: Date
 ): Promise<void> {
   await prisma.job.create({
