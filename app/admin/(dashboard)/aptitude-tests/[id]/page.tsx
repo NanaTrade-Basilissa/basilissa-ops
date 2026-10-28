@@ -3,7 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckCircle2, ChevronLeft, Timer, Trophy, Users } from "lucide-react";
 import { can, requirePermission } from "@/lib/modules/identity/server";
-import { aptitudeTestSummary, getAptitudeTestForEditing, listInvitationsPaginated } from "@/lib/modules/aptitude/server";
+import {
+  aptitudeTestSummary,
+  getAptitudeTestForEditing,
+  listInvitationsPaginated,
+} from "@/lib/modules/aptitude/server";
 import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
 import {
   resendInvitationAction,
@@ -11,6 +15,7 @@ import {
 } from "@/lib/modules/aptitude/actions";
 import { AptitudeTestActions } from "@/components/admin/aptitude-test-actions";
 import { AptitudeResponsesTable } from "@/components/admin/aptitude-responses-table";
+import { AptitudeCandidatesFilters } from "@/components/admin/aptitude-candidates-filters";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { StatCard } from "@/components/admin/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +32,23 @@ function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+const STATUS_OPTIONS = [
+  { value: "ALL", label: "All Candidate Statuses" },
+  { value: "COMPLETED", label: "Completed (Submitted)" },
+  { value: "TIMED_OUT", label: "Timed Out (Auto-submitted)" },
+  { value: "STARTED", label: "Started / In Progress" },
+  { value: "NOT_STARTED", label: "Not Started" },
+  { value: "WITHDRAWN", label: "Withdrawn" },
+  { value: "EXPIRED", label: "Expired" },
+];
+
+const SCORE_OPTIONS = [
+  { value: "ALL", label: "All Scores" },
+  { value: "ZERO", label: "Score = 0 (Zero Points)" },
+  { value: "PASSED", label: "Passed" },
+  { value: "FAILED", label: "Did Not Pass" },
+];
+
 export default async function AptitudeTestPage({
   params,
   searchParams,
@@ -39,11 +61,22 @@ export default async function AptitudeTestPage({
   const canWrite = can(actor, "aptitude:write");
 
   const rawParams = await searchParams;
-  const page = Number(first(rawParams.page)) || 1;
+  const page = Math.max(1, Number(first(rawParams.page)) || 1);
+  const rawPageSize = Number(first(rawParams.pageSize)) || 10;
+  const pageSize = [10, 20, 50].includes(rawPageSize) ? rawPageSize : 10;
+  const activeSearch = (first(rawParams.search) || "").trim();
+  const activeStatus = first(rawParams.status) || "ALL";
+  const activeScore = first(rawParams.score) || "ALL";
 
   const [test, paginatedResult, summary] = await Promise.all([
     getAptitudeTestForEditing(id),
-    listInvitationsPaginated(id, { page, pageSize: 10 }),
+    listInvitationsPaginated(id, {
+      page,
+      pageSize,
+      search: activeSearch,
+      status: activeStatus,
+      scoreFilter: activeScore,
+    }),
     aptitudeTestSummary(id),
   ]);
 
@@ -57,11 +90,17 @@ export default async function AptitudeTestPage({
   const completionRate =
     summary.invited > 0 ? `${Math.round((summary.submitted / summary.invited) * 100)}%` : "-";
 
-  function pageHref(targetPage: number) {
-    return targetPage === 1
-      ? `/admin/aptitude-tests/${id}`
-      : `/admin/aptitude-tests/${id}?page=${targetPage}`;
-  }
+  const makeFilterUrl = (newPage: number, newPageSize?: number) => {
+    const sp = new URLSearchParams();
+    if (activeSearch) sp.set("search", activeSearch);
+    if (activeStatus !== "ALL") sp.set("status", activeStatus);
+    if (activeScore !== "ALL") sp.set("score", activeScore);
+    const ps = newPageSize ?? pageSize;
+    if (ps !== 10) sp.set("pageSize", String(ps));
+    if (newPage > 1) sp.set("page", String(newPage));
+    const qs = sp.toString();
+    return qs ? `/admin/aptitude-tests/${id}?${qs}` : `/admin/aptitude-tests/${id}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -81,7 +120,9 @@ export default async function AptitudeTestPage({
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
-            <span>{test.sections.length} sections · {questionCount} questions</span>
+            <span>
+              {test.sections.length} sections · {questionCount} questions
+            </span>
             <span>
               ·{" "}
               {test.sections.some((s) => (s.timeLimitMinutes ?? 0) > 0)
@@ -137,6 +178,13 @@ export default async function AptitudeTestPage({
           )}
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Candidate Search & Filter Toolbar */}
+          <AptitudeCandidatesFilters
+            basePath={`/admin/aptitude-tests/${id}`}
+            statusOptions={STATUS_OPTIONS}
+            scoreOptions={SCORE_OPTIONS}
+          />
+
           <AptitudeResponsesTable
             testId={test.id}
             canWrite={canWrite}
@@ -149,8 +197,10 @@ export default async function AptitudeTestPage({
             page={paginatedResult.page}
             totalPages={paginatedResult.totalPages}
             total={paginatedResult.total}
-            pageSize={paginatedResult.pageSize}
-            buildHref={pageHref}
+            pageSize={pageSize}
+            buildHref={(p) => makeFilterUrl(p)}
+            buildPageSizeHref={(ps) => makeFilterUrl(1, ps)}
+            alwaysShow={true}
           />
         </CardContent>
       </Card>

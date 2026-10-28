@@ -9,6 +9,8 @@ import {
 import { drainPendingJobs } from "@/lib/modules/identity/server";
 import { autoSubmitExpiredAttempts } from "@/lib/modules/aptitude/jobs";
 import { expireUrgentBanners } from "@/lib/modules/announcements/jobs";
+import { queueDepth } from "@/lib/platform/jobs";
+import { notifyQueueBacklog } from "@/lib/platform/slack";
 import { scoped } from "@/lib/platform/logger";
 
 const log = scoped("api.cron.attendance");
@@ -63,10 +65,33 @@ async function handleCron(request: NextRequest) {
         log.error("Leave reminders sweep error", { err });
         return { error: String(err) };
       }),
-      drainPendingJobs(10).catch((err) => {
-        log.error("Job queue drain error", { err });
-        return { error: String(err) };
-      }),
+      (async () => {
+        try {
+          const depth = await queueDepth();
+          const oldestWaitMs = depth.oldestPendingAt ? Date.now() - depth.oldestPendingAt.getTime() : 0;
+          const oldestMinutes = Math.round(oldestWaitMs / 60_000);
+
+          if (depth.oldestPendingAt && oldestWaitMs > 10 * 60_000) {
+            log.warn("Queue backlog detected during cron sweep", {
+              pending: depth.pending,
+              oldestMinutes,
+              oldestType: depth.oldestType,
+            });
+            await notifyQueueBacklog({
+              pendingCount: depth.pending,
+              oldestPendingMinutes: oldestMinutes,
+              oldestType: depth.oldestType ?? undefined,
+              source: "cron-sweep",
+            }).catch(() => {});
+          }
+
+          const drainLimit = depth.pending > 10 ? 25 : 10;
+          return await drainPendingJobs(drainLimit);
+        } catch (err) {
+          log.error("Job queue drain error", { err });
+          return { error: String(err) };
+        }
+      })(),
       autoSubmitExpiredAttempts(now).catch((err) => {
         log.error("Aptitude auto-submit sweep error", { err });
         return { error: String(err) };

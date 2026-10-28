@@ -5,6 +5,7 @@ import { enqueue } from "@/lib/platform/jobs";
 import { recordAudit } from "@/lib/platform/audit";
 import { auditActorFrom } from "./audit";
 import { isSuperAdmin, type Actor } from "./authorization";
+import { retryAnyJob } from "./jobs-admin";
 import { EMAIL_JOB_TYPES, type EmailJobType, type FormattedEmailJob } from "./constants";
 
 export { EMAIL_JOB_TYPES, type EmailJobType, type FormattedEmailJob };
@@ -237,11 +238,13 @@ export async function retryEmailJob(
 }
 
 /**
- * Re-enqueues a fresh email job with the exact same type and payload.
+ * Re-enqueues a fresh email job with the exact same type and payload, optionally with an updated recipient
+ * and immediate synchronous execution.
  */
 export async function resendEmailJob(
   jobId: string,
   actor: Actor,
+  options?: { overrideRecipient?: string; sendImmediately?: boolean },
 ): Promise<{ success: boolean; newJobId?: string; error?: string }> {
   if (!isSuperAdmin(actor)) {
     return { success: false, error: "Only Super Admins can resend email jobs" };
@@ -252,7 +255,36 @@ export async function resendEmailJob(
     return { success: false, error: "Job not found" };
   }
 
-  const newJobId = await enqueue(job.type, job.payload as Prisma.InputJsonValue);
+  const rawPayload = (typeof job.payload === "object" && job.payload !== null ? { ...job.payload } : {}) as Record<
+    string,
+    unknown
+  >;
+
+  if (options?.overrideRecipient && options.overrideRecipient.trim()) {
+    const newEmail = options.overrideRecipient.trim().toLowerCase();
+    rawPayload.email = newEmail;
+
+    // Update parent entities if relevant
+    if (job.type === "aptitude.invitation_send" && typeof rawPayload.invitationId === "string") {
+      await prisma.aptitudeInvitation
+        .update({
+          where: { id: rawPayload.invitationId },
+          data: { candidateEmail: newEmail },
+        })
+        .catch(() => {});
+    }
+
+    if (job.type === "assessments.invitation_send" && typeof rawPayload.invitationId === "string") {
+      await prisma.assessmentInvitation
+        .update({
+          where: { id: rawPayload.invitationId },
+          data: { inviteeEmail: newEmail },
+        })
+        .catch(() => {});
+    }
+  }
+
+  const newJobId = await enqueue(job.type, rawPayload as Prisma.InputJsonValue);
 
   await recordAudit({
     actor: auditActorFrom(actor),
@@ -260,7 +292,15 @@ export async function resendEmailJob(
     entityType: "job",
     entityId: newJobId,
     before: { originalJobId: jobId, type: job.type },
+    after: { overrideRecipient: options?.overrideRecipient, sendImmediately: options?.sendImmediately },
   });
+
+  if (options?.sendImmediately) {
+    const directRun = await retryAnyJob(newJobId, actor);
+    if (!directRun.success) {
+      return { success: false, newJobId, error: directRun.error };
+    }
+  }
 
   return { success: true, newJobId };
 }

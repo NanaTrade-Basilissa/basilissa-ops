@@ -39,6 +39,7 @@ export type AptitudeInvitationRow = {
     maxPoints: number | null;
     identityMismatch: boolean;
     declaredName: string | null;
+    declaredEmail?: string | null;
     autoSubmitted: boolean;
   } | null;
 };

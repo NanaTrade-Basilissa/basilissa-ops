@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
-import { requirePermission } from "@/lib/modules/identity/server";
+import { can, requirePermission } from "@/lib/modules/identity/server";
 import { getAttemptDetail } from "@/lib/modules/aptitude/server";
 import { AttemptDetailContent } from "@/components/admin/attempt-detail-content";
 
@@ -14,7 +14,8 @@ export default async function AptitudeAttemptPage({
 }: {
   params: Promise<{ id: string; attemptId: string }>;
 }) {
-  await requirePermission("aptitude:read");
+  const actor = await requirePermission("aptitude:read");
+  const canWrite = can(actor, "aptitude:write");
   const { id, attemptId } = await params;
 
   const attempt = await getAttemptDetail(attemptId);
@@ -29,7 +30,7 @@ export default async function AptitudeAttemptPage({
         <ChevronLeft className="size-4" /> Back to the test
       </Link>
 
-      <AttemptDetailContent attempt={attempt} />
+      <AttemptDetailContent attempt={attempt} canWrite={canWrite} />
     </div>
   );
 }

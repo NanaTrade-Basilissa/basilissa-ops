@@ -16,7 +16,7 @@ import { purgeExpiredPasswordResets } from "@/lib/modules/identity/jobs";
 import { expireUrgentBanners, remindUnacknowledged } from "@/lib/modules/announcements/jobs";
 import { purgeSentInvitationJobs } from "@/lib/modules/assessments/jobs";
 import { autoSubmitExpiredAttempts, purgeSentInvitationJobs as purgeSentAptitudeInvitationJobs } from "@/lib/modules/aptitude/jobs";
-import { notifyJobDead, notifyWorkerError } from "@/lib/platform/slack";
+import { notifyJobDead, notifyQueueBacklog, notifyWorkerError } from "@/lib/platform/slack";
 import { purgeOldEmailDeliveries } from "@/lib/platform/email";
 import { resolveHandler } from "./registry";
 
@@ -263,10 +263,18 @@ async function tick(): Promise<void> {
     logger.error("dead jobs are waiting for a human", { dead: depth.dead });
   }
   if (depth.oldestPendingAt && Date.now() - depth.oldestPendingAt.getTime() > BACKLOG_WARN_MS) {
+    const oldestMinutes = Math.round((Date.now() - depth.oldestPendingAt.getTime()) / 60_000);
     logger.warn("queue is falling behind", {
       pending: depth.pending,
       oldestPendingAt: depth.oldestPendingAt.toISOString(),
+      oldestMinutes,
     });
+    notifyQueueBacklog({
+      pendingCount: depth.pending,
+      oldestPendingMinutes: oldestMinutes,
+      oldestType: depth.oldestType ?? undefined,
+      source: "worker",
+    }).catch(() => {});
   }
   if (jobs.length > 0) {
     logger.info("batch complete", { processed: jobs.length, ...depth });

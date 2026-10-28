@@ -330,3 +330,46 @@ export async function notifyWorkerError(details: {
     ],
   });
 }
+
+/**
+ * Notifies Slack when background jobs are stalling in PENDING without worker pickup.
+ */
+export async function notifyQueueBacklog(details: {
+  pendingCount: number;
+  oldestPendingMinutes: number;
+  oldestType?: string;
+  source: "cron-sweep" | "worker";
+}): Promise<void> {
+  const envTag = getAppEnvName();
+  const text = `⚠️ [${envTag}] Background Queue Stalled: ${details.pendingCount} pending job(s) (${details.oldestPendingMinutes}m backlog)`;
+
+  await sendSlackWebhook({
+    text,
+    blocks: [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: `⚠️ [${envTag}] Background Job Queue Stalled`,
+          emoji: true,
+        },
+      },
+      {
+        type: "section",
+        fields: [
+          { type: "mrkdwn", text: `*Pending Jobs:*\n${details.pendingCount}` },
+          { type: "mrkdwn", text: `*Oldest Wait Time:*\n${details.oldestPendingMinutes} minutes` },
+          { type: "mrkdwn", text: `*Sample Type:*\n\`${details.oldestType || "N/A"}\`` },
+          { type: "mrkdwn", text: `*Detected By:*\n\`${details.source}\`` },
+        ],
+      },
+      {
+        type: "context",
+        text: {
+          type: "mrkdwn",
+          text: "Jobs have waited past the 10-minute threshold without worker pickup. Automated cron sweep is executing backup drainage.",
+        },
+      },
+    ],
+  });
+}

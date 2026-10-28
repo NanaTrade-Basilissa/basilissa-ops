@@ -16,6 +16,9 @@ import { createUser, grantRole, revokeRole, setUserStatus } from "./user-admin";
 import { getEnv, isEmailConfigured } from "@/lib/platform/env";
 import { completePasswordReset, issuePasswordReset } from "./password-reset";
 import { retryEmailJob, resendEmailJob, cancelEmailJob } from "./email-queue";
+import { getEmailJobInspection, type EmailJobInspectionDetail } from "./email-preview";
+
+export type { EmailJobInspectionDetail };
 import { retryAnyJob, cancelAnyJob } from "./jobs-admin";
 import { PASSWORD_RESET_SEND } from "./jobs";
 import { enqueue } from "@/lib/platform/jobs";
@@ -765,14 +768,27 @@ export async function retryEmailJobAction(jobId: string): Promise<{ success: boo
 }
 
 /**
- * Re-enqueues an identical copy of an email job.
+ * Fetches the inspection details and rendered HTML template preview for an email job.
+ */
+export async function getEmailJobInspectionAction(
+  jobId: string,
+): Promise<{ success: boolean; data?: EmailJobInspectionDetail; error?: string }> {
+  await requirePermission("email_queue:read");
+  const data = await getEmailJobInspection(jobId);
+  if (!data) return { success: false, error: "Email job not found" };
+  return { success: true, data };
+}
+
+/**
+ * Re-enqueues an email job, optionally with an updated recipient and immediate execution.
  * Super Admin only.
  */
 export async function resendEmailJobAction(
   jobId: string,
+  options?: { overrideRecipient?: string; sendImmediately?: boolean },
 ): Promise<{ success: boolean; newJobId?: string; error?: string }> {
   const actor = await requirePermission("email_queue:manage");
-  const result = await resendEmailJob(jobId, actor);
+  const result = await resendEmailJob(jobId, actor, options);
   if (result.success) {
     revalidatePath("/admin/email-queue");
     revalidatePath("/admin");

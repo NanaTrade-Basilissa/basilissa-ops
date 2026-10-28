@@ -216,7 +216,13 @@ export async function reclaimStuck(staleAfterMs = 15 * 60_000): Promise<number> 
   return count;
 }
 
-export type QueueDepth = { pending: number; running: number; dead: number; oldestPendingAt: Date | null };
+export type QueueDepth = {
+  pending: number;
+  running: number;
+  dead: number;
+  oldestPendingAt: Date | null;
+  oldestType?: string | null;
+};
 
 /** Queue health, for logging and later alerting. */
 export async function queueDepth(): Promise<QueueDepth> {
@@ -227,9 +233,15 @@ export async function queueDepth(): Promise<QueueDepth> {
     prisma.job.findFirst({
       where: { status: "PENDING" },
       orderBy: { runAt: "asc" },
-      select: { runAt: true },
+      select: { runAt: true, type: true },
     }),
   ]);
 
-  return { pending, running, dead, oldestPendingAt: oldest?.runAt ?? null };
+  return {
+    pending,
+    running,
+    dead,
+    oldestPendingAt: oldest?.runAt ?? null,
+    oldestType: oldest?.type ?? null,
+  };
 }

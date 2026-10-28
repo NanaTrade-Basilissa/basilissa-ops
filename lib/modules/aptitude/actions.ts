@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
+import { prisma } from "@/lib/platform/prisma";
+import { sendEmail } from "@/lib/platform/email";
+import { recordAudit } from "@/lib/platform/audit";
+import { buildAptitudeCandidateResultEmailHtml } from "@/lib/email-templates/aptitude";
 import { auditActorFrom, requirePermission } from "@/lib/modules/identity/server";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import { getEnv, isEmailConfigured } from "@/lib/platform/env";
@@ -613,4 +617,118 @@ export async function advanceAptitudeSectionAction(token: string): Promise<Advan
     sectionDeadlineAt: outcome.sectionDeadlineAt,
     submitted: false,
   };
+}
+
+/**
+ * Sends or resends the official assessment scorecard email directly to the candidate.
+ * Accessible to HR / admin with aptitude:write permission.
+ */
+export async function sendCandidateAptitudeResultAction(
+  attemptId: string,
+  options?: { overrideEmail?: string },
+): Promise<{ success: boolean; sentTo?: string; error?: string }> {
+  const actor = await requirePermission("aptitude:write");
+
+  const attempt = await prisma.aptitudeAttempt.findUnique({
+    where: { id: attemptId },
+    include: {
+      invitation: {
+        include: { test: true },
+      },
+    },
+  });
+
+  if (!attempt) {
+    return { success: false, error: "Assessment attempt not found" };
+  }
+
+  if (!attempt.submittedAt) {
+    return { success: false, error: "Cannot send results for an unsubmitted test attempt" };
+  }
+
+  const rawTarget =
+    options?.overrideEmail?.trim() ||
+    attempt.declaredEmail?.trim() ||
+    attempt.invitation.candidateEmail?.trim();
+
+  if (!rawTarget) {
+    return {
+      success: false,
+      error: "No email address found for this candidate. Please enter an email to dispatch results.",
+    };
+  }
+
+  const targetEmail = rawTarget.toLowerCase();
+
+  // If a corrected or override email was provided, persist it to avoid repeat typos
+  if (options?.overrideEmail && options.overrideEmail.trim()) {
+    await prisma
+      .$transaction([
+        prisma.aptitudeAttempt.update({
+          where: { id: attemptId },
+          data: { declaredEmail: targetEmail },
+        }),
+        prisma.aptitudeInvitation.update({
+          where: { id: attempt.invitationId },
+          data: { candidateEmail: targetEmail },
+        }),
+      ])
+      .catch(() => {});
+  }
+
+  const candidateName = attempt.declaredName || attempt.invitation.candidateName || "Candidate";
+  const testTitle = attempt.invitation.test.title;
+  const scoredPoints = attempt.scoredPoints ?? 0;
+  const maxPoints = attempt.maxPoints ?? 0;
+  const percent = maxPoints > 0 ? Math.round((scoredPoints / maxPoints) * 100) : 0;
+
+  const html = buildAptitudeCandidateResultEmailHtml({
+    testTitle,
+    candidateName,
+    submittedAt: attempt.submittedAt,
+    scoredPoints,
+    maxPoints,
+    percent,
+    passMarkPercent: attempt.invitation.test.passMarkPercent,
+  });
+
+  const emailResult = await sendEmail({
+    to: [targetEmail],
+    from: "Basilissa Aptitude",
+    recipientName: candidateName,
+    subject: `Your Results: ${testTitle} (${percent}%)`,
+    html,
+  });
+
+  if (emailResult.status === "failed") {
+    const errorMsg =
+      emailResult.error instanceof Error ? emailResult.error.message : String(emailResult.error);
+    return { success: false, error: `Email dispatch failed: ${errorMsg}` };
+  }
+
+  if (emailResult.status === "skipped") {
+    return {
+      success: false,
+      error: `Email skipped: ${emailResult.reason}. Please verify email configuration.`,
+    };
+  }
+
+  await recordAudit({
+    actor: auditActorFrom(actor),
+    action: "aptitude.candidate_result_sent",
+    entityType: "AptitudeAttempt",
+    entityId: attempt.id,
+    after: {
+      targetEmail,
+      scoredPoints,
+      maxPoints,
+      percent,
+      testId: attempt.invitation.testId,
+    },
+  });
+
+  revalidatePath(`/admin/aptitude-tests/${attempt.invitation.testId}/attempts/${attemptId}`);
+  revalidatePath(`/admin/aptitude-tests/${attempt.invitation.testId}`);
+
+  return { success: true, sentTo: targetEmail };
 }

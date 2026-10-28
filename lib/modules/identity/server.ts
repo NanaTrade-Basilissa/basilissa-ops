@@ -14,6 +14,7 @@ export * from "./user-admin";
 export * from "./jobs";
 export * from "./jobs-admin";
 export * from "./email-queue";
+export * from "./email-preview";
 export * from "./queries";
 export * from "./hr-recipients";
 export * from "./standard-roles";

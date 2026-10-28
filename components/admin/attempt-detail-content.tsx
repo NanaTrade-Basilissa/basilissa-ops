@@ -3,6 +3,7 @@ import type { getAttemptDetail, TabAbsence } from "@/lib/modules/aptitude/server
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CandidateResultDispatchCard } from "@/components/admin/candidate-result-dispatch-card";
 import { formatAccraDateTime } from "@/lib/platform/date";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +27,10 @@ function formatAbsenceDuration(ms: number): string {
  */
 export function AttemptDetailContent({
   attempt,
+  canWrite = true,
 }: {
   attempt: NonNullable<Awaited<ReturnType<typeof getAttemptDetail>>>;
+  canWrite?: boolean;
 }) {
   const percent =
     (attempt.maxPoints ?? 0) > 0 ? Math.round((attempt.scoredPoints! / attempt.maxPoints!) * 100) : null;
@@ -104,30 +107,17 @@ export function AttemptDetailContent({
       )}
 
       {attempt.submittedAt && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Score</CardTitle>
-            <CardDescription className="text-xs">Submission score record.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-foreground">
-              {attempt.scoredPoints} / {attempt.maxPoints}
-            </p>
-            {percent !== null && (
-              <p className="text-muted-foreground">
-                {percent}%
-                {passMark !== null && (
-                  <>
-                    {" · "}
-                    <span className={percent >= passMark ? "" : "text-destructive"}>
-                      {percent >= passMark ? "at or above" : "below"} the {passMark}% pass mark
-                    </span>
-                  </>
-                )}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <CandidateResultDispatchCard
+          attemptId={attempt.id}
+          candidateName={attempt.declaredName || attempt.invitation.candidateName || "Candidate"}
+          candidateEmail={attempt.declaredEmail || attempt.invitation.candidateEmail}
+          scoredPoints={attempt.scoredPoints}
+          maxPoints={attempt.maxPoints}
+          percent={percent}
+          passMark={passMark}
+          submittedAt={attempt.submittedAt}
+          canWrite={canWrite}
+        />
       )}
 
       {attempt.sections.map((section) => (

@@ -139,9 +139,20 @@ export async function listInvitations(testId: string) {
   });
 }
 
-export async function listInvitationsPaginated(testId: string, params?: { page?: number; pageSize?: number }) {
+export async function listInvitationsPaginated(
+  testId: string,
+  params?: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    status?: string;
+    scoreFilter?: string;
+  },
+) {
   const page = Math.max(1, params?.page ?? 1);
   const pageSize = params?.pageSize ?? 10;
+  const now = new Date();
+
   const where: Prisma.AptitudeInvitationWhereInput = {
     testId,
     NOT: {
@@ -150,6 +161,123 @@ export async function listInvitationsPaginated(testId: string, params?: { page?:
       attempt: null,
     },
   };
+
+  const andConditions: Prisma.AptitudeInvitationWhereInput[] = [];
+
+  if (params?.search && params.search.trim() !== "") {
+    const q = params.search.trim();
+    andConditions.push({
+      OR: [
+        { candidateName: { contains: q, mode: "insensitive" } },
+        { candidateEmail: { contains: q, mode: "insensitive" } },
+        { attempt: { is: { declaredName: { contains: q, mode: "insensitive" } } } },
+        { attempt: { is: { declaredEmail: { contains: q, mode: "insensitive" } } } },
+      ],
+    });
+  }
+
+  if (params?.status && params.status !== "ALL") {
+    switch (params.status) {
+      case "NOT_STARTED":
+        andConditions.push({
+          openedAt: null,
+          attempt: { is: null },
+          revokedAt: null,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        });
+        break;
+      case "STARTED":
+        andConditions.push({
+          openedAt: { not: null },
+          attempt: { is: { submittedAt: null } },
+          revokedAt: null,
+        });
+        break;
+      case "COMPLETED":
+        andConditions.push({
+          attempt: {
+            is: {
+              submittedAt: { not: null },
+              autoSubmitted: false,
+            },
+          },
+          revokedAt: null,
+        });
+        break;
+      case "TIMED_OUT":
+        andConditions.push({
+          attempt: {
+            is: {
+              submittedAt: { not: null },
+              autoSubmitted: true,
+            },
+          },
+          revokedAt: null,
+        });
+        break;
+      case "WITHDRAWN":
+        andConditions.push({
+          revokedAt: { not: null },
+        });
+        break;
+      case "EXPIRED":
+        andConditions.push({
+          expiresAt: { lte: now },
+          attempt: { is: { submittedAt: null } },
+          revokedAt: null,
+        });
+        break;
+    }
+  }
+
+  if (params?.scoreFilter && params.scoreFilter !== "ALL") {
+    if (params.scoreFilter === "ZERO") {
+      andConditions.push({
+        attempt: {
+          is: {
+            submittedAt: { not: null },
+            scoredPoints: 0,
+          },
+        },
+      });
+    } else if (params.scoreFilter === "PASSED" || params.scoreFilter === "FAILED") {
+      const test = await prisma.aptitudeTest.findUnique({
+        where: { id: testId },
+        select: { passMarkPercent: true },
+      });
+      const passMark = test?.passMarkPercent ?? null;
+      if (passMark !== null) {
+        const scoredAttempts = await prisma.aptitudeAttempt.findMany({
+          where: {
+            invitation: { testId },
+            submittedAt: { not: null },
+            maxPoints: { gt: 0 },
+            scoredPoints: { not: null },
+          },
+          select: { id: true, scoredPoints: true, maxPoints: true },
+        });
+
+        const matchingAttemptIds = scoredAttempts
+          .filter((a) => {
+            const pct = Math.round((a.scoredPoints! / a.maxPoints!) * 100);
+            return params.scoreFilter === "PASSED" ? pct >= passMark : pct < passMark;
+          })
+          .map((a) => a.id);
+
+        andConditions.push({
+          attempt: {
+            is: {
+              id: { in: matchingAttemptIds },
+            },
+          },
+        });
+      }
+    }
+  }
+
+  if (andConditions.length > 0) {
+    where.AND = andConditions;
+  }
 
   const [invitations, total] = await Promise.all([
     prisma.aptitudeInvitation.findMany({
@@ -174,6 +302,7 @@ export async function listInvitationsPaginated(testId: string, params?: { page?:
             maxPoints: true,
             identityMismatch: true,
             declaredName: true,
+            declaredEmail: true,
             autoSubmitted: true,
           },
         },
