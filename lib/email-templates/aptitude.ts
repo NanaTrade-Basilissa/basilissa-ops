@@ -68,7 +68,7 @@ export function buildAptitudeCompletedEmailHtml(params: AptitudeCompletedEmailPa
       <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
         <tr>
           <td style="font-family:'Inter',Arial,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;color:#71717A;font-weight:600;">Score</td>
-          <td align="right" style="font-family:'IBM Plex Sans Condensed','Arial Narrow',Arial,sans-serif;font-size:32px;font-weight:500;color:#131313;line-height:1;">
+          <td align="right" class="email-score-val" style="font-family:'IBM Plex Sans Condensed','Arial Narrow',Arial,sans-serif;font-size:32px;font-weight:500;color:#131313;line-height:1;word-break:break-word;">
             ${params.scoredPoints} / ${params.maxPoints} (${params.percent}%)
           </td>
         </tr>
@@ -77,8 +77,8 @@ export function buildAptitudeCompletedEmailHtml(params: AptitudeCompletedEmailPa
 
     <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:24px;font-size:14px;color:#131313;">
       <tr style="border-bottom:1px solid #E4E4E7;">
-        <td style="padding:10px 0;color:#71717A;width:140px;">Candidate</td>
-        <td style="padding:10px 0;font-weight:600;">
+        <td style="padding:10px 0;color:#71717A;width:120px;vertical-align:top;">Candidate</td>
+        <td style="padding:10px 0;font-weight:600;word-break:break-word;">
           ${escapeHtml(params.candidateName)}
           ${params.candidateEmail ? `<span style="font-weight:normal;color:#71717A;">(${escapeHtml(params.candidateEmail)})</span>` : ""}
         </td>
@@ -147,7 +147,7 @@ export function buildAptitudeCandidateResultEmailHtml(
           <td style="font-family:'Inter',Arial,sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;color:#71717A;font-weight:600;">
             Official Score
           </td>
-          <td align="right" style="font-family:'IBM Plex Sans Condensed','Arial Narrow',Arial,sans-serif;font-size:32px;font-weight:600;color:#131313;line-height:1;">
+          <td align="right" class="email-score-val" style="font-family:'IBM Plex Sans Condensed','Arial Narrow',Arial,sans-serif;font-size:32px;font-weight:600;color:#131313;line-height:1;word-break:break-word;">
             ${params.scoredPoints} / ${params.maxPoints} (${params.percent}%)
           </td>
         </tr>
@@ -171,16 +171,16 @@ export function buildAptitudeCandidateResultEmailHtml(
 
     <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:24px;font-size:14px;color:#131313;">
       <tr style="border-bottom:1px solid #E4E4E7;">
-        <td style="padding:10px 0;color:#71717A;width:140px;">Candidate</td>
-        <td style="padding:10px 0;font-weight:600;">${escapeHtml(params.candidateName)}</td>
+        <td style="padding:10px 0;color:#71717A;width:120px;vertical-align:top;">Candidate</td>
+        <td style="padding:10px 0;font-weight:600;word-break:break-word;">${escapeHtml(params.candidateName)}</td>
       </tr>
       <tr style="border-bottom:1px solid #E4E4E7;">
-        <td style="padding:10px 0;color:#71717A;">Assessment</td>
-        <td style="padding:10px 0;">${escapeHtml(params.testTitle)}</td>
+        <td style="padding:10px 0;color:#71717A;vertical-align:top;">Assessment</td>
+        <td style="padding:10px 0;word-break:break-word;">${escapeHtml(params.testTitle)}</td>
       </tr>
       <tr style="border-bottom:1px solid #E4E4E7;">
-        <td style="padding:10px 0;color:#71717A;">Completed On</td>
-        <td style="padding:10px 0;">${escapeHtml(formattedDate)}</td>
+        <td style="padding:10px 0;color:#71717A;vertical-align:top;">Completed On</td>
+        <td style="padding:10px 0;word-break:break-word;">${escapeHtml(formattedDate)}</td>
       </tr>
     </table>
 

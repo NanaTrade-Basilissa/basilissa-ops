@@ -37,23 +37,33 @@ export function renderProtocolEmail(options: ProtocolEmailOptions): string {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <title>${escapeHtml(heading)}</title>
+  <style>
+    @media screen and (max-width: 620px) {
+      .email-container { width: 100% !important; max-width: 100% !important; }
+      .email-heading { font-size: 26px !important; line-height: 1.15 !important; letter-spacing: -0.5px !important; margin-bottom: 16px !important; }
+      .email-pad-main { padding: 32px 18px 24px 18px !important; }
+      .email-pad-logo { padding: 20px 18px 0 18px !important; }
+      .email-pad-footer { padding: 32px 18px 36px 18px !important; }
+      .email-score-val { font-size: 24px !important; }
+    }
+  </style>
 </head>
 <body style="background-color:#F4F4F5;color:#131313;font-family:'Inter',Arial,sans-serif;font-size:14px;line-height:1.5;margin:0;padding:0;">
   ${previewText ? `<div style="display:none;font-size:1px;color:#F4F4F5;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${escapeHtml(previewText)}</div>` : ""}
   <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color:#F4F4F5;width:100%;margin:0;padding:24px 0;">
     <tr>
       <td align="center">
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background-color:#FFFFFF;margin:0 auto;text-align:left;">
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="email-container" style="max-width:640px;width:100%;background-color:#FFFFFF;margin:0 auto;text-align:left;">
           <!-- Logo Header -->
           <tr>
-            <td style="padding:24px 24px 0 24px;">
+            <td class="email-pad-logo" style="padding:24px 24px 0 24px;">
               <img src="${HOSTED_EMAIL_LOGO_URL}" alt="Basilissa" width="56" height="56" style="display:block;border:0;width:56px;height:56px;object-fit:contain;" />
             </td>
           </tr>
           <!-- Main Content -->
           <tr>
-            <td style="padding:48px 24px 40px 24px;">
-              <h1 style="font-family:'IBM Plex Sans Condensed','Arial Narrow',Arial,sans-serif;font-size:${headingSmall ? "32px" : "40px"};line-height:1;letter-spacing:-1.2px;font-weight:500;color:#131313;text-transform:uppercase;margin:0 0 24px 0;">
+            <td class="email-pad-main" style="padding:48px 24px 40px 24px;">
+              <h1 class="email-heading" style="font-family:'IBM Plex Sans Condensed','Arial Narrow',Arial,sans-serif;font-size:${headingSmall ? "32px" : "40px"};line-height:1.05;letter-spacing:-1.2px;font-weight:500;color:#131313;text-transform:uppercase;margin:0 0 24px 0;word-break:break-word;overflow-wrap:break-word;">
                 ${escapeHtml(heading)}
               </h1>
               ${contentHtml}
@@ -62,7 +72,7 @@ export function renderProtocolEmail(options: ProtocolEmailOptions): string {
           </tr>
           <!-- Divider & Footer -->
           <tr>
-            <td style="border-top:1px solid #E4E4E7;padding:48px 24px 48px 24px;">
+            <td class="email-pad-footer" style="border-top:1px solid #E4E4E7;padding:48px 24px 48px 24px;">
               <p style="font-family:'Inter',Arial,sans-serif;font-size:13px;color:#3F3F46;margin:0 0 12px 0;font-weight:400;">
                 Basilissa Restaurant &middot; NanaTrade Group
               </p>

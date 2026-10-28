@@ -41,16 +41,23 @@ function DialogOverlay({
 
 function DialogContent({
   className,
+  viewportClassName,
   children,
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & {
+  viewportClassName?: string
   showCloseButton?: boolean
 }) {
   return (
     <DialogPortal>
       <DialogOverlay />
-      <DialogPrimitive.Viewport className="fixed inset-0 isolate z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain">
+      <DialogPrimitive.Viewport
+        className={cn(
+          "fixed inset-0 isolate z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain",
+          viewportClassName
+        )}
+      >
         <DialogPrimitive.Popup
           data-slot="dialog-content"
           className={cn(
@@ -66,7 +73,7 @@ function DialogContent({
               render={
                 <Button
                   variant="ghost"
-                  className="absolute top-2 right-2"
+                  className="absolute top-2.5 right-2.5 z-10"
                   size="icon-sm"
                 />
               }

@@ -374,26 +374,37 @@ export function EmailQueueTable({
           }
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[92vh] flex flex-col p-6 overflow-hidden">
-          <DialogHeader className="pb-3 border-b shrink-0">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="space-y-1">
-                <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-                  <Mail className="size-5 text-primary shrink-0" />
-                  <span className="truncate max-w-lg">
+        <DialogContent
+          viewportClassName="p-0 sm:p-4 sm:items-center sm:justify-center"
+          className="my-0 sm:my-auto w-full h-[100dvh] max-h-[100dvh] max-w-none rounded-none border-0 ring-0 sm:ring-1 p-3.5 sm:p-6 sm:rounded-xl sm:border sm:w-[95vw] sm:max-w-5xl md:max-w-6xl xl:max-w-7xl sm:h-[90vh] sm:max-h-[92vh] flex flex-col gap-0 overflow-hidden"
+        >
+          <DialogHeader className="pb-3 border-b shrink-0 pr-10 sm:pr-12">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="space-y-1.5 min-w-0 flex-1">
+                <DialogTitle className="flex items-start gap-2 text-base sm:text-lg font-bold min-w-0">
+                  <Mail className="size-5 text-primary shrink-0 mt-0.5" />
+                  <span className="break-words line-clamp-2 leading-tight">
                     {inspectionDetail?.subject || selectedEmailJob?.subject || "Email Details"}
                   </span>
                 </DialogTitle>
-                <DialogDescription className="text-xs flex flex-wrap items-center gap-2">
-                  <span>Job ID:</span>
-                  <code className="font-mono text-xs text-foreground font-semibold bg-muted px-1.5 py-0.5 rounded">
-                    {selectedEmailJob?.id}
-                  </code>
-                  <span>· Type:</span>
-                  <Badge variant="outline" className="text-xs">
-                    {selectedEmailJob?.typeLabel}
-                  </Badge>
-                  <span>· Status:</span>
+                <DialogDescription className="text-xs flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground pt-0.5">
+                  <span className="inline-flex items-center gap-1 min-w-0">
+                    <span className="shrink-0">Job:</span>
+                    <code
+                      className="font-mono text-[11px] text-foreground font-semibold bg-muted px-1.5 py-0.5 rounded truncate max-w-[150px] sm:max-w-none"
+                      title={selectedEmailJob?.id}
+                    >
+                      {selectedEmailJob?.id}
+                    </code>
+                  </span>
+                  <span className="text-muted-foreground/40 hidden sm:inline">·</span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="text-muted-foreground/70 hidden xs:inline">Type:</span>
+                    <Badge variant="outline" className="text-[11px] font-normal py-0 h-5">
+                      {selectedEmailJob?.typeLabel}
+                    </Badge>
+                  </span>
+                  <span className="text-muted-foreground/40 hidden sm:inline">·</span>
                   <Badge
                     variant={
                       selectedEmailJob?.status === "SUCCEEDED"
@@ -402,7 +413,7 @@ export function EmailQueueTable({
                           ? "destructive"
                           : "secondary"
                     }
-                    className="text-xs"
+                    className="text-[11px] py-0 h-5"
                   >
                     {selectedEmailJob?.status}
                   </Badge>
@@ -411,13 +422,13 @@ export function EmailQueueTable({
 
               {/* Header Direct Actions */}
               {canManage && selectedEmailJob && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 shrink-0 pt-1 sm:pt-0">
                   {selectedEmailJob.status === "PENDING" && (
                     <Button
                       size="sm"
                       onClick={() => handleRetry(selectedEmailJob.id)}
                       disabled={isPending && pendingJobId === selectedEmailJob.id}
-                      className="gap-1.5 text-xs h-8"
+                      className="gap-1.5 text-xs h-8 flex-1 sm:flex-initial"
                     >
                       <RotateCw className="size-3.5" />
                       Send Now
@@ -428,17 +439,17 @@ export function EmailQueueTable({
                     size="sm"
                     variant="outline"
                     onClick={() => setEditRecipientOpen((v) => !v)}
-                    className="gap-1.5 text-xs h-8"
+                    className="gap-1.5 text-xs h-8 flex-1 sm:flex-initial"
                   >
                     <Mail className="size-3.5" />
-                    Edit Recipient & Resend
+                    <span className="hidden xs:inline">Edit Recipient & </span>Resend
                   </Button>
 
                   <Button
                     size="sm"
                     onClick={() => handleResend(selectedEmailJob.id, { sendImmediately: true })}
                     disabled={isPending && pendingJobId === selectedEmailJob.id}
-                    className="gap-1.5 text-xs h-8"
+                    className="gap-1.5 text-xs h-8 flex-1 sm:flex-initial"
                   >
                     <Send className="size-3.5" />
                     Resend Now
@@ -449,100 +460,117 @@ export function EmailQueueTable({
 
             {/* Recipient update form */}
             {editRecipientOpen && (
-              <div className="mt-3 p-3 bg-muted/50 rounded-lg border flex flex-wrap items-center gap-2 text-xs">
-                <Label htmlFor="override-email" className="font-medium shrink-0">
-                  Recipient Email:
-                </Label>
-                <Input
-                  id="override-email"
-                  value={recipientInput}
-                  onChange={(e) => setRecipientInput(e.target.value)}
-                  placeholder="recipient@example.com"
-                  className="h-8 text-xs max-w-sm"
-                />
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    handleResend(selectedEmailJob!.id, {
-                      overrideRecipient: recipientInput,
-                      sendImmediately: true,
-                    })
-                  }
-                  disabled={!recipientInput || (isPending && pendingJobId === selectedEmailJob!.id)}
-                  className="h-8 text-xs gap-1"
-                >
-                  <Send className="size-3" />
-                  Send to this address
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setEditRecipientOpen(false)}
-                  className="h-8 text-xs"
-                >
-                  Cancel
-                </Button>
+              <div className="mt-3 p-3 bg-muted/50 rounded-lg border flex flex-col sm:flex-row sm:items-center gap-2 text-xs">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <Label htmlFor="override-email" className="font-medium shrink-0">
+                    Recipient:
+                  </Label>
+                  <Input
+                    id="override-email"
+                    type="email"
+                    value={recipientInput}
+                    onChange={(e) => setRecipientInput(e.target.value)}
+                    placeholder="recipient@example.com"
+                    className="h-8 text-xs flex-1 min-w-[200px]"
+                  />
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      handleResend(selectedEmailJob!.id, {
+                        overrideRecipient: recipientInput,
+                        sendImmediately: true,
+                      })
+                    }
+                    disabled={!recipientInput || (isPending && pendingJobId === selectedEmailJob!.id)}
+                    className="h-8 text-xs gap-1 flex-1 sm:flex-initial"
+                  >
+                    <Send className="size-3" />
+                    Send to address
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditRecipientOpen(false)}
+                    className="h-8 text-xs"
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
             )}
           </DialogHeader>
 
           {isLoadingDetail ? (
-            <div className="flex flex-col items-center justify-center p-16 space-y-3">
+            <div className="flex-1 flex flex-col items-center justify-center p-16 space-y-3">
               <Loader2 className="size-8 animate-spin text-primary" />
               <p className="text-xs text-muted-foreground">Rendering email preview & delivery logs...</p>
             </div>
           ) : inspectionDetail ? (
             <Tabs defaultValue="preview" className="flex-1 flex flex-col min-h-0 pt-3">
-              <div className="flex items-center justify-between pb-2">
-                <TabsList className="h-8">
-                  <TabsTrigger value="preview" className="text-xs gap-1.5">
-                    <Mail className="size-3.5" /> Email Preview
-                  </TabsTrigger>
-                  <TabsTrigger value="recipients" className="text-xs gap-1.5">
-                    <UserCheck className="size-3.5" /> Recipients & Delivery (
-                    {inspectionDetail.deliveries.length > 0 ? inspectionDetail.deliveries.length : 1})
-                  </TabsTrigger>
-                  <TabsTrigger value="logs" className="text-xs gap-1.5">
-                    <ExternalLink className="size-3.5" /> Technical Logs
-                  </TabsTrigger>
-                </TabsList>
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 shrink-0 border-b">
+                <div className="overflow-x-auto max-w-full pb-0.5 -mx-1 px-1">
+                  <TabsList className="h-8 inline-flex shrink-0">
+                    <TabsTrigger value="preview" className="text-xs gap-1.5 whitespace-nowrap px-2.5">
+                      <Mail className="size-3.5" />
+                      <span>Email Preview</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="recipients" className="text-xs gap-1.5 whitespace-nowrap px-2.5">
+                      <UserCheck className="size-3.5" />
+                      <span>Recipients</span>
+                      <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
+                        {inspectionDetail.deliveries.length > 0 ? inspectionDetail.deliveries.length : 1}
+                      </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="logs" className="text-xs gap-1.5 whitespace-nowrap px-2.5">
+                      <ExternalLink className="size-3.5" />
+                      <span>Technical Logs</span>
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
 
-                <div className="flex items-center gap-1 bg-muted p-0.5 rounded border">
-                  <Button
-                    size="icon"
-                    variant={previewDevice === "desktop" ? "default" : "ghost"}
-                    className="size-6 text-xs"
-                    onClick={() => setPreviewDevice("desktop")}
-                    title="Desktop Preview"
-                  >
-                    <Laptop className="size-3.5" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant={previewDevice === "mobile" ? "default" : "ghost"}
-                    className="size-6 text-xs"
-                    onClick={() => setPreviewDevice("mobile")}
-                    title="Mobile Preview"
-                  >
-                    <Smartphone className="size-3.5" />
-                  </Button>
+                <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                  <span className="text-[11px] text-muted-foreground hidden sm:inline">Preview:</span>
+                  <div className="flex items-center gap-1 bg-muted p-0.5 rounded border">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant={previewDevice === "desktop" ? "default" : "ghost"}
+                      className="size-7 sm:size-6 text-xs"
+                      onClick={() => setPreviewDevice("desktop")}
+                      title="Desktop Preview (Full Width)"
+                    >
+                      <Laptop className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant={previewDevice === "mobile" ? "default" : "ghost"}
+                      className="size-7 sm:size-6 text-xs"
+                      onClick={() => setPreviewDevice("mobile")}
+                      title="Mobile Preview (385px)"
+                    >
+                      <Smartphone className="size-3.5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
 
               {/* Tab 1: Email HTML Preview */}
-              <TabsContent value="preview" className="flex-1 min-h-0 pt-1">
-                <div className="h-full flex justify-center bg-slate-100 dark:bg-slate-900 rounded-lg p-3 border overflow-hidden">
+              <TabsContent value="preview" className="flex-1 min-h-0 pt-2 flex flex-col">
+                <div className="flex-1 min-h-[350px] sm:min-h-[480px] w-full flex justify-center bg-slate-100 dark:bg-slate-900 rounded-lg p-1.5 sm:p-4 border overflow-hidden">
                   <div
-                    className="h-full transition-all duration-200 bg-white shadow-sm rounded border overflow-hidden"
+                    className="h-full w-full transition-all duration-200 bg-white shadow-sm rounded border overflow-hidden flex flex-col"
                     style={{
-                      width: previewDevice === "desktop" ? "100%" : "385px",
+                      maxWidth: previewDevice === "desktop" ? "100%" : "385px",
                     }}
                   >
                     <iframe
                       title="Email Preview"
                       sandbox="allow-same-origin"
                       srcDoc={inspectionDetail.htmlPreview}
-                      className="w-full h-full border-0 bg-white"
+                      className="w-full flex-1 border-0 bg-white"
                     />
                   </div>
                 </div>
@@ -550,7 +578,7 @@ export function EmailQueueTable({
 
               {/* Tab 2: Recipients & Delivery Status */}
               <TabsContent value="recipients" className="flex-1 overflow-auto space-y-4 pt-2">
-                <div className="rounded-lg border bg-card p-4 space-y-3">
+                <div className="rounded-lg border bg-card p-3 sm:p-4 space-y-3">
                   <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
                     Recipient Delivery Confirmation
                   </h4>
@@ -558,16 +586,18 @@ export function EmailQueueTable({
                   {inspectionDetail.deliveries.length > 0 ? (
                     <div className="divide-y rounded-lg border">
                       {inspectionDetail.deliveries.map((del, i) => (
-                        <div key={i} className="flex items-center justify-between p-3 text-xs">
-                          <div className="space-y-0.5">
-                            <span className="font-semibold text-foreground block">{del.recipient}</span>
-                            <span className="text-muted-foreground text-[11px]">
+                        <div key={i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 text-xs">
+                          <div className="space-y-0.5 min-w-0 flex-1">
+                            <span className="font-semibold text-foreground block truncate" title={del.recipient}>
+                              {del.recipient}
+                            </span>
+                            <span className="text-muted-foreground text-[11px] block">
                               Confirmed sent at {formatAccraDateTime(del.sentAt)}
                             </span>
                           </div>
                           <Badge
                             variant="outline"
-                            className="border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 gap-1"
+                            className="border-emerald-500/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 gap-1 self-start sm:self-auto shrink-0"
                           >
                             <CheckCircle2 className="size-3" />
                             Delivered
@@ -577,8 +607,10 @@ export function EmailQueueTable({
                     </div>
                   ) : (
                     <div className="p-4 rounded-lg bg-muted/40 border text-xs space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{inspectionDetail.recipient}</span>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <span className="font-medium truncate min-w-0" title={inspectionDetail.recipient}>
+                          {inspectionDetail.recipient}
+                        </span>
                         <Badge
                           variant={
                             inspectionDetail.status === "SUCCEEDED"
@@ -587,7 +619,7 @@ export function EmailQueueTable({
                                 ? "destructive"
                                 : "secondary"
                           }
-                          className="gap-1"
+                          className="gap-1 self-start sm:self-auto shrink-0"
                         >
                           {inspectionDetail.status === "SUCCEEDED" ? (
                             <>
@@ -622,23 +654,27 @@ export function EmailQueueTable({
               {/* Tab 3: Technical Logs & Payload */}
               <TabsContent value="logs" className="flex-1 overflow-auto space-y-4 pt-2">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-muted/30 p-3 rounded-lg border">
-                  <div>
-                    <span className="text-muted-foreground block">Attempts:</span>
+                  <div className="min-w-0">
+                    <span className="text-muted-foreground block text-[11px]">Attempts:</span>
                     <span className="font-medium">
                       {inspectionDetail.attempts} / {inspectionDetail.maxAttempts}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground block">Created:</span>
-                    <span>{formatAccraDateTime(inspectionDetail.createdAt)}</span>
+                  <div className="min-w-0">
+                    <span className="text-muted-foreground block text-[11px]">Created:</span>
+                    <span className="truncate block" title={formatAccraDateTime(inspectionDetail.createdAt)}>
+                      {formatAccraDateTime(inspectionDetail.createdAt)}
+                    </span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground block">Scheduled:</span>
-                    <span>{formatAccraDateTime(inspectionDetail.runAt)}</span>
+                  <div className="min-w-0">
+                    <span className="text-muted-foreground block text-[11px]">Scheduled:</span>
+                    <span className="truncate block" title={formatAccraDateTime(inspectionDetail.runAt)}>
+                      {formatAccraDateTime(inspectionDetail.runAt)}
+                    </span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground block">Completed:</span>
-                    <span>
+                  <div className="min-w-0">
+                    <span className="text-muted-foreground block text-[11px]">Completed:</span>
+                    <span className="truncate block">
                       {inspectionDetail.completedAt
                         ? formatAccraDateTime(inspectionDetail.completedAt)
                         : "Not yet completed"}
@@ -649,10 +685,10 @@ export function EmailQueueTable({
                 {inspectionDetail.lastError && (
                   <div className="space-y-1">
                     <p className="text-xs font-semibold text-destructive flex items-center gap-1.5">
-                      <AlertCircle className="size-3.5" />
+                      <AlertCircle className="size-3.5 shrink-0" />
                       Recorded Delivery Error:
                     </p>
-                    <pre className="max-h-36 overflow-auto rounded-lg bg-slate-950 p-3 text-xs font-mono text-rose-400 border border-border/50 whitespace-pre-wrap break-all">
+                    <pre className="max-h-48 overflow-auto rounded-lg bg-slate-950 p-3 text-xs font-mono text-rose-400 border border-border/50 whitespace-pre-wrap break-all">
                       {inspectionDetail.lastError}
                     </pre>
                   </div>
@@ -660,7 +696,7 @@ export function EmailQueueTable({
 
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground">Raw Job Payload:</p>
-                  <pre className="max-h-48 overflow-auto rounded-lg bg-slate-950 p-3 text-xs font-mono text-emerald-400 border border-border/50 whitespace-pre-wrap break-all">
+                  <pre className="max-h-60 sm:max-h-80 overflow-auto rounded-lg bg-slate-950 p-3 text-xs font-mono text-emerald-400 border border-border/50 whitespace-pre-wrap break-all">
                     {JSON.stringify(inspectionDetail.payload, null, 2)}
                   </pre>
                 </div>
