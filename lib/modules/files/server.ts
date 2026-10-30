@@ -3,6 +3,7 @@ import { customAlphabet } from "nanoid";
 import { prisma } from "@/lib/platform/prisma";
 import { getEnv } from "@/lib/platform/env";
 import { scoped } from "@/lib/platform/logger";
+import { enqueue } from "@/lib/platform/jobs";
 import {
   createPresignedDownloadUrl,
   deleteFromStorage,
@@ -11,6 +12,7 @@ import {
 import type { HostedFileDisplayMode, HostedFileItem } from "./constants";
 import { isReservedSlug, SLUG_REGEX } from "./validation";
 import { processLowResPreview } from "./processor";
+import { FILES_PROCESS_PREVIEW } from "./jobs";
 
 const log = scoped("modules.files.server");
 const nanoid = customAlphabet("abcdefghjkmnpqrstuvwxyz23456789", 8);
@@ -229,8 +231,16 @@ export async function createHostedFile({
     },
   });
 
-  // Kick off low-res generation asynchronously
+  // Enqueue in Background Jobs queue so admins have visibility in /admin/jobs
   if (generateLowRes) {
+    enqueue(FILES_PROCESS_PREVIEW, {
+      fileId: record.id,
+      title: record.title,
+    }).catch((err) => {
+      log.warn("Failed to enqueue files.process_preview background job", { fileId: record.id, err });
+    });
+
+    // Also trigger execution immediately in background
     processLowResPreview(record.id).catch((err) => {
       log.error("Async low-res preview generation failed", { fileId: record.id, err });
     });

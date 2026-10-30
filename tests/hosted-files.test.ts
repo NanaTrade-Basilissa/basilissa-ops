@@ -123,6 +123,23 @@ describe("Hosted Files - Validation & Slugs", () => {
     expect(slug.startsWith("basilissa-ghana-hr-policies-2026")).toBe(true);
   });
 
+  it("supports RENDER_AS_PAGE display mode preference", () => {
+    const result = createFileRecordSchema.safeParse({
+      title: "Main Restaurant Menu",
+      originalFilename: "menu_q4_2026.pdf",
+      mimeType: "application/pdf",
+      fileSize: 2048576,
+      fileKey: "hosted-files/originals/123-menu.pdf",
+      fileUrl: "https://s3.example.com/hosted-files/originals/123-menu.pdf",
+      displayMode: "RENDER_AS_PAGE",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.displayMode).toBe("RENDER_AS_PAGE");
+    }
+  });
+
   it("validates file create schema with correct defaults", () => {
     const result = createFileRecordSchema.safeParse({
       title: "Menu Brochure",

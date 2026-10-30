@@ -7,6 +7,7 @@ import { ProgressiveViewer } from "@/components/files/progressive-viewer";
 
 interface ViewPageProps {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ view?: string }>;
 }
 
 export async function generateMetadata({ params }: ViewPageProps): Promise<Metadata> {
@@ -32,15 +33,16 @@ export async function generateMetadata({ params }: ViewPageProps): Promise<Metad
   };
 }
 
-export default async function PublicFileViewPage({ params }: ViewPageProps) {
+export default async function PublicFileViewPage({ params, searchParams }: ViewPageProps) {
   const { slug } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
   const data = await resolvePublicFileBySlug(slug);
 
   if (!data) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-4 text-center text-zinc-100">
         <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400 shadow-xl">
-          <Lock className="h-10 w-10 text-amber-500" />
+          <Lock className="h-10 w-10 text-[#EFCE02]" />
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
           File Not Available
@@ -66,12 +68,16 @@ export default async function PublicFileViewPage({ params }: ViewPageProps) {
     redirect(highResResolvedUrl);
   }
 
-  // In-App Viewer Mode: render full-screen progressive viewer
+  // Determine initial mode: if file is set to RENDER_AS_PAGE or query ?view=page, open clean full-page
+  const isPageMode =
+    file.displayMode === "RENDER_AS_PAGE" || resolvedSearchParams.view === "page";
+
   return (
     <ProgressiveViewer
       file={file}
       highResUrl={highResResolvedUrl}
       lowResUrl={lowResResolvedUrl}
+      initialMode={isPageMode ? "page" : "branded"}
     />
   );
 }

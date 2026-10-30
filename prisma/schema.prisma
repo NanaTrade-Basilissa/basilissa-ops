@@ -2392,6 +2392,7 @@ model TrainingProgress {
 enum HostedFileDisplayMode {
   IN_APP_VIEWER
   DIRECT_RAW
+  RENDER_AS_PAGE
 }
 
 enum LowResPreviewStatus {

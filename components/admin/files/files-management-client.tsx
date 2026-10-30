@@ -20,6 +20,8 @@ import {
   Edit3,
   Search,
   Loader2,
+  LayoutTemplate,
+  AlertTriangle,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -453,6 +455,7 @@ export function FilesManagementClient({
                             className="h-7 text-[11px] max-w-[150px]"
                           >
                             <option value="IN_APP_VIEWER">In-App Viewer</option>
+                            <option value="RENDER_AS_PAGE">Render as Page</option>
                             <option value="DIRECT_RAW">Direct Raw Access</option>
                           </NativeSelect>
                         ) : (
@@ -472,20 +475,29 @@ export function FilesManagementClient({
                           ) : file.lowResStatus === "PENDING" ? (
                             <Badge variant="outline" className="text-[10px] gap-1 border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/10">
                               <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                              Processing
+                              In Queue
+                            </Badge>
+                          ) : file.lowResStatus === "FAILED" ? (
+                            <Badge variant="outline" className="text-[10px] gap-1 border-destructive/40 text-destructive bg-destructive/10">
+                              <AlertTriangle className="h-2.5 w-2.5" />
+                              Failed
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="text-[10px] text-muted-foreground">
                               None
                             </Badge>
                           )}
-                          {canWrite && file.lowResStatus !== "PENDING" && (
+                          {canWrite && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-6 w-6 text-muted-foreground hover:text-foreground"
                               onClick={() => handleRegenerateLowRes(file)}
-                              title="Regenerate Low-Res Preview"
+                              title={
+                                file.lowResStatus === "FAILED"
+                                  ? "Retry Fast Preview Generation (Enqueues Background Job)"
+                                  : "Regenerate Fast Preview"
+                              }
                             >
                               <RefreshCw className="h-2.5 w-2.5" />
                             </Button>
@@ -502,18 +514,34 @@ export function FilesManagementClient({
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {file.isPublic && file.slug ? (
-                            <Link
-                              href={`/view/${file.slug}`}
-                              target="_blank"
-                              className={buttonVariants({
-                                variant: "outline",
-                                size: "sm",
-                                className: "h-7 px-2 text-[11px] gap-1",
-                              })}
-                            >
-                              <Eye className="h-3 w-3" />
-                              View
-                            </Link>
+                            <>
+                              <Link
+                                href={`/view/${file.slug}`}
+                                target="_blank"
+                                className={buttonVariants({
+                                  variant: "outline",
+                                  size: "sm",
+                                  className: "h-7 px-2 text-[11px] gap-1",
+                                })}
+                                title="Open Branded In-App Viewer"
+                              >
+                                <Eye className="h-3 w-3" />
+                                View
+                              </Link>
+                              <Link
+                                href={`/view/${file.slug}?view=page`}
+                                target="_blank"
+                                className={buttonVariants({
+                                  variant: "outline",
+                                  size: "sm",
+                                  className: "h-7 px-2 text-[11px] gap-1 border-[#EFCE02]/50 hover:bg-[#EFCE02]/10",
+                                })}
+                                title="Render as a Page (Full Screen Asset)"
+                              >
+                                <LayoutTemplate className="h-3 w-3 text-[#EFCE02]" />
+                                Page
+                              </Link>
+                            </>
                           ) : (
                             <Button
                               variant="outline"

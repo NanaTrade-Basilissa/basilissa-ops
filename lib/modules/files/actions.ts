@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/platform/prisma";
+import { enqueue } from "@/lib/platform/jobs";
 import { requirePermission } from "@/lib/modules/identity/server";
 import type { HostedFileDisplayMode, HostedFileItem } from "./constants";
 import {
@@ -13,6 +15,7 @@ import {
   updateHostedFileSlug,
 } from "./server";
 import { processLowResPreview } from "./processor";
+import { FILES_PROCESS_PREVIEW } from "./jobs";
 import { hostedFileCreateSchema, updateSlugSchema } from "./validation";
 
 export type ActionResult<T = unknown> =
@@ -162,6 +165,25 @@ export async function updateFileDisplayModeAction(input: {
 export async function regenerateLowResAction(fileId: string): Promise<ActionResult<{ queued: boolean }>> {
   try {
     await requirePermission("files:write");
+    const file = await prisma.hostedFile.findUnique({
+      where: { id: fileId },
+      select: { id: true, title: true },
+    });
+
+    if (!file) {
+      return { success: false, error: "File not found" };
+    }
+
+    await prisma.hostedFile.update({
+      where: { id: fileId },
+      data: { lowResStatus: "PENDING" },
+    });
+
+    enqueue(FILES_PROCESS_PREVIEW, {
+      fileId: file.id,
+      title: file.title,
+    }).catch(() => {});
+
     // Run asynchronously
     processLowResPreview(fileId).catch(() => {});
     revalidatePath("/admin/files");

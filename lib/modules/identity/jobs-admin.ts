@@ -51,6 +51,16 @@ export function categorizeJob(type: string): { category: JobCategory; typeLabel:
     };
   }
 
+  if (type.startsWith("files.") || type.includes("preview")) {
+    const labelMap: Record<string, string> = {
+      "files.process_preview": "Fast Preview Optimization",
+    };
+    return {
+      category: "system",
+      typeLabel: labelMap[type] ?? "File Preview Optimization",
+    };
+  }
+
   if (type.includes("purge") || type.includes("clean") || type.includes("prune") || type.includes("sweep")) {
     return {
       category: "maintenance",

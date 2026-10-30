@@ -32,7 +32,7 @@ export const togglePrivacySchema = z.object({
 
 export const updateDisplayModeSchema = z.object({
   fileId: z.string().min(1, "File ID is required"),
-  displayMode: z.enum(["IN_APP_VIEWER", "DIRECT_RAW"]),
+  displayMode: z.enum(["IN_APP_VIEWER", "DIRECT_RAW", "RENDER_AS_PAGE"]),
 });
 
 export const createFileRecordSchema = z.object({
@@ -44,7 +44,7 @@ export const createFileRecordSchema = z.object({
   fileUrl: z.string().min(1),
   isPublic: z.boolean().default(false),
   customSlug: slugSchema.optional(),
-  displayMode: z.enum(["IN_APP_VIEWER", "DIRECT_RAW"]).default("IN_APP_VIEWER"),
+  displayMode: z.enum(["IN_APP_VIEWER", "DIRECT_RAW", "RENDER_AS_PAGE"]).default("IN_APP_VIEWER"),
   generateLowRes: z.boolean().default(true),
 });
 

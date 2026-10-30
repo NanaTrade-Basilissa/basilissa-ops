@@ -22,7 +22,7 @@ function generateDocumentPreviewSvg(title: string, mimeType: string, fileSize: n
     
     <!-- Top Document Accent Header -->
     <path d="M60 76C60 67.1634 67.1634 60 76 60H724C732.837 60 740 67.1634 740 76V160H60V76Z" fill="#18181B"/>
-    <text x="100" y="118" fill="#FACC15" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" letter-spacing="1">${typeLabel}</text>
+    <text x="100" y="118" fill="#EFCE02" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" letter-spacing="1">${typeLabel}</text>
     <text x="700" y="118" text-anchor="end" fill="#A1A1AA" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="500">${sizeLabel}</text>
     
     <!-- Document Graphic / Icon -->

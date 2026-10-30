@@ -377,14 +377,17 @@ export function FileUploadDialog({
                     className="text-xs"
                   >
                     <option value="IN_APP_VIEWER">
-                      In-App Viewer (Controlled Mode with Progressive Loading)
+                      In-App Viewer (Branded Mode with Controls)
+                    </option>
+                    <option value="RENDER_AS_PAGE">
+                      Render as a Page (Clean Full Screen Asset, No Header/Footer)
                     </option>
                     <option value="DIRECT_RAW">
                       Direct File Access (Raw Stream / Inline Download)
                     </option>
                   </NativeSelect>
                   <p className="text-[10px] text-muted-foreground">
-                    In-App Viewer loads a branded reader; Direct Raw redirects straight to the file.
+                    Render as a Page displays the asset edge-to-edge full screen; In-App Viewer adds branded Basilissa navigation controls.
                   </p>
                 </div>
               </div>

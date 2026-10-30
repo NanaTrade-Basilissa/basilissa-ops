@@ -41,6 +41,10 @@ export const HANDLERS: Record<string, JobHandler> = {
     const { handleAnnouncementFanout } = await import("@/lib/modules/announcements/jobs");
     return handleAnnouncementFanout(payload);
   },
+  "files.process_preview": async (payload, context) => {
+    const { handleFileProcessPreview } = await import("@/lib/modules/files/jobs");
+    return handleFileProcessPreview(payload, context);
+  },
 };
 
 export function resolveHandler(type: string): JobHandler | undefined {

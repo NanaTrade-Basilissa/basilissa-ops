@@ -1,4 +1,4 @@
-export type HostedFileDisplayMode = "IN_APP_VIEWER" | "DIRECT_RAW";
+export type HostedFileDisplayMode = "IN_APP_VIEWER" | "DIRECT_RAW" | "RENDER_AS_PAGE";
 export type LowResPreviewStatus = "NONE" | "PENDING" | "READY" | "FAILED";
 
 export const RESERVED_SLUGS: readonly string[] = [

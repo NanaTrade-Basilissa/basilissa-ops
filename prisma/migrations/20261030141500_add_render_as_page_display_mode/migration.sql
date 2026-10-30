@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "HostedFileDisplayMode" ADD VALUE IF NOT EXISTS 'RENDER_AS_PAGE';
