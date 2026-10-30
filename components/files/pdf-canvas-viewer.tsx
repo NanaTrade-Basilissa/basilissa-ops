@@ -56,8 +56,6 @@ export function PdfCanvasViewer({
   useEffect(() => {
     activeTaskRef.current = true;
 
-    let scriptElement: HTMLScriptElement | null = null;
-
     async function initPdfJs(): Promise<void> {
       if (window.pdfjsLib) {
         return;
@@ -88,7 +86,6 @@ export function PdfCanvasViewer({
         };
         script.onerror = () => reject(new Error("Failed to load local PDF script"));
         document.head.appendChild(script);
-        scriptElement = script;
       });
     }
 
@@ -114,39 +111,68 @@ export function PdfCanvasViewer({
         const container = containerRef.current;
         if (!container) return;
 
-        // Clear previous canvas renders
+        // Clear previous page renders
         container.innerHTML = "";
-
-        // High DPI multiplier (2x for retina sharpness without excessive memory use)
-        const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
 
         for (let pageNum = 1; pageNum <= pagesCount; pageNum++) {
           if (!activeTaskRef.current) break;
 
           const page = await pdf.getPage(pageNum);
           const baseViewport = page.getViewport({ scale: 1 });
-          const renderViewport = page.getViewport({ scale: dpr * 1.5 });
 
-          const pageWrapper = document.createElement("div");
-          pageWrapper.className =
-            "relative w-full flex flex-col items-center justify-center rounded-xl bg-white shadow-2xl overflow-hidden mb-6 last:mb-0 transition-transform duration-200";
+          // Safe resolution scaling: Target ~1200px width for retina sharpness
+          // while strictly clamping dimensions to avoid iOS Safari canvas memory limit (max 2048px width / 3000px height)
+          let targetScale = Math.min(2.5, 1200 / Math.max(baseViewport.width, 1));
+          if (baseViewport.height * targetScale > 3000) {
+            targetScale = 3000 / baseViewport.height;
+          }
+          const renderViewport = page.getViewport({ scale: Math.max(1, targetScale) });
 
+          // Create temporary offscreen canvas
           const canvas = document.createElement("canvas");
-          canvas.width = renderViewport.width;
-          canvas.height = renderViewport.height;
-          canvas.className = "w-full h-auto block select-none";
-          canvas.style.aspectRatio = `${baseViewport.width} / ${baseViewport.height}`;
+          canvas.width = Math.round(renderViewport.width);
+          canvas.height = Math.round(renderViewport.height);
 
-          const ctx = canvas.getContext("2d", { alpha: false });
+          const ctx = canvas.getContext("2d", { willReadFrequently: false });
           if (!ctx) continue;
 
-          pageWrapper.appendChild(canvas);
-          container.appendChild(pageWrapper);
+          // Explicitly paint white background so transparent PDF pages don't show transparent/black
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+          // Render PDF page content onto canvas
           await page.render({
             canvasContext: ctx,
             viewport: renderViewport,
           }).promise;
+
+          if (!activeTaskRef.current) {
+            canvas.width = 0;
+            canvas.height = 0;
+            break;
+          }
+
+          // Convert rendered canvas into standard JPEG image element
+          // This immediately frees iOS Safari GPU canvas memory and avoids blank white canvas bugs
+          const imgUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+          // Release canvas backing store immediately
+          canvas.width = 0;
+          canvas.height = 0;
+
+          const pageCard = document.createElement("div");
+          pageCard.className =
+            "relative w-full flex flex-col items-center justify-center rounded-xl bg-white shadow-2xl overflow-hidden mb-6 last:mb-0";
+
+          const img = document.createElement("img");
+          img.src = imgUrl;
+          img.alt = `${title} - Page ${pageNum} of ${pagesCount}`;
+          img.className = "w-full h-auto block select-none";
+          img.draggable = false;
+          img.decoding = "async";
+
+          pageCard.appendChild(img);
+          container.appendChild(pageCard);
 
           if (activeTaskRef.current) {
             setRenderedCount(pageNum);
@@ -168,16 +194,13 @@ export function PdfCanvasViewer({
 
     return () => {
       activeTaskRef.current = false;
-      if (scriptElement && scriptElement.parentNode) {
-        // Keep script in head for caching across views
-      }
     };
-  }, [url, onLoaded]);
+  }, [url, title, onLoaded]);
 
   return (
     <div className="relative w-full flex flex-col items-center">
       {/* Loading Skeleton & Progress */}
-      {loading && (
+      {loading && renderedCount === 0 && (
         <div className="flex w-full flex-col items-center justify-center py-16 text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-900 border border-zinc-800 text-[#EFCE02] shadow-lg animate-pulse">
             <Loader2 className="h-7 w-7 animate-spin" />
@@ -187,7 +210,7 @@ export function PdfCanvasViewer({
               ? `Rendering page ${renderedCount + 1} of ${totalPages}...`
               : "Loading document..."}
           </p>
-          <p className="mt-1 text-xs text-zinc-400">Optimizing full resolution view for your device</p>
+          <p className="mt-1 text-xs text-zinc-400">Rendering high-resolution pages for mobile</p>
         </div>
       )}
 
@@ -208,7 +231,7 @@ export function PdfCanvasViewer({
         </div>
       )}
 
-      {/* Rendered Canvas Pages Container */}
+      {/* Rendered Image Pages Container */}
       <div
         ref={containerRef}
         className="w-full flex flex-col items-center transition-all duration-200 ease-out"

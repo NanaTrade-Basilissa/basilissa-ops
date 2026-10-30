@@ -293,17 +293,20 @@ export function ProgressiveViewer({
               <ZoomIn className="h-4 w-4" />
             </button>
 
-            <div className="mx-1 h-3.5 w-px bg-zinc-800" />
-
-            <button
-              type="button"
-              onClick={handleRotate}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white active:scale-95"
-              aria-label="Rotate 90 degrees"
-              title="Rotate 90°"
-            >
-              <RotateCw className="h-4 w-4" />
-            </button>
+            {!isPdf && (
+              <>
+                <div className="mx-1 h-3.5 w-px bg-zinc-800" />
+                <button
+                  type="button"
+                  onClick={handleRotate}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white active:scale-95"
+                  aria-label="Rotate 90 degrees"
+                  title="Rotate 90°"
+                >
+                  <RotateCw className="h-4 w-4" />
+                </button>
+              </>
+            )}
 
             {scale > 1 && (
               <button
@@ -403,16 +406,20 @@ export function ProgressiveViewer({
               >
                 <ZoomIn className="h-4 w-4" />
               </button>
-              <div className="mx-1 h-3 w-px bg-zinc-700" />
-              <button
-                type="button"
-                onClick={handleRotate}
-                className="rounded p-1.5 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
-                title="Rotate 90 degrees"
-                aria-label="Rotate"
-              >
-                <RotateCw className="h-4 w-4" />
-              </button>
+              {!isPdf && (
+                <>
+                  <div className="mx-1 h-3 w-px bg-zinc-700" />
+                  <button
+                    type="button"
+                    onClick={handleRotate}
+                    className="rounded p-1.5 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                    title="Rotate 90 degrees"
+                    aria-label="Rotate"
+                  >
+                    <RotateCw className="h-4 w-4" />
+                  </button>
+                </>
+              )}
             </div>
           )}
 
