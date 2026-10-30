@@ -11,6 +11,7 @@ import {
   Minimize2,
   WifiOff,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { useOfflineCache } from "@/components/files/use-offline-cache";
 
@@ -196,6 +197,18 @@ export function PresentationViewer({
             : "max-w-md max-h-[94vh] aspect-[9/16] px-2 sm:px-4"
         }`}
       >
+        {slides.length === 0 && (
+          <div className="flex flex-col items-center justify-center text-center p-8 bg-zinc-900/60 rounded-2xl border border-zinc-800">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 text-[#EFCE02] mb-3">
+              <Loader2 className="h-7 w-7 animate-spin" />
+            </div>
+            <h3 className="text-sm font-semibold text-white">Preparing Slideshow...</h3>
+            <p className="mt-1 text-xs text-zinc-400 max-w-xs">
+              Slide frames are currently being prepared for high-speed playback.
+            </p>
+          </div>
+        )}
+
         {slides.map((slideUrl, idx) => {
           const isActive = idx === currentIndex;
           return (

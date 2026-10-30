@@ -245,7 +245,16 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
   }
 
   if (!file.generateLowRes) {
-    return { success: true };
+    const isPresentation =
+      file.mimeType.includes("presentation") ||
+      file.mimeType.includes("powerpoint") ||
+      file.originalFilename.toLowerCase().endsWith(".pptx") ||
+      file.originalFilename.toLowerCase().endsWith(".ppt");
+
+    // Only skip processing if it is NOT a presentation configured for viewing
+    if (!isPresentation || file.displayMode === "DIRECT_RAW") {
+      return { success: true };
+    }
   }
 
   await prisma.hostedFile.update({

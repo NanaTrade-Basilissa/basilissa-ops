@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { requirePermission } from "@/lib/modules/identity/server";
 import { createPresignedUploadUrl, isR2Configured } from "@/lib/platform/r2";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
     const actor = await requirePermission("files:write");

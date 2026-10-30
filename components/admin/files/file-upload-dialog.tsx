@@ -6,11 +6,13 @@ import {
   UploadCloud,
   FileText,
   FileImage,
+  Presentation,
   Loader2,
   X,
   Lock,
   Globe,
   Sparkles,
+  AlertCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -49,6 +51,9 @@ export function FileUploadDialog({
   onUploaded,
 }: FileUploadDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeXhrRef = useRef<XMLHttpRequest | null>(null);
+  const startTimeRef = useRef<number>(0);
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [isPublic, setIsPublic] = useState(false);
@@ -58,9 +63,26 @@ export function FileUploadDialog({
 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatusText, setUploadStatusText] = useState("");
+  const [uploadDetailText, setUploadDetailText] = useState("");
+  const [uploadSpeedText, setUploadSpeedText] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  const isImage = Boolean(selectedFile?.type.startsWith("image/"));
+  const isPresentation = Boolean(
+    selectedFile &&
+      (selectedFile.type.includes("presentation") ||
+        selectedFile.type.includes("powerpoint") ||
+        selectedFile.name.toLowerCase().endsWith(".pptx") ||
+        selectedFile.name.toLowerCase().endsWith(".ppt"))
+  );
+
   const resetForm = () => {
+    if (activeXhrRef.current) {
+      activeXhrRef.current.abort();
+      activeXhrRef.current = null;
+    }
     setSelectedFile(null);
     setTitle("");
     setIsPublic(false);
@@ -69,13 +91,112 @@ export function FileUploadDialog({
     setGenerateLowRes(true);
     setUploading(false);
     setUploadProgress(0);
+    setUploadStatusText("");
+    setUploadDetailText("");
+    setUploadSpeedText("");
+    setUploadError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleCancel = () => {
+    if (uploading) {
+      if (activeXhrRef.current) {
+        activeXhrRef.current.abort();
+        activeXhrRef.current = null;
+      }
+      setUploading(false);
+      setUploadProgress(0);
+      setUploadStatusText("");
+      setUploadDetailText("");
+      setUploadSpeedText("");
+      toast.info("Upload cancelled.");
+    } else {
+      resetForm();
+      onOpenChange(false);
+    }
   };
 
   const handleFileChange = (file: File) => {
     setSelectedFile(file);
+    setUploadError(null);
     const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
     setTitle(nameWithoutExt);
+  };
+
+  /**
+   * Resilient upload via server streaming fallback.
+   * Tracks upload progress smoothly through an XMLHttpRequest.
+   */
+  const uploadViaFallback = async (fileToUpload: File, fileTitle: string): Promise<HostedFileItem> => {
+    return new Promise<HostedFileItem>((resolve, reject) => {
+      const formData = new FormData();
+      formData.append("file", fileToUpload);
+      formData.append("title", fileTitle);
+      formData.append("isPublic", String(isPublic));
+      if (isPublic && customSlug.trim()) {
+        formData.append("customSlug", customSlug.trim());
+      }
+      formData.append("displayMode", displayMode);
+      formData.append("generateLowRes", String(generateLowRes));
+
+      const xhr = new XMLHttpRequest();
+      activeXhrRef.current = xhr;
+      xhr.open("POST", "/api/admin/files/upload-fallback", true);
+      xhr.timeout = 300000; // 5 minutes
+
+      xhr.upload.onprogress = (evt) => {
+        if (evt.lengthComputable && evt.total > 0) {
+          const loaded = evt.loaded;
+          const total = evt.total;
+          const pct = Math.min(92, Math.max(5, Math.round(5 + (loaded / total) * 87)));
+          setUploadProgress(pct);
+          setUploadDetailText(`${formatBytes(loaded)} / ${formatBytes(total)}`);
+
+          const elapsedSec = (Date.now() - startTimeRef.current) / 1000;
+          if (elapsedSec > 0.5 && loaded > 0) {
+            const bps = loaded / elapsedSec;
+            const remainingBytes = Math.max(0, total - loaded);
+            const etaSec = Math.ceil(remainingBytes / bps);
+            setUploadSpeedText(`${formatBytes(bps)}/s · ~${etaSec}s left`);
+          }
+        }
+      };
+
+      xhr.onload = () => {
+        activeXhrRef.current = null;
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (data.success && data.file) {
+              resolve(data.file);
+            } else {
+              reject(new Error(data.error || "Upload fallback failed."));
+            }
+          } catch {
+            reject(new Error("Invalid response from server upload."));
+          }
+        } else {
+          try {
+            const errData = JSON.parse(xhr.responseText);
+            reject(new Error(errData.error || `Server upload failed with status ${xhr.status}`));
+          } catch {
+            reject(new Error(`Server upload failed with status ${xhr.status}`));
+          }
+        }
+      };
+
+      xhr.onerror = () => {
+        activeXhrRef.current = null;
+        reject(new Error("Server upload network error. Please verify your connection."));
+      };
+
+      xhr.ontimeout = () => {
+        activeXhrRef.current = null;
+        reject(new Error("Server upload timed out. Connection speed is too slow for this asset size."));
+      };
+
+      xhr.send(formData);
+    });
   };
 
   const handleUpload = async () => {
@@ -85,8 +206,13 @@ export function FileUploadDialog({
     }
 
     const fileTitle = title.trim() || selectedFile.name;
+    setUploadError(null);
     setUploading(true);
-    setUploadProgress(10);
+    setUploadProgress(5);
+    setUploadStatusText("Requesting upload authorization...");
+    setUploadDetailText(`0 B / ${formatBytes(selectedFile.size)}`);
+    setUploadSpeedText("");
+    startTimeRef.current = Date.now();
 
     try {
       // Step 1: Request presigned upload URL
@@ -105,98 +231,133 @@ export function FileUploadDialog({
         throw new Error(presignData.error || "Failed to initialize upload.");
       }
 
-      setUploadProgress(30);
-
-      // If presigned S3/R2 upload is configured and available
+      // Step 2: Direct S3/R2 upload or seamless fallback
       if (presignData.configured && !presignData.useFallback && presignData.uploadUrl) {
-        // Direct browser PUT to object storage with progress tracking
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", presignData.uploadUrl, true);
-          xhr.setRequestHeader("Content-Type", selectedFile.type || "application/octet-stream");
+        let directSuccess = false;
+        try {
+          setUploadStatusText("Uploading directly to object storage...");
+          startTimeRef.current = Date.now();
 
-          xhr.upload.onprogress = (evt) => {
-            if (evt.lengthComputable) {
-              const pct = Math.round(30 + (evt.loaded / evt.total) * 50);
-              setUploadProgress(pct);
-            }
-          };
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            activeXhrRef.current = xhr;
+            xhr.open("PUT", presignData.uploadUrl, true);
+            xhr.timeout = 180000; // 3 minutes timeout for direct PUT
+            xhr.setRequestHeader("Content-Type", selectedFile.type || "application/octet-stream");
 
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve();
-            } else {
-              reject(new Error(`Storage PUT failed with status ${xhr.status}`));
-            }
-          };
+            xhr.upload.onprogress = (evt) => {
+              if (evt.lengthComputable && evt.total > 0) {
+                const loaded = evt.loaded;
+                const total = evt.total;
+                const pct = Math.min(92, Math.max(5, Math.round(5 + (loaded / total) * 87)));
+                setUploadProgress(pct);
+                setUploadDetailText(`${formatBytes(loaded)} / ${formatBytes(total)}`);
 
-          xhr.onerror = () => reject(new Error("Direct upload network error."));
-          xhr.send(selectedFile);
-        });
+                const elapsedSec = (Date.now() - startTimeRef.current) / 1000;
+                if (elapsedSec > 0.5 && loaded > 0) {
+                  const bps = loaded / elapsedSec;
+                  const remainingBytes = Math.max(0, total - loaded);
+                  const etaSec = Math.ceil(remainingBytes / bps);
+                  setUploadSpeedText(`${formatBytes(bps)}/s · ~${etaSec}s left`);
+                }
+              }
+            };
 
-        setUploadProgress(85);
+            xhr.onload = () => {
+              activeXhrRef.current = null;
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve();
+              } else {
+                reject(new Error(`Storage PUT failed with status ${xhr.status}`));
+              }
+            };
 
-        // Register file record in database
-        const recordRes = await createHostedFileAction({
-          title: fileTitle,
-          originalFilename: selectedFile.name,
-          mimeType: selectedFile.type || "application/octet-stream",
-          fileSize: selectedFile.size,
-          fileKey: presignData.fileKey,
-          fileUrl: presignData.publicUrl,
-          isPublic,
-          customSlug: isPublic && customSlug.trim() ? customSlug.trim() : undefined,
-          displayMode,
-          generateLowRes,
-        });
+            xhr.onerror = () => {
+              activeXhrRef.current = null;
+              reject(new Error("Direct upload network error."));
+            };
 
-        if (!recordRes.success) {
-          throw new Error(recordRes.error);
+            xhr.ontimeout = () => {
+              activeXhrRef.current = null;
+              reject(new Error("Direct upload timed out."));
+            };
+
+            xhr.send(selectedFile);
+          });
+
+          directSuccess = true;
+        } catch (directErr) {
+          console.warn("Direct storage PUT failed, falling back to server stream:", directErr);
+          setUploadStatusText("Direct upload blocked by network. Streaming via secure gateway...");
+          setUploadSpeedText("");
+          startTimeRef.current = Date.now();
+
+          const fallbackFile = await uploadViaFallback(selectedFile, fileTitle);
+          setUploadProgress(100);
+          setUploadStatusText("File hosted successfully!");
+          toast.success("File uploaded and hosted successfully!");
+          onUploaded(fallbackFile);
+          resetForm();
+          onOpenChange(false);
+          return;
         }
 
-        setUploadProgress(100);
-        toast.success("File uploaded and hosted successfully!");
-        onUploaded(recordRes.data);
-        resetForm();
-        onOpenChange(false);
+        if (directSuccess) {
+          setUploadProgress(95);
+          setUploadStatusText("Finalizing asset record...");
+          setUploadSpeedText("");
+
+          // Register file record in database
+          const recordRes = await createHostedFileAction({
+            title: fileTitle,
+            originalFilename: selectedFile.name,
+            mimeType: selectedFile.type || "application/octet-stream",
+            fileSize: selectedFile.size,
+            fileKey: presignData.fileKey,
+            fileUrl: presignData.publicUrl,
+            isPublic,
+            customSlug: isPublic && customSlug.trim() ? customSlug.trim() : undefined,
+            displayMode,
+            generateLowRes,
+          });
+
+          if (!recordRes.success) {
+            throw new Error(recordRes.error);
+          }
+
+          setUploadProgress(100);
+          setUploadStatusText("File hosted successfully!");
+          toast.success("File uploaded and hosted successfully!");
+          onUploaded(recordRes.data);
+          resetForm();
+          onOpenChange(false);
+        }
       } else {
-        // Server multipart fallback
-        setUploadProgress(40);
-        const formData = new FormData();
-        formData.append("file", selectedFile);
-        formData.append("title", fileTitle);
-        formData.append("isPublic", String(isPublic));
-        if (isPublic && customSlug.trim()) {
-          formData.append("customSlug", customSlug.trim());
-        }
-        formData.append("displayMode", displayMode);
-        formData.append("generateLowRes", String(generateLowRes));
-
-        const fallbackRes = await fetch("/api/admin/files/upload-fallback", {
-          method: "POST",
-          body: formData,
-        });
-
-        const fallbackData = await fallbackRes.json();
-        if (!fallbackRes.ok || !fallbackData.success) {
-          throw new Error(fallbackData.error || "Upload fallback failed");
-        }
-
+        // Direct cloud upload not configured, use server upload directly
+        setUploadStatusText("Uploading to application server...");
+        startTimeRef.current = Date.now();
+        const fallbackFile = await uploadViaFallback(selectedFile, fileTitle);
         setUploadProgress(100);
+        setUploadStatusText("File hosted successfully!");
         toast.success("File uploaded and hosted successfully!");
-        onUploaded(fallbackData.file);
+        onUploaded(fallbackFile);
         resetForm();
         onOpenChange(false);
       }
     } catch (err) {
       console.error("Upload error:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to upload file");
+      const msg = err instanceof Error ? err.message : "Failed to upload file";
+      setUploadError(msg);
+      toast.error(msg);
+      setUploadProgress(0);
+      setUploadStatusText("");
+      setUploadDetailText("");
+      setUploadSpeedText("");
     } finally {
       setUploading(false);
+      activeXhrRef.current = null;
     }
   };
-
-  const isImage = selectedFile?.type.startsWith("image/");
 
   return (
     <Dialog
@@ -259,14 +420,20 @@ export function FileUploadDialog({
                 Click to browse or drag and drop file here
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Images (PNG, JPG, WebP), PDFs, and Documents up to 100MB
+                Images, PDFs, and PowerPoint Presentations (.pptx) up to 100MB
               </p>
             </div>
           ) : (
             <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-3">
               <div className="flex items-center gap-3 overflow-hidden">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
-                  {isImage ? <FileImage className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+                  {isImage ? (
+                    <FileImage className="h-5 w-5" />
+                  ) : isPresentation ? (
+                    <Presentation className="h-5 w-5" />
+                  ) : (
+                    <FileText className="h-5 w-5" />
+                  )}
                 </div>
                 <div className="truncate">
                   <p className="text-xs font-semibold text-foreground truncate">
@@ -400,11 +567,15 @@ export function FileUploadDialog({
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-amber-500" />
                 <span className="text-xs font-semibold">
-                  Generate Low-Res Preview for Fast Loading
+                  {isPresentation
+                    ? "Pre-render Slides for TV Auto-Slide & Instant Display"
+                    : "Generate Low-Res Preview for Fast Loading"}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Instantly displays a lightweight compressed version while the high-res file loads seamlessly in the background.
+                {isPresentation
+                  ? "Pre-renders slide images so the slideshow auto-advances smoothly on restaurant TVs with zero buffering."
+                  : "Instantly displays a lightweight compressed version while the high-res file loads seamlessly in the background."}
               </p>
             </div>
             <Switch
@@ -414,14 +585,46 @@ export function FileUploadDialog({
             />
           </div>
 
+          {/* Error Banner if upload failed */}
+          {uploadError && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-500">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold">Upload Failed</p>
+                <p className="mt-0.5 text-[11px] text-red-400/90">{uploadError}</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleUpload}
+                className="h-7 text-xs border-red-500/30 text-red-400 hover:bg-red-500/20"
+              >
+                Retry
+              </Button>
+            </div>
+          )}
+
           {/* Progress Indicator */}
           {uploading && (
-            <div className="space-y-1.5 pt-2">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Uploading and optimizing asset...</span>
-                <span>{uploadProgress}%</span>
+            <div className="space-y-2 pt-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-medium text-foreground truncate max-w-[280px]">
+                  {uploadStatusText || "Uploading asset..."}
+                </span>
+                <span className="font-mono text-xs font-bold text-amber-500 shrink-0">
+                  {uploadProgress}%
+                </span>
               </div>
-              <Progress value={uploadProgress} className="h-2" />
+              <Progress
+                value={uploadProgress}
+                className="h-2.5 bg-muted/70"
+                indicatorClassName="bg-amber-500 transition-all duration-200"
+              />
+              <div className="flex justify-between items-center text-[11px] text-muted-foreground font-mono">
+                <span>{uploadDetailText}</span>
+                <span>{uploadSpeedText}</span>
+              </div>
             </div>
           )}
         </div>
@@ -430,8 +633,7 @@ export function FileUploadDialog({
           <Button
             type="button"
             variant="ghost"
-            onClick={() => onOpenChange(false)}
-            disabled={uploading}
+            onClick={handleCancel}
           >
             Cancel
           </Button>

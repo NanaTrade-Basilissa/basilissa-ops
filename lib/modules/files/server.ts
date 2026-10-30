@@ -234,8 +234,18 @@ export async function createHostedFile({
     },
   });
 
+  const isPresentation =
+    mimeType.includes("presentation") ||
+    mimeType.includes("powerpoint") ||
+    originalFilename.toLowerCase().endsWith(".pptx") ||
+    originalFilename.toLowerCase().endsWith(".ppt");
+
+  // Presentations intended for in-app or page viewing require slide rasterization
+  // so the presentation viewer can loop through slides on TV/kiosks.
+  const shouldProcess = generateLowRes || (isPresentation && displayMode !== "DIRECT_RAW");
+
   // Enqueue in Background Jobs queue so admins have visibility in /admin/jobs
-  if (generateLowRes) {
+  if (shouldProcess) {
     enqueue(FILES_PROCESS_PREVIEW, {
       fileId: record.id,
       title: record.title,

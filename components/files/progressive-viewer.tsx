@@ -559,7 +559,7 @@ export function ProgressiveViewer({
         {isPresentation && (
           <div className="w-full max-w-5xl flex flex-col items-center my-4">
             <PresentationViewer
-              slides={lowResPages && lowResPages.length > 0 ? lowResPages : [lowResUrl || highResUrl]}
+              slides={lowResPages && lowResPages.length > 0 ? lowResPages : lowResUrl ? [lowResUrl] : []}
               title={file.title}
               orientation={file.orientation || "LANDSCAPE"}
               autoSlideIntervalSeconds={8}

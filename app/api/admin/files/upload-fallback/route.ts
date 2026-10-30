@@ -7,6 +7,9 @@ import { isR2Configured, uploadBufferToStorage } from "@/lib/platform/r2";
 import { createHostedFile } from "@/lib/modules/files/server";
 import type { HostedFileDisplayMode } from "@/lib/modules/files/constants";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 300; // 5 minutes for large assets
+
 export async function POST(req: Request) {
   try {
     const actor = await requirePermission("files:write");
