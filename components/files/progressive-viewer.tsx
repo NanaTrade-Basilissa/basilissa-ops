@@ -43,18 +43,14 @@ export function ProgressiveViewer({
   const [copied, setCopied] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Pan & Zoom gesture state
+  // Zoom & Scale state
   const [scale, setScale] = useState(1);
-  const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [rotation, setRotation] = useState(0);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const isPinchingRef = useRef(false);
-  const isDraggingRef = useRef(false);
   const startDistanceRef = useRef(0);
   const startScaleRef = useRef(1);
-  const startPosRef = useRef({ x: 0, y: 0 });
-  const startTranslateRef = useRef({ x: 0, y: 0 });
   const lastTapTimeRef = useRef(0);
 
   // Background preload for high-res asset
@@ -88,22 +84,15 @@ export function ProgressiveViewer({
 
   // Zoom manipulation helpers
   const handleZoomIn = useCallback(() => {
-    setScale((s) => Math.min(5, +(s + 0.5).toFixed(2)));
+    setScale((s) => Math.min(3, +(s + 0.25).toFixed(2)));
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    setScale((s) => {
-      const next = Math.max(1, +(s - 0.5).toFixed(2));
-      if (next <= 1) {
-        setTranslate({ x: 0, y: 0 });
-      }
-      return next;
-    });
+    setScale((s) => Math.max(1, +(s - 0.25).toFixed(2)));
   }, []);
 
   const handleResetZoom = useCallback(() => {
     setScale(1);
-    setTranslate({ x: 0, y: 0 });
     setRotation(0);
   }, []);
 
@@ -111,56 +100,24 @@ export function ProgressiveViewer({
     setRotation((r) => (r + 90) % 360);
   }, []);
 
-  // Native non-passive touchmove listener to avoid iOS Safari page bounce & native conflict
-  useEffect(() => {
-    const el = viewportRef.current;
-    if (!el) return;
-
-    const preventDefaultTouch = (e: TouchEvent) => {
-      if (e.touches.length === 2 || scale > 1) {
-        if (e.cancelable) {
-          e.preventDefault();
-        }
-      }
-    };
-
-    el.addEventListener("touchmove", preventDefaultTouch, { passive: false });
-    return () => {
-      el.removeEventListener("touchmove", preventDefaultTouch);
-    };
-  }, [scale]);
-
-  // Touch handlers for 2-finger pinch-to-zoom and 1-finger pan
+  // Multi-touch gestures (2-finger pinch-to-zoom + double-tap)
+  // Single finger touches are untouched so native vertical document scrolling is 100% fluid
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length === 2) {
-      // 2 fingers: pinch-to-zoom gesture
+      // 2 fingers: pinch gesture
       isPinchingRef.current = true;
-      isDraggingRef.current = false;
       const t1 = e.touches[0]!;
       const t2 = e.touches[1]!;
       startDistanceRef.current = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
       startScaleRef.current = scale;
     } else if (e.touches.length === 1) {
-      // 1 finger: pan if zoomed in, or detect double tap
+      // Single finger: detect double tap to toggle zoom
       const now = Date.now();
       const timeDiff = now - lastTapTimeRef.current;
       lastTapTimeRef.current = now;
 
       if (timeDiff < 300) {
-        // Double tap: toggle between 1x (fit) and 2.5x zoom
-        if (scale > 1) {
-          handleResetZoom();
-        } else {
-          setScale(2.5);
-        }
-        return;
-      }
-
-      if (scale > 1) {
-        isDraggingRef.current = true;
-        const t = e.touches[0]!;
-        startPosRef.current = { x: t.clientX, y: t.clientY };
-        startTranslateRef.current = { ...translate };
+        setScale((s) => (s > 1 ? 1 : 1.75));
       }
     }
   };
@@ -173,21 +130,9 @@ export function ProgressiveViewer({
 
       if (startDistanceRef.current > 0) {
         const factor = currentDist / startDistanceRef.current;
-        const newScale = Math.min(5, Math.max(1, +(startScaleRef.current * factor).toFixed(2)));
+        const newScale = Math.min(3, Math.max(1, +(startScaleRef.current * factor).toFixed(2)));
         setScale(newScale);
-        if (newScale <= 1) {
-          setTranslate({ x: 0, y: 0 });
-        }
       }
-    } else if (isDraggingRef.current && e.touches.length === 1 && scale > 1) {
-      const t = e.touches[0]!;
-      const deltaX = t.clientX - startPosRef.current.x;
-      const deltaY = t.clientY - startPosRef.current.y;
-
-      setTranslate({
-        x: startTranslateRef.current.x + deltaX,
-        y: startTranslateRef.current.y + deltaY,
-      });
     }
   };
 
@@ -195,36 +140,6 @@ export function ProgressiveViewer({
     if (e.touches.length < 2) {
       isPinchingRef.current = false;
     }
-    if (e.touches.length === 0) {
-      isDraggingRef.current = false;
-      if (scale <= 1) {
-        setTranslate({ x: 0, y: 0 });
-      }
-    }
-  };
-
-  // Desktop mouse drag handlers when zoomed in
-  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (scale > 1 && e.button === 0) {
-      isDraggingRef.current = true;
-      startPosRef.current = { x: e.clientX, y: e.clientY };
-      startTranslateRef.current = { ...translate };
-    }
-  };
-
-  const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isDraggingRef.current && scale > 1) {
-      const deltaX = e.clientX - startPosRef.current.x;
-      const deltaY = e.clientY - startPosRef.current.y;
-      setTranslate({
-        x: startTranslateRef.current.x + deltaX,
-        y: startTranslateRef.current.y + deltaY,
-      });
-    }
-  };
-
-  const onMouseUp = () => {
-    isDraggingRef.current = false;
   };
 
   const toggleFullscreen = () => {
@@ -251,40 +166,38 @@ export function ProgressiveViewer({
       : `${Math.round(file.fileSize / 1024)} KB`;
 
   // ==========================================
-  // MODE 1: "Render as a Page" (Full Screen Mobile Experience)
-  // - Entire image fitted properly on screen on initial load
-  // - Physical zoom buttons (+ / - / reset)
-  // - 2-finger pinch-to-zoom + 1-finger pan
-  // - Double-tap zoom
-  // - Viewer controls button HIDDEN
+  // MODE 1: "Render as a Page" (Clean Full Screen Document View)
+  // - Vertically scrollable across ALL pages with native momentum
+  // - Clean fit width on initial load (no oversized cropping)
+  // - Physical zoom buttons (+ / - / reset to fit)
+  // - 2-finger pinch-to-zoom + double-tap zoom
+  // - NO header, NO footer, NO floating viewer controls button
   // ==========================================
   if (viewMode === "page") {
     return (
       <div
         ref={containerRef}
-        className="relative min-h-[100dvh] w-full bg-zinc-950 font-sans text-zinc-100 antialiased overflow-hidden selection:bg-[#EFCE02] selection:text-black touch-none"
+        className="relative min-h-screen w-full bg-zinc-950 font-sans text-zinc-100 antialiased overflow-y-auto overflow-x-auto selection:bg-[#EFCE02] selection:text-black"
+        style={{
+          touchAction: "pan-x pan-y pinch-zoom",
+        }}
       >
-        {/* Main Pan/Zoom Canvas */}
+        {/* Main Scrollable Canvas */}
         <div
           ref={viewportRef}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={onMouseUp}
-          className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden"
-          style={{
-            cursor: scale > 1 ? "grab" : "default",
-          }}
+          className="min-h-screen w-full flex flex-col items-center justify-start py-6 px-3 sm:px-6 pb-28"
         >
           {isImage && (
             <div
-              className="relative flex max-h-[100dvh] max-w-full items-center justify-center transition-transform duration-75 ease-out select-none will-change-transform"
+              className="relative flex flex-col items-center justify-start transition-all duration-200 ease-out select-none"
               style={{
-                transform: `translate3d(${translate.x}px, ${translate.y}px, 0) scale(${scale}) rotate(${rotation}deg)`,
-                transformOrigin: "center center",
+                width: `${Math.round(scale * 100)}%`,
+                maxWidth: scale === 1 ? "48rem" : `${Math.round(scale * 48)}rem`,
+                transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+                transformOrigin: "center top",
               }}
             >
               {/* Instant low-res preview */}
@@ -295,13 +208,13 @@ export function ProgressiveViewer({
                   fetchPriority="high"
                   decoding="async"
                   draggable={false}
-                  className={`max-h-[100dvh] max-w-[100vw] w-auto h-auto object-contain transition-opacity duration-300 pointer-events-none select-none ${
-                    isHighResLoaded ? "opacity-0 absolute" : "opacity-100 blur-[0.5px]"
+                  className={`w-full h-auto object-contain rounded-lg shadow-2xl transition-opacity duration-300 pointer-events-none select-none ${
+                    isHighResLoaded ? "opacity-0 absolute inset-0" : "opacity-100 blur-[0.5px]"
                   }`}
                 />
               )}
 
-              {/* High-res asset (fitted to screen width & height on 1x) */}
+              {/* High-res asset (fitted to screen width & scrollable vertically for all pages) */}
               <img
                 src={highResUrl}
                 alt={file.title}
@@ -309,15 +222,15 @@ export function ProgressiveViewer({
                 decoding="async"
                 draggable={false}
                 onLoad={() => setIsHighResLoaded(true)}
-                className={`max-h-[100dvh] max-w-[100vw] w-auto h-auto object-contain transition-opacity duration-300 select-none ${
-                  isHighResLoaded || !lowResUrl ? "opacity-100" : "opacity-0 absolute pointer-events-none"
+                className={`w-full h-auto object-contain rounded-lg shadow-2xl transition-opacity duration-300 select-none ${
+                  isHighResLoaded || !lowResUrl ? "opacity-100" : "opacity-0 absolute inset-0 pointer-events-none"
                 }`}
               />
             </div>
           )}
 
           {isPdf && (
-            <div className="h-[100dvh] w-screen overflow-hidden">
+            <div className="h-[92vh] w-full max-w-5xl overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl">
               <iframe
                 src={`${highResUrl}#toolbar=0&navpanes=0`}
                 title={file.title}
@@ -327,13 +240,21 @@ export function ProgressiveViewer({
           )}
 
           {!isImage && !isPdf && (
-            <div className="flex min-h-[100dvh] w-full items-center justify-center p-4">
+            <div className="flex min-h-[80vh] w-full items-center justify-center p-4">
               <div className="flex max-w-md flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-900/90 p-8 text-center shadow-2xl">
                 <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-zinc-800 text-[#EFCE02]">
                   <FileText className="h-10 w-10" />
                 </div>
                 <h2 className="text-lg font-semibold text-white">{file.title}</h2>
                 <p className="mt-1 text-sm text-zinc-400">{file.originalFilename}</p>
+                <a
+                  href={highResUrl}
+                  download={file.originalFilename}
+                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#EFCE02] px-5 py-3 text-sm font-bold text-zinc-950 transition-all hover:bg-[#FFE300] active:scale-95 shadow-md"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Document
+                </a>
               </div>
             </div>
           )}
@@ -341,7 +262,7 @@ export function ProgressiveViewer({
 
         {/* Physical Zoom Controls (Docked sleekly at bottom center for easy thumb access) */}
         {isImage && (
-          <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom,1.5rem))] left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-950/85 px-3 py-1.5 shadow-2xl backdrop-blur-md">
+          <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom,1.5rem))] left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-950/90 px-3 py-1.5 shadow-2xl backdrop-blur-md">
             <button
               type="button"
               onClick={handleZoomOut}
@@ -356,7 +277,7 @@ export function ProgressiveViewer({
               type="button"
               onClick={handleResetZoom}
               className="px-2 text-xs font-mono font-medium text-zinc-300 hover:text-[#EFCE02] transition-colors"
-              title="Reset to 100% fit"
+              title="Reset to 100% fit width"
             >
               {Math.round(scale * 100)}%
             </button>
@@ -364,7 +285,7 @@ export function ProgressiveViewer({
             <button
               type="button"
               onClick={handleZoomIn}
-              disabled={scale >= 5}
+              disabled={scale >= 3}
               className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white disabled:opacity-30 active:scale-95"
               aria-label="Zoom In"
             >
@@ -388,7 +309,7 @@ export function ProgressiveViewer({
                 type="button"
                 onClick={handleResetZoom}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-[#EFCE02] active:scale-95"
-                title="Reset zoom"
+                title="Reset zoom to 100% fit width"
               >
                 <RotateCcw className="h-4 w-4" />
               </button>
@@ -527,7 +448,7 @@ export function ProgressiveViewer({
       </header>
 
       {/* Main Viewing Canvas */}
-      <main className="relative flex flex-1 items-center justify-center overflow-auto p-4 sm:p-8">
+      <main className="relative flex flex-1 flex-col items-center justify-start overflow-y-auto overflow-x-auto p-4 sm:p-8">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.03]"
           style={{
@@ -540,10 +461,12 @@ export function ProgressiveViewer({
         {/* Image Mode */}
         {isImage && (
           <div
-            className="relative flex items-center justify-center transition-transform duration-100 ease-out select-none"
+            className="w-full max-w-3xl flex flex-col items-center my-auto transition-all duration-200 ease-out select-none"
             style={{
-              transform: `scale(${scale}) rotate(${rotation}deg)`,
-              transformOrigin: "center center",
+              width: `${Math.round(scale * 100)}%`,
+              maxWidth: scale === 1 ? "48rem" : `${Math.round(scale * 48)}rem`,
+              transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+              transformOrigin: "center top",
             }}
           >
             {lowResUrl && (
@@ -552,8 +475,8 @@ export function ProgressiveViewer({
                 alt={file.title}
                 fetchPriority="high"
                 decoding="async"
-                className={`max-h-[82vh] max-w-[92vw] rounded-lg object-contain shadow-2xl transition-opacity duration-300 ${
-                  isHighResLoaded ? "opacity-0 absolute pointer-events-none" : "opacity-100 blur-[0.5px]"
+                className={`w-full h-auto rounded-lg object-contain shadow-2xl transition-opacity duration-300 pointer-events-none select-none ${
+                  isHighResLoaded ? "opacity-0 absolute inset-0" : "opacity-100 blur-[0.5px]"
                 }`}
               />
             )}
@@ -564,8 +487,8 @@ export function ProgressiveViewer({
               fetchPriority={lowResUrl ? "auto" : "high"}
               decoding="async"
               onLoad={() => setIsHighResLoaded(true)}
-              className={`max-h-[82vh] max-w-[92vw] rounded-lg object-contain shadow-2xl transition-opacity duration-300 ${
-                isHighResLoaded || !lowResUrl ? "opacity-100" : "opacity-0 absolute pointer-events-none"
+              className={`w-full h-auto rounded-lg object-contain shadow-2xl transition-opacity duration-300 select-none ${
+                isHighResLoaded || !lowResUrl ? "opacity-100" : "opacity-0 absolute inset-0 pointer-events-none"
               }`}
             />
           </div>
