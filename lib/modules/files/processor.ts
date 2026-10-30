@@ -59,6 +59,72 @@ export async function inspectPptx(buffer: Buffer): Promise<{
 }
 
 /**
+ * Extracts slide images directly from a PPTX file without requiring LibreOffice or external binaries.
+ * Works seamlessly in serverless environments (Vercel, AWS Lambda) and Docker.
+ */
+async function extractPptxSlides(buffer: Buffer): Promise<{
+  slideBuffers: Buffer[];
+  orientation: "LANDSCAPE" | "PORTRAIT";
+  slideCount: number;
+} | null> {
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    const pptxInfo = await inspectPptx(buffer);
+    const orientation = pptxInfo?.orientation || "LANDSCAPE";
+
+    // 1. Try resolving slides in strict order using slide rels
+    const slideRelsFiles = Object.keys(zip.files)
+      .filter((k) => /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/i.test(k))
+      .sort((a, b) => {
+        const numA = parseInt(a.match(/slide(\d+)/i)?.[1] || "0", 10);
+        const numB = parseInt(b.match(/slide(\d+)/i)?.[1] || "0", 10);
+        return numA - numB;
+      });
+
+    const slideBuffers: Buffer[] = [];
+    if (slideRelsFiles.length > 0) {
+      for (const relsPath of slideRelsFiles) {
+        const relsXml = await zip.files[relsPath].async("string");
+        const allImgMatches = [...relsXml.matchAll(/Target="\.\.\/media\/([^"]+)"/gi)];
+        for (const m of allImgMatches) {
+          const mediaPath = `ppt/media/${m[1]}`;
+          if (zip.files[mediaPath]) {
+            const raw = await zip.files[mediaPath].async("nodebuffer");
+            slideBuffers.push(raw);
+            break;
+          }
+        }
+      }
+    }
+
+    // 2. Fallback: if rels didn't yield images, check ppt/media directly
+    if (slideBuffers.length === 0) {
+      const mediaFiles = Object.keys(zip.files)
+        .filter((k) => /^ppt\/media\/image.*?\.(png|jpe?g|webp)$/i.test(k))
+        .sort();
+
+      for (const m of mediaFiles) {
+        const raw = await zip.files[m].async("nodebuffer");
+        slideBuffers.push(raw);
+      }
+    }
+
+    if (slideBuffers.length > 0) {
+      return {
+        slideBuffers,
+        orientation,
+        slideCount: slideBuffers.length,
+      };
+    }
+
+    return null;
+  } catch (err) {
+    log.warn("Failed to extract embedded PPTX slide images", { err });
+    return null;
+  }
+}
+
+/**
  * Attempts to convert a PPTX/PPT presentation buffer to PDF using headless LibreOffice if available.
  */
 async function convertPptxToPdf(buffer: Buffer): Promise<Buffer | null> {
@@ -340,7 +406,67 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
       const pptxInfo = await inspectPptx(originalBuffer);
       const orientation: "LANDSCAPE" | "PORTRAIT" = pptxInfo?.orientation || "LANDSCAPE";
 
-      // Convert presentation to PDF via headless LibreOffice if available
+      // Method 1: Direct OpenXML slide image extraction (works in all environments including Vercel)
+      const extracted = await extractPptxSlides(originalBuffer);
+      if (extracted && extracted.slideBuffers.length > 0) {
+        const pageKeys: string[] = [];
+        let firstPageUrl = "";
+        let totalSize = 0;
+
+        for (let p = 0; p < extracted.slideBuffers.length; p++) {
+          const rawSlide = extracted.slideBuffers[p];
+          const webpBuffer = await sharp(rawSlide)
+            .resize({
+              width: orientation === "LANDSCAPE" ? 1920 : 1080,
+              height: orientation === "LANDSCAPE" ? 1080 : 1920,
+              fit: "inside",
+              withoutEnlargement: true,
+            })
+            .webp({ quality: 80, effort: 4 })
+            .toBuffer();
+
+          const pageKey = `hosted-files/previews/${file.id}-slide-${p + 1}.webp`;
+          const uploadRes = await uploadBufferToStorage({
+            key: pageKey,
+            buffer: webpBuffer,
+            contentType: "image/webp",
+          });
+
+          if (uploadRes) {
+            pageKeys.push(uploadRes.fileKey);
+            if (p === 0) {
+              firstPageUrl = uploadRes.publicUrl;
+            }
+            totalSize += webpBuffer.length;
+          }
+        }
+
+        if (pageKeys.length > 0) {
+          await prisma.hostedFile.update({
+            where: { id: fileId },
+            data: {
+              lowResKey: pageKeys[0],
+              lowResUrl: firstPageUrl,
+              lowResSize: totalSize,
+              lowResStatus: "READY",
+              pageCount: pageKeys.length,
+              previewPages: pageKeys,
+              orientation: extracted.orientation,
+            },
+          });
+
+          log.info("Presentation slide previews extracted and optimized successfully", {
+            fileId,
+            slideCount: pageKeys.length,
+            totalPreviewSize: totalSize,
+            orientation: extracted.orientation,
+          });
+
+          return { success: true };
+        }
+      }
+
+      // Method 2: Convert presentation to PDF via headless LibreOffice if available
       const convertedPdf = await convertPptxToPdf(originalBuffer);
       if (convertedPdf) {
         const pdfResult = await processPdfPages(file.id, convertedPdf);
@@ -358,7 +484,7 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
             },
           });
 
-          log.info("Presentation slide previews generated successfully", {
+          log.info("Presentation slide previews generated via LibreOffice successfully", {
             fileId,
             slideCount: pdfResult.totalPages,
             renderedSlides: pdfResult.pageKeys.length,
