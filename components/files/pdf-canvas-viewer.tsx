@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
@@ -49,12 +50,17 @@ export function PdfCanvasViewer({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState(0);
-  const [renderedCount, setRenderedCount] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const activeTaskRef = useRef<boolean>(true);
+  const [pages, setPages] = useState<string[]>([]);
+  const renderRunIdRef = useRef(0);
+  const onLoadedRef = useRef(onLoaded);
 
   useEffect(() => {
-    activeTaskRef.current = true;
+    onLoadedRef.current = onLoaded;
+  }, [onLoaded]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const currentRunId = ++renderRunIdRef.current;
 
     async function initPdfJs(): Promise<void> {
       if (window.pdfjsLib) {
@@ -92,36 +98,32 @@ export function PdfCanvasViewer({
     async function loadAndRenderPdf() {
       try {
         await initPdfJs();
-        if (!activeTaskRef.current || !window.pdfjsLib) return;
+        if (isCancelled || renderRunIdRef.current !== currentRunId || !window.pdfjsLib) return;
 
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = "/vendor/pdfjs/pdf.worker.min.js";
 
         const loadingTask = window.pdfjsLib.getDocument({ url });
         const pdf = await loadingTask.promise;
 
-        if (!activeTaskRef.current) {
+        if (isCancelled || renderRunIdRef.current !== currentRunId) {
           pdf.destroy();
           return;
         }
 
         const pagesCount = pdf.numPages;
         setTotalPages(pagesCount);
-        onLoaded?.(pagesCount);
+        onLoadedRef.current?.(pagesCount);
 
-        const container = containerRef.current;
-        if (!container) return;
-
-        // Clear previous page renders
-        container.innerHTML = "";
+        const renderedPages: string[] = [];
 
         for (let pageNum = 1; pageNum <= pagesCount; pageNum++) {
-          if (!activeTaskRef.current) break;
+          if (isCancelled || renderRunIdRef.current !== currentRunId) break;
 
           const page = await pdf.getPage(pageNum);
           const baseViewport = page.getViewport({ scale: 1 });
 
           // Safe resolution scaling: Target ~1200px width for retina sharpness
-          // while strictly clamping dimensions to avoid iOS Safari canvas memory limit (max 2048px width / 3000px height)
+          // Clamped strictly to avoid iOS Safari canvas memory limit (max 2048px width / 3000px height)
           let targetScale = Math.min(2.5, 1200 / Math.max(baseViewport.width, 1));
           if (baseViewport.height * targetScale > 3000) {
             targetScale = 3000 / baseViewport.height;
@@ -136,17 +138,17 @@ export function PdfCanvasViewer({
           const ctx = canvas.getContext("2d", { willReadFrequently: false });
           if (!ctx) continue;
 
-          // Explicitly paint white background so transparent PDF pages don't show transparent/black
+          // Paint solid white background
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-          // Render PDF page content onto canvas
+          // Render PDF page content
           await page.render({
             canvasContext: ctx,
             viewport: renderViewport,
           }).promise;
 
-          if (!activeTaskRef.current) {
+          if (isCancelled || renderRunIdRef.current !== currentRunId) {
             canvas.width = 0;
             canvas.height = 0;
             break;
@@ -160,30 +162,17 @@ export function PdfCanvasViewer({
           canvas.width = 0;
           canvas.height = 0;
 
-          const pageCard = document.createElement("div");
-          pageCard.className =
-            "relative w-full flex flex-col items-center justify-center rounded-xl bg-white shadow-2xl overflow-hidden mb-6 last:mb-0";
-
-          const img = document.createElement("img");
-          img.src = imgUrl;
-          img.alt = `${title} - Page ${pageNum} of ${pagesCount}`;
-          img.className = "w-full h-auto block select-none";
-          img.draggable = false;
-          img.decoding = "async";
-
-          pageCard.appendChild(img);
-          container.appendChild(pageCard);
-
-          if (activeTaskRef.current) {
-            setRenderedCount(pageNum);
+          renderedPages.push(imgUrl);
+          if (!isCancelled && renderRunIdRef.current === currentRunId) {
+            setPages([...renderedPages]);
           }
         }
 
-        if (activeTaskRef.current) {
+        if (!isCancelled && renderRunIdRef.current === currentRunId) {
           setLoading(false);
         }
       } catch (err) {
-        if (activeTaskRef.current) {
+        if (!isCancelled && renderRunIdRef.current === currentRunId) {
           setError(err instanceof Error ? err.message : "Failed to render PDF pages");
           setLoading(false);
         }
@@ -193,21 +182,21 @@ export function PdfCanvasViewer({
     loadAndRenderPdf();
 
     return () => {
-      activeTaskRef.current = false;
+      isCancelled = true;
     };
-  }, [url, title, onLoaded]);
+  }, [url, title]);
 
   return (
     <div className="relative w-full flex flex-col items-center">
       {/* Loading Skeleton & Progress */}
-      {loading && renderedCount === 0 && (
+      {loading && pages.length === 0 && (
         <div className="flex w-full flex-col items-center justify-center py-16 text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-900 border border-zinc-800 text-[#EFCE02] shadow-lg animate-pulse">
             <Loader2 className="h-7 w-7 animate-spin" />
           </div>
           <p className="text-sm font-semibold text-white">
             {totalPages > 0
-              ? `Rendering page ${renderedCount + 1} of ${totalPages}...`
+              ? `Rendering page ${pages.length + 1} of ${totalPages}...`
               : "Loading document..."}
           </p>
           <p className="mt-1 text-xs text-zinc-400">Rendering high-resolution pages for mobile</p>
@@ -231,9 +220,8 @@ export function PdfCanvasViewer({
         </div>
       )}
 
-      {/* Rendered Image Pages Container */}
+      {/* Rendered React Image Pages Container (Zero duplicates guaranteed by React key reconciliation) */}
       <div
-        ref={containerRef}
         className="w-full flex flex-col items-center transition-all duration-200 ease-out"
         style={{
           width: `${Math.round(scale * 100)}%`,
@@ -242,7 +230,22 @@ export function PdfCanvasViewer({
           transformOrigin: "center top",
         }}
         aria-label={title}
-      />
+      >
+        {pages.map((imgUrl, index) => (
+          <div
+            key={index}
+            className="relative w-full flex flex-col items-center justify-center rounded-xl bg-white shadow-2xl overflow-hidden mb-6 last:mb-0"
+          >
+            <img
+              src={imgUrl}
+              alt={`${title} - Page ${index + 1} of ${totalPages || pages.length}`}
+              className="w-full h-auto block select-none"
+              draggable={false}
+              decoding="async"
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

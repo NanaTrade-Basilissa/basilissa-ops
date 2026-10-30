@@ -101,6 +101,10 @@ export function ProgressiveViewer({
     setRotation((r) => (r + 90) % 360);
   }, []);
 
+  const handlePdfLoaded = useCallback(() => {
+    setIsHighResLoaded(true);
+  }, []);
+
   // Multi-touch gestures (2-finger pinch-to-zoom + double-tap)
   // Single finger touches are untouched so native vertical document scrolling is 100% fluid
   const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -236,7 +240,7 @@ export function ProgressiveViewer({
               title={file.title}
               scale={scale}
               rotation={rotation}
-              onLoaded={() => setIsHighResLoaded(true)}
+              onLoaded={handlePdfLoaded}
             />
           )}
 
@@ -510,7 +514,7 @@ export function ProgressiveViewer({
               title={file.title}
               scale={scale}
               rotation={rotation}
-              onLoaded={() => setIsHighResLoaded(true)}
+              onLoaded={handlePdfLoaded}
             />
           </div>
         )}
