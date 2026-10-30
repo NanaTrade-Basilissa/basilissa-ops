@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import type { HostedFileItem } from "@/lib/modules/files/constants";
 import { PdfCanvasViewer } from "@/components/files/pdf-canvas-viewer";
+import { PresentationViewer } from "@/components/files/presentation-viewer";
+import { useOfflineCache } from "@/components/files/use-offline-cache";
 
 interface ProgressiveViewerProps {
   file: HostedFileItem;
@@ -36,6 +38,18 @@ export function ProgressiveViewer({
 }: ProgressiveViewerProps) {
   const isImage = file.mimeType.startsWith("image/");
   const isPdf = file.mimeType === "application/pdf";
+  const isPresentation =
+    file.mimeType.includes("presentation") ||
+    file.mimeType.includes("powerpoint") ||
+    file.originalFilename.toLowerCase().endsWith(".pptx") ||
+    file.originalFilename.toLowerCase().endsWith(".ppt");
+
+  // Proactively cache assets for offline TV and page playback
+  const cacheUrls =
+    lowResPages && lowResPages.length > 0
+      ? lowResPages
+      : [lowResUrl, highResUrl].filter(Boolean);
+  useOfflineCache({ urlsToCache: cacheUrls });
 
   const defaultMode =
     initialMode ?? (file.displayMode === "RENDER_AS_PAGE" ? "page" : "branded");
@@ -181,6 +195,24 @@ export function ProgressiveViewer({
   // - NO header, NO footer, NO floating viewer controls button
   // ==========================================
   if (viewMode === "page") {
+    if (isPresentation) {
+      const slides =
+        lowResPages && lowResPages.length > 0
+          ? lowResPages
+          : lowResUrl
+          ? [lowResUrl]
+          : [];
+
+      return (
+        <PresentationViewer
+          slides={slides}
+          title={file.title}
+          orientation={file.orientation || "LANDSCAPE"}
+          autoSlideIntervalSeconds={8}
+        />
+      );
+    }
+
     return (
       <div
         ref={containerRef}
@@ -247,7 +279,7 @@ export function ProgressiveViewer({
             />
           )}
 
-          {!isImage && !isPdf && (
+          {!isImage && !isPdf && !isPresentation && (
             <div className="flex min-h-[80vh] w-full items-center justify-center p-4">
               <div className="flex max-w-md flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-900/90 p-8 text-center shadow-2xl">
                 <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-zinc-800 text-[#EFCE02]">
@@ -523,8 +555,20 @@ export function ProgressiveViewer({
           </div>
         )}
 
+        {/* Presentation Mode (Interactive Slideshow) */}
+        {isPresentation && (
+          <div className="w-full max-w-5xl flex flex-col items-center my-4">
+            <PresentationViewer
+              slides={lowResPages && lowResPages.length > 0 ? lowResPages : [lowResUrl || highResUrl]}
+              title={file.title}
+              orientation={file.orientation || "LANDSCAPE"}
+              autoSlideIntervalSeconds={8}
+            />
+          </div>
+        )}
+
         {/* Document / Other */}
-        {!isImage && !isPdf && (
+        {!isImage && !isPdf && !isPresentation && (
           <div className="flex max-w-md flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-900/90 p-8 text-center shadow-2xl">
             <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-zinc-800 text-[#EFCE02]">
               <FileText className="h-10 w-10" />

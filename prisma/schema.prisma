@@ -2424,6 +2424,7 @@ model HostedFile {
   lowResStatus     LowResPreviewStatus   @default(NONE)
   pageCount        Int?                  // total document pages
   previewPages     Json?                 // array of storage keys or URLs for multi-page documents
+  orientation      String?               // LANDSCAPE | PORTRAIT
 
   // Ownership & Metrics
   uploadedById     String

@@ -229,4 +229,42 @@ describe("Hosted Files - Validation & Slugs", () => {
       })
     );
   });
+
+  it("inspects PPTX orientation and slide count accurately", async () => {
+    const { inspectPptx } = await import("@/lib/modules/files/processor");
+    const JSZip = (await import("jszip")).default;
+
+    // 1. Landscape 16:9 presentation mock (cx > cy)
+    const landscapeZip = new JSZip();
+    landscapeZip.file(
+      "ppt/presentation.xml",
+      `<?xml version="1.0" encoding="UTF-8"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldSz cx="12192000" cy="6858000"/></p:presentation>`
+    );
+    landscapeZip.file("ppt/slides/slide1.xml", `<p:sld/>`);
+    landscapeZip.file("ppt/slides/slide2.xml", `<p:sld/>`);
+    landscapeZip.file("ppt/slides/slide3.xml", `<p:sld/>`);
+
+    const landscapeBuf = await landscapeZip.generateAsync({ type: "nodebuffer" });
+    const landscapeRes = await inspectPptx(landscapeBuf);
+
+    expect(landscapeRes).not.toBeNull();
+    expect(landscapeRes?.orientation).toBe("LANDSCAPE");
+    expect(landscapeRes?.slideCount).toBe(3);
+
+    // 2. Portrait presentation mock (cy > cx, vertical menu board)
+    const portraitZip = new JSZip();
+    portraitZip.file(
+      "ppt/presentation.xml",
+      `<?xml version="1.0" encoding="UTF-8"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldSz cx="6858000" cy="12192000"/></p:presentation>`
+    );
+    portraitZip.file("ppt/slides/slide1.xml", `<p:sld/>`);
+    portraitZip.file("ppt/slides/slide2.xml", `<p:sld/>`);
+
+    const portraitBuf = await portraitZip.generateAsync({ type: "nodebuffer" });
+    const portraitRes = await inspectPptx(portraitBuf);
+
+    expect(portraitRes).not.toBeNull();
+    expect(portraitRes?.orientation).toBe("PORTRAIT");
+    expect(portraitRes?.slideCount).toBe(2);
+  });
 });

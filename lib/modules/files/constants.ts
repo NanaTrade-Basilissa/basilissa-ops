@@ -62,6 +62,7 @@ export type HostedFileItem = {
   lowResStatus: LowResPreviewStatus;
   pageCount?: number | null;
   previewPages?: string[] | null;
+  orientation?: "LANDSCAPE" | "PORTRAIT" | null;
   uploadedById: string;
   uploaderName: string;
   uploaderEmail: string;

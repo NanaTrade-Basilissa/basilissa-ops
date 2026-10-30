@@ -1,10 +1,124 @@
 import "server-only";
 import sharp from "sharp";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import JSZip from "jszip";
 import { prisma } from "@/lib/platform/prisma";
 import { scoped } from "@/lib/platform/logger";
 import { getObjectBuffer, uploadBufferToStorage } from "@/lib/platform/r2";
 
 const log = scoped("modules.files.processor");
+const execFileAsync = promisify(execFile);
+
+/**
+ * Inspects a PPTX file to extract its slide dimensions, orientation, and slide count.
+ */
+export async function inspectPptx(buffer: Buffer): Promise<{
+  slideCount: number;
+  orientation: "LANDSCAPE" | "PORTRAIT";
+  width: number;
+  height: number;
+} | null> {
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    const presXmlStr = await zip.file("ppt/presentation.xml")?.async("string");
+    if (!presXmlStr) return null;
+
+    const match =
+      presXmlStr.match(/<[a-zA-Z0-9:]*sldSz[^>]*cx="(\d+)"[^>]*cy="(\d+)"/i) ||
+      presXmlStr.match(/<[a-zA-Z0-9:]*sldSz[^>]*cy="(\d+)"[^>]*cx="(\d+)"/i);
+
+    let width = 1920;
+    let height = 1080;
+    if (match) {
+      const cx = parseInt(match[1], 10);
+      const cy = parseInt(match[2], 10);
+      width = cx;
+      height = cy;
+    }
+
+    const orientation: "LANDSCAPE" | "PORTRAIT" = width >= height ? "LANDSCAPE" : "PORTRAIT";
+
+    const slideFiles = Object.keys(zip.files).filter((name) =>
+      /^ppt\/slides\/slide\d+\.xml$/i.test(name)
+    );
+
+    return {
+      slideCount: Math.max(1, slideFiles.length),
+      orientation,
+      width,
+      height,
+    };
+  } catch (err) {
+    log.warn("Failed to inspect PPTX presentation structure", { err });
+    return null;
+  }
+}
+
+/**
+ * Attempts to convert a PPTX/PPT presentation buffer to PDF using headless LibreOffice if available.
+ */
+async function convertPptxToPdf(buffer: Buffer): Promise<Buffer | null> {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "pptx-conv-"));
+  const inputPath = path.join(tmpDir, "input.pptx");
+
+  try {
+    await fs.writeFile(inputPath, buffer);
+
+    const binaryCandidates = [
+      "libreoffice",
+      "soffice",
+      "/usr/bin/libreoffice",
+      "/usr/bin/soffice",
+      "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    ];
+
+    let converted = false;
+    for (const bin of binaryCandidates) {
+      try {
+        await execFileAsync(
+          bin,
+          [
+            "--headless",
+            "--invisible",
+            "--nodefault",
+            "--nofirststartwizard",
+            "--nolockcheck",
+            "--nologo",
+            "--norestore",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            tmpDir,
+            inputPath,
+          ],
+          { timeout: 30000 }
+        );
+        converted = true;
+        break;
+      } catch {
+        // Try next candidate
+      }
+    }
+
+    if (converted) {
+      const outputPath = path.join(tmpDir, "input.pdf");
+      const pdfBuffer = await fs.readFile(outputPath);
+      return pdfBuffer;
+    }
+    return null;
+  } catch (convErr) {
+    log.warn("LibreOffice conversion unavailable or failed", {
+      error: convErr instanceof Error ? convErr.message : String(convErr),
+    });
+    return null;
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
 
 /**
  * Generates an SVG placeholder preview for PDF/Office documents
@@ -54,12 +168,18 @@ async function processPdfPages(
   firstPageUrl: string;
   totalSize: number;
   totalPages: number;
+  orientation: "LANDSCAPE" | "PORTRAIT";
 } | null> {
   try {
     const { getDocumentProxy, renderPageAsImage } = await import("unpdf");
     const pdf = await getDocumentProxy(new Uint8Array(originalBuffer));
     const totalPages = pdf.numPages;
-    const pagesToRender = Math.min(totalPages, 20);
+    const pagesToRender = Math.min(totalPages, 30);
+
+    const firstPage = await pdf.getPage(1);
+    const firstVp = firstPage.getViewport({ scale: 1 });
+    const orientation: "LANDSCAPE" | "PORTRAIT" =
+      firstVp.width >= firstVp.height ? "LANDSCAPE" : "PORTRAIT";
 
     const pageKeys: string[] = [];
     let firstPageUrl = "";
@@ -68,12 +188,12 @@ async function processPdfPages(
     for (let p = 1; p <= pagesToRender; p++) {
       const pageImage = await renderPageAsImage(pdf, p, {
         canvasImport: () => import("@napi-rs/canvas"),
-        width: 1000,
+        width: orientation === "LANDSCAPE" ? 1440 : 1000,
         format: "png",
       });
 
       const webpBuffer = await sharp(Buffer.from(pageImage as Uint8Array))
-        .webp({ quality: 50, effort: 4 })
+        .webp({ quality: 55, effort: 4 })
         .toBuffer();
 
       const pageKey = `hosted-files/previews/${fileId}-page-${p}.webp`;
@@ -98,6 +218,7 @@ async function processPdfPages(
         firstPageUrl,
         totalSize,
         totalPages,
+        orientation,
       };
     }
     return null;
@@ -138,12 +259,21 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
 
     const isImage = file.mimeType.startsWith("image/") && !file.mimeType.includes("svg");
     const isPdf = file.mimeType === "application/pdf";
+    const isPresentation =
+      file.mimeType.includes("presentation") ||
+      file.mimeType.includes("powerpoint") ||
+      file.originalFilename.toLowerCase().endsWith(".pptx") ||
+      file.originalFilename.toLowerCase().endsWith(".ppt");
 
     if (isImage) {
       const originalBuffer = await getObjectBuffer(file.fileKey);
       if (!originalBuffer) {
         throw new Error(`Could not fetch original buffer for key ${file.fileKey}`);
       }
+
+      const imgMeta = await sharp(originalBuffer).metadata();
+      const orientation: "LANDSCAPE" | "PORTRAIT" =
+        (imgMeta.width || 1) >= (imgMeta.height || 1) ? "LANDSCAPE" : "PORTRAIT";
 
       // Downsample and compress image to high-efficiency WebP
       const previewBuffer = await sharp(originalBuffer)
@@ -178,6 +308,7 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
           lowResStatus: "READY",
           pageCount: 1,
           previewPages: [uploadRes.fileKey],
+          orientation,
         },
       });
 
@@ -185,6 +316,81 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
         fileId,
         originalSize: file.fileSize,
         previewSize: previewBuffer.length,
+        orientation,
+      });
+
+      return { success: true };
+    }
+
+    if (isPresentation) {
+      const originalBuffer = await getObjectBuffer(file.fileKey);
+      if (!originalBuffer) {
+        throw new Error(`Could not fetch original buffer for key ${file.fileKey}`);
+      }
+
+      const pptxInfo = await inspectPptx(originalBuffer);
+      const orientation: "LANDSCAPE" | "PORTRAIT" = pptxInfo?.orientation || "LANDSCAPE";
+
+      // Convert presentation to PDF via headless LibreOffice if available
+      const convertedPdf = await convertPptxToPdf(originalBuffer);
+      if (convertedPdf) {
+        const pdfResult = await processPdfPages(file.id, convertedPdf);
+        if (pdfResult) {
+          await prisma.hostedFile.update({
+            where: { id: fileId },
+            data: {
+              lowResKey: pdfResult.pageKeys[0],
+              lowResUrl: pdfResult.firstPageUrl,
+              lowResSize: pdfResult.totalSize,
+              lowResStatus: "READY",
+              pageCount: pdfResult.totalPages,
+              previewPages: pdfResult.pageKeys,
+              orientation,
+            },
+          });
+
+          log.info("Presentation slide previews generated successfully", {
+            fileId,
+            slideCount: pdfResult.totalPages,
+            renderedSlides: pdfResult.pageKeys.length,
+            totalPreviewSize: pdfResult.totalSize,
+            orientation,
+          });
+
+          return { success: true };
+        }
+      }
+
+      // If conversion tool is unavailable or failed, create SVG badge with slide metadata
+      const svgBuffer = generateDocumentPreviewSvg(
+        file.title,
+        "application/vnd.ms-powerpoint",
+        file.fileSize
+      );
+      const previewBuffer = await sharp(svgBuffer).webp({ quality: 80 }).toBuffer();
+      const previewKey = `hosted-files/previews/${file.id}-lowres.${previewExtension}`;
+
+      const uploadRes = await uploadBufferToStorage({
+        key: previewKey,
+        buffer: previewBuffer,
+        contentType: previewMime,
+      });
+
+      if (!uploadRes) {
+        throw new Error("Failed to upload preview buffer to storage");
+      }
+
+      await prisma.hostedFile.update({
+        where: { id: fileId },
+        data: {
+          lowResKey: uploadRes.fileKey,
+          lowResUrl: uploadRes.publicUrl,
+          lowResSize: previewBuffer.length,
+          lowResStatus: "READY",
+          pageCount: pptxInfo?.slideCount || 1,
+          previewPages: [uploadRes.fileKey],
+          orientation,
+        },
       });
 
       return { success: true };
@@ -207,6 +413,7 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
             lowResStatus: "READY",
             pageCount: pdfResult.totalPages,
             previewPages: pdfResult.pageKeys,
+            orientation: pdfResult.orientation,
           },
         });
 
@@ -215,6 +422,7 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
           pageCount: pdfResult.totalPages,
           renderedPages: pdfResult.pageKeys.length,
           totalPreviewSize: pdfResult.totalSize,
+          orientation: pdfResult.orientation,
         });
 
         return { success: true };

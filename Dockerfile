@@ -52,7 +52,7 @@ WORKDIR /app
 # outbound HTTPS calls (Email Gateway / Slack). pnpm: only `docker compose exec app pnpm
 # prisma db seed` needs it — the app itself runs via plain `node`.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends openssl ca-certificates libreoffice-impress-nogui fonts-dejavu fonts-liberation \
   && rm -rf /var/lib/apt/lists/* \
   && npm install -g pnpm@10.28.0
 
