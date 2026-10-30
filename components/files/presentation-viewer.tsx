@@ -32,14 +32,12 @@ export function PresentationViewer({
 }: PresentationViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialSlideIndex);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isHovered, setIsHovered] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [progress, setProgress] = useState(0); // 0 to 100%
 
   const containerRef = useRef<HTMLDivElement>(null);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const animFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const durationMs = autoSlideIntervalSeconds * 1000;
 
@@ -52,18 +50,23 @@ export function PresentationViewer({
   const handleNext = useCallback(() => {
     setCurrentIndex((prev) => (prev + 1) % totalSlides);
     setProgress(0);
-    startTimeRef.current = null;
+    startTimeRef.current = Date.now();
   }, [totalSlides]);
 
   const handlePrev = useCallback(() => {
     setCurrentIndex((prev) => (prev - 1 + totalSlides) % totalSlides);
     setProgress(0);
-    startTimeRef.current = null;
+    startTimeRef.current = Date.now();
   }, [totalSlides]);
 
   const togglePlay = useCallback(() => {
-    setIsPlaying((p) => !p);
-    startTimeRef.current = null;
+    setIsPlaying((prev) => {
+      const next = !prev;
+      if (next) {
+        startTimeRef.current = Date.now();
+      }
+      return next;
+    });
   }, []);
 
   const toggleFullscreen = useCallback(async () => {
@@ -84,7 +87,7 @@ export function PresentationViewer({
     return () => document.removeEventListener("fullscreenchange", handleFsChange);
   }, []);
 
-  // Auto-hide controls dock for clean TV display
+  // Auto-hide controls dock after 3.5s of inactivity for clean TV presentation
   const resetIdleTimer = useCallback(() => {
     setShowControls(true);
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
@@ -127,46 +130,36 @@ export function PresentationViewer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleNext, handlePrev, togglePlay, toggleFullscreen, resetIdleTimer]);
 
-  // 8-second smooth animation loop
+  // Robust auto-slide interval (ticks every 50ms, never halts on hover or tab changes)
   useEffect(() => {
-    if (!isPlaying || isHovered || totalSlides <= 1) {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (!isPlaying || totalSlides <= 1) {
       return;
     }
 
-    const step = (timestamp: number) => {
-      if (!startTimeRef.current) {
-        startTimeRef.current = timestamp;
-      }
+    startTimeRef.current = Date.now();
 
-      const elapsed = timestamp - startTimeRef.current;
-      const currentProgress = Math.min(100, (elapsed / durationMs) * 100);
-      setProgress(currentProgress);
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = now - (startTimeRef.current ?? now);
+      const pct = Math.min(100, (elapsed / durationMs) * 100);
+      setProgress(pct);
 
       if (elapsed >= durationMs) {
         handleNext();
-      } else {
-        animFrameRef.current = requestAnimationFrame(step);
       }
-    };
+    }, 50);
 
-    animFrameRef.current = requestAnimationFrame(step);
-
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [isPlaying, isHovered, currentIndex, durationMs, handleNext, totalSlides]);
+    return () => clearInterval(interval);
+  }, [isPlaying, currentIndex, durationMs, handleNext, totalSlides]);
 
   return (
     <div
       ref={containerRef}
       onMouseMove={resetIdleTimer}
       onTouchStart={resetIdleTimer}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="relative flex min-h-screen w-full flex-col items-center justify-center bg-black text-white select-none overflow-hidden"
+      className="relative flex h-screen w-screen flex-col items-center justify-center bg-black text-white select-none overflow-hidden"
     >
-      {/* Offline Status Badge */}
+      {/* Offline Status Badge (Fades in if offline or when controls are active) */}
       <div
         className={`fixed top-4 left-4 z-40 flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold backdrop-blur-md transition-opacity duration-300 ${
           !isOnline
@@ -189,14 +182,8 @@ export function PresentationViewer({
         )}
       </div>
 
-      {/* Main Slide Stage (Adaptive Landscape vs Portrait) */}
-      <div
-        className={`relative flex items-center justify-center w-full transition-all duration-300 ${
-          isLandscape
-            ? "max-w-6xl max-h-[92vh] aspect-[16/9] px-2 sm:px-6"
-            : "max-w-md max-h-[94vh] aspect-[9/16] px-2 sm:px-4"
-        }`}
-      >
+      {/* Main Fullscreen Slide Canvas (Edge-to-Edge) */}
+      <div className="relative flex items-center justify-center w-full h-full overflow-hidden">
         {slides.length === 0 && (
           <div className="flex flex-col items-center justify-center text-center p-8 bg-zinc-900/60 rounded-2xl border border-zinc-800">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 text-[#EFCE02] mb-3">
@@ -214,16 +201,14 @@ export function PresentationViewer({
           return (
             <div
               key={idx}
-              className={`absolute inset-0 flex items-center justify-center transition-opacity duration-500 ease-in-out ${
+              className={`absolute inset-0 flex items-center justify-center transition-opacity duration-700 ease-in-out ${
                 isActive ? "opacity-100 z-10 pointer-events-auto" : "opacity-0 z-0 pointer-events-none"
               }`}
             >
               <img
                 src={slideUrl}
                 alt={`${title} - Slide ${idx + 1} of ${totalSlides}`}
-                className={`w-full h-full object-contain rounded-xl shadow-2xl ${
-                  isLandscape ? "max-h-[90vh]" : "max-h-[94vh]"
-                }`}
+                className="w-full h-full object-contain"
                 draggable={false}
                 decoding="async"
                 fetchPriority={isActive ? "high" : "auto"}
@@ -232,18 +217,18 @@ export function PresentationViewer({
           );
         })}
 
-        {/* 8-Second Progress Bar (Ticking indicator along slide bottom in Basilissa yellow) */}
+        {/* 8-Second Progress Bar (Ticking indicator along the very bottom edge of screen in Basilissa yellow) */}
         {isPlaying && totalSlides > 1 && (
-          <div className="absolute bottom-1 left-4 right-4 z-20 h-1 overflow-hidden rounded-full bg-white/10 backdrop-blur-sm sm:left-8 sm:right-8">
+          <div className="absolute bottom-0 left-0 right-0 z-30 h-1.5 overflow-hidden bg-white/10 backdrop-blur-sm">
             <div
-              className="h-full bg-[#EFCE02] transition-[width] duration-75 ease-linear"
+              className="h-full bg-[#EFCE02] transition-[width] duration-75 ease-linear shadow-[0_0_8px_#EFCE02]"
               style={{ width: `${progress}%` }}
             />
           </div>
         )}
       </div>
 
-      {/* Navigation Touch / Click Zones */}
+      {/* Navigation Touch / Click Arrows */}
       {totalSlides > 1 && (
         <>
           <button
@@ -284,7 +269,7 @@ export function PresentationViewer({
         </button>
 
         {/* Slide Counter */}
-        <span className="px-2 text-xs font-semibold tracking-wider text-zinc-300">
+        <span className="px-2 text-xs font-semibold tracking-wider text-zinc-300 font-mono">
           Slide {currentIndex + 1} <span className="text-zinc-500">/</span> {totalSlides}
         </span>
 
@@ -317,7 +302,7 @@ export function PresentationViewer({
               onClick={() => {
                 setCurrentIndex(idx);
                 setProgress(0);
-                startTimeRef.current = null;
+                startTimeRef.current = Date.now();
               }}
               className={`h-1.5 rounded-full transition-all duration-300 ${
                 idx === currentIndex ? "w-6 bg-[#EFCE02]" : "w-1.5 bg-zinc-600 hover:bg-zinc-400"
