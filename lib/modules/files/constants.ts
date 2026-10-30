@@ -60,6 +60,8 @@ export type HostedFileItem = {
   lowResUrl: string | null;
   lowResSize: number | null;
   lowResStatus: LowResPreviewStatus;
+  pageCount?: number | null;
+  previewPages?: string[] | null;
   uploadedById: string;
   uploaderName: string;
   uploaderEmail: string;

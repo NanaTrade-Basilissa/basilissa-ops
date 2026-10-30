@@ -154,6 +154,8 @@ export async function listHostedFiles({
     lowResUrl: file.lowResUrl,
     lowResSize: file.lowResSize,
     lowResStatus: file.lowResStatus,
+    pageCount: file.pageCount,
+    previewPages: Array.isArray(file.previewPages) ? (file.previewPages as string[]) : null,
     uploadedById: file.uploadedById,
     uploaderName: file.uploadedBy.name,
     uploaderEmail: file.uploadedBy.email,
@@ -264,6 +266,8 @@ export async function createHostedFile({
     lowResUrl: record.lowResUrl,
     lowResSize: record.lowResSize,
     lowResStatus: record.lowResStatus,
+    pageCount: record.pageCount,
+    previewPages: Array.isArray(record.previewPages) ? (record.previewPages as string[]) : null,
     uploadedById: record.uploadedById,
     uploaderName: record.uploadedBy.name,
     uploaderEmail: record.uploadedBy.email,
@@ -341,6 +345,8 @@ export async function toggleHostedFilePrivacy({
     lowResUrl: updated.lowResUrl,
     lowResSize: updated.lowResSize,
     lowResStatus: updated.lowResStatus,
+    pageCount: updated.pageCount,
+    previewPages: Array.isArray(updated.previewPages) ? (updated.previewPages as string[]) : null,
     uploadedById: updated.uploadedById,
     uploaderName: updated.uploadedBy.name,
     uploaderEmail: updated.uploadedBy.email,
@@ -396,6 +402,8 @@ export async function updateHostedFileSlug({
     lowResUrl: updated.lowResUrl,
     lowResSize: updated.lowResSize,
     lowResStatus: updated.lowResStatus,
+    pageCount: updated.pageCount,
+    previewPages: Array.isArray(updated.previewPages) ? (updated.previewPages as string[]) : null,
     uploadedById: updated.uploadedById,
     uploaderName: updated.uploadedBy.name,
     uploaderEmail: updated.uploadedBy.email,
@@ -445,6 +453,8 @@ export async function updateHostedFileDisplayMode({
     lowResUrl: updated.lowResUrl,
     lowResSize: updated.lowResSize,
     lowResStatus: updated.lowResStatus,
+    pageCount: updated.pageCount,
+    previewPages: Array.isArray(updated.previewPages) ? (updated.previewPages as string[]) : null,
     uploadedById: updated.uploadedById,
     uploaderName: updated.uploadedBy.name,
     uploaderEmail: updated.uploadedBy.email,
@@ -473,8 +483,16 @@ export async function deleteHostedFile(fileId: string): Promise<boolean> {
     });
   }
 
-  // Purge low-res preview asset
-  if (file.lowResKey) {
+  // Purge low-res preview assets (including all pages for multi-page documents)
+  if (Array.isArray(file.previewPages) && file.previewPages.length > 0) {
+    for (const key of file.previewPages) {
+      if (typeof key === "string") {
+        await deleteFromStorage(key).catch((err) => {
+          log.warn("Failed to delete preview page asset from storage", { key, err });
+        });
+      }
+    }
+  } else if (file.lowResKey) {
     await deleteFromStorage(file.lowResKey).catch((err) => {
       log.warn("Failed to delete low-res asset from storage", { lowResKey: file.lowResKey, err });
     });
@@ -496,6 +514,7 @@ export async function resolvePublicFileBySlug(slug: string): Promise<{
   file: HostedFileItem;
   highResResolvedUrl: string;
   lowResResolvedUrl: string | null;
+  lowResPages?: string[];
 } | null> {
   const normalized = slug.trim().toLowerCase();
 
@@ -530,6 +549,13 @@ export async function resolvePublicFileBySlug(slug: string): Promise<{
     ? await resolveStorageUrl(file.lowResUrl, file.lowResKey)
     : null;
 
+  let lowResPages: string[] | undefined = undefined;
+  if (Array.isArray(file.previewPages) && file.previewPages.length > 0) {
+    lowResPages = await Promise.all(
+      file.previewPages.map((k) => resolveStorageUrl(k as string, k as string))
+    );
+  }
+
   const appUrl = getEnv().NEXT_PUBLIC_APP_URL.replace(/\/+$/, "");
 
   return {
@@ -549,6 +575,8 @@ export async function resolvePublicFileBySlug(slug: string): Promise<{
       lowResUrl: file.lowResUrl,
       lowResSize: file.lowResSize,
       lowResStatus: file.lowResStatus,
+      pageCount: file.pageCount,
+      previewPages: Array.isArray(file.previewPages) ? (file.previewPages as string[]) : null,
       uploadedById: file.uploadedById,
       uploaderName: file.uploadedBy.name,
       uploaderEmail: file.uploadedBy.email,
@@ -560,6 +588,7 @@ export async function resolvePublicFileBySlug(slug: string): Promise<{
     },
     highResResolvedUrl,
     lowResResolvedUrl,
+    lowResPages,
   };
 }
 

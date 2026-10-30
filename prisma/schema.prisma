@@ -2422,6 +2422,8 @@ model HostedFile {
   lowResUrl        String?
   lowResSize       Int?                  // in bytes
   lowResStatus     LowResPreviewStatus   @default(NONE)
+  pageCount        Int?                  // total document pages
+  previewPages     Json?                 // array of storage keys or URLs for multi-page documents
 
   // Ownership & Metrics
   uploadedById     String

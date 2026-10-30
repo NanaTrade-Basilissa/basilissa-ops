@@ -23,6 +23,7 @@ interface ProgressiveViewerProps {
   file: HostedFileItem;
   highResUrl: string;
   lowResUrl: string | null;
+  lowResPages?: string[];
   initialMode?: "branded" | "page";
 }
 
@@ -30,6 +31,7 @@ export function ProgressiveViewer({
   file,
   highResUrl,
   lowResUrl,
+  lowResPages,
   initialMode,
 }: ProgressiveViewerProps) {
   const isImage = file.mimeType.startsWith("image/");
@@ -237,6 +239,7 @@ export function ProgressiveViewer({
           {isPdf && (
             <PdfCanvasViewer
               url={highResUrl}
+              lowResPages={lowResPages}
               title={file.title}
               scale={scale}
               rotation={rotation}
@@ -511,6 +514,7 @@ export function ProgressiveViewer({
           <div className="w-full max-w-4xl flex flex-col items-center my-4">
             <PdfCanvasViewer
               url={highResUrl}
+              lowResPages={lowResPages}
               title={file.title}
               scale={scale}
               rotation={rotation}

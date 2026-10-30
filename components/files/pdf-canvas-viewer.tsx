@@ -6,6 +6,7 @@ import { Loader2, AlertCircle } from "lucide-react";
 
 interface PdfCanvasViewerProps {
   url: string;
+  lowResPages?: string[];
   title: string;
   scale?: number;
   rotation?: number;
@@ -42,21 +43,34 @@ declare global {
 
 export function PdfCanvasViewer({
   url,
+  lowResPages,
   title,
   scale = 1,
   rotation = 0,
   onLoaded,
 }: PdfCanvasViewerProps) {
-  const [loading, setLoading] = useState(true);
+  const hasLowRes = Boolean(lowResPages && lowResPages.length > 0);
+  const [highResPages, setHighResPages] = useState<Record<number, string>>({});
+  const [loading, setLoading] = useState(!hasLowRes);
   const [error, setError] = useState<string | null>(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [pages, setPages] = useState<string[]>([]);
+  const [pdfNumPages, setPdfNumPages] = useState(0);
+
+  const totalPages = pdfNumPages || lowResPages?.length || 0;
+  const displayedPages = Array.from({ length: totalPages }, (_, i) => {
+    return highResPages[i] || lowResPages?.[i] || "";
+  }).filter(Boolean);
+
   const renderRunIdRef = useRef(0);
   const onLoadedRef = useRef(onLoaded);
+  const hasLowResRef = useRef(hasLowRes);
 
   useEffect(() => {
     onLoadedRef.current = onLoaded;
   }, [onLoaded]);
+
+  useEffect(() => {
+    hasLowResRef.current = hasLowRes;
+  }, [hasLowRes]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -111,10 +125,8 @@ export function PdfCanvasViewer({
         }
 
         const pagesCount = pdf.numPages;
-        setTotalPages(pagesCount);
+        setPdfNumPages(pagesCount);
         onLoadedRef.current?.(pagesCount);
-
-        const renderedPages: string[] = [];
 
         for (let pageNum = 1; pageNum <= pagesCount; pageNum++) {
           if (isCancelled || renderRunIdRef.current !== currentRunId) break;
@@ -162,9 +174,12 @@ export function PdfCanvasViewer({
           canvas.width = 0;
           canvas.height = 0;
 
-          renderedPages.push(imgUrl);
+          // Swap high-res page into state
           if (!isCancelled && renderRunIdRef.current === currentRunId) {
-            setPages([...renderedPages]);
+            setHighResPages((prev) => ({
+              ...prev,
+              [pageNum - 1]: imgUrl,
+            }));
           }
         }
 
@@ -173,7 +188,10 @@ export function PdfCanvasViewer({
         }
       } catch (err) {
         if (!isCancelled && renderRunIdRef.current === currentRunId) {
-          setError(err instanceof Error ? err.message : "Failed to render PDF pages");
+          // If we already have preview pages showing, do not disrupt the user with a fatal error banner
+          if (!hasLowResRef.current) {
+            setError(err instanceof Error ? err.message : "Failed to render PDF pages");
+          }
           setLoading(false);
         }
       }
@@ -189,14 +207,14 @@ export function PdfCanvasViewer({
   return (
     <div className="relative w-full flex flex-col items-center">
       {/* Loading Skeleton & Progress */}
-      {loading && pages.length === 0 && (
+      {loading && displayedPages.length === 0 && (
         <div className="flex w-full flex-col items-center justify-center py-16 text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-900 border border-zinc-800 text-[#EFCE02] shadow-lg animate-pulse">
             <Loader2 className="h-7 w-7 animate-spin" />
           </div>
           <p className="text-sm font-semibold text-white">
             {totalPages > 0
-              ? `Rendering page ${pages.length + 1} of ${totalPages}...`
+              ? `Rendering page ${displayedPages.length + 1} of ${totalPages}...`
               : "Loading document..."}
           </p>
           <p className="mt-1 text-xs text-zinc-400">Rendering high-resolution pages for mobile</p>
@@ -231,17 +249,18 @@ export function PdfCanvasViewer({
         }}
         aria-label={title}
       >
-        {pages.map((imgUrl, index) => (
+        {displayedPages.map((imgUrl, index) => (
           <div
             key={index}
             className="relative w-full flex flex-col items-center justify-center rounded-xl bg-white shadow-2xl overflow-hidden mb-6 last:mb-0"
           >
             <img
               src={imgUrl}
-              alt={`${title} - Page ${index + 1} of ${totalPages || pages.length}`}
+              alt={`${title} - Page ${index + 1} of ${totalPages || displayedPages.length}`}
               className="w-full h-auto block select-none"
               draggable={false}
               decoding="async"
+              fetchPriority={index === 0 ? "high" : "auto"}
             />
           </div>
         ))}

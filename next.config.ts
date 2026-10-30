@@ -15,6 +15,7 @@ const devOrigins = [
 ];
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@napi-rs/canvas", "unpdf", "sharp"],
   // Produces .next/standalone — a self-contained server bundle with only
   // the production node_modules it actually needs, traced automatically.
   // The Dockerfile copies just that output into the final image, which is

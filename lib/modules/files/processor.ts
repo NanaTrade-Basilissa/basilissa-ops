@@ -43,6 +43,74 @@ function generateDocumentPreviewSvg(title: string, mimeType: string, fileSize: n
 }
 
 /**
+ * Renders each page of a PDF document into a lightweight WebP preview image.
+ * Yields an array of uploaded storage keys and total preview size.
+ */
+async function processPdfPages(
+  fileId: string,
+  originalBuffer: Buffer
+): Promise<{
+  pageKeys: string[];
+  firstPageUrl: string;
+  totalSize: number;
+  totalPages: number;
+} | null> {
+  try {
+    const { getDocumentProxy, renderPageAsImage } = await import("unpdf");
+    const pdf = await getDocumentProxy(new Uint8Array(originalBuffer));
+    const totalPages = pdf.numPages;
+    const pagesToRender = Math.min(totalPages, 20);
+
+    const pageKeys: string[] = [];
+    let firstPageUrl = "";
+    let totalSize = 0;
+
+    for (let p = 1; p <= pagesToRender; p++) {
+      const pageImage = await renderPageAsImage(pdf, p, {
+        canvasImport: () => import("@napi-rs/canvas"),
+        width: 1000,
+        format: "png",
+      });
+
+      const webpBuffer = await sharp(Buffer.from(pageImage as Uint8Array))
+        .webp({ quality: 50, effort: 4 })
+        .toBuffer();
+
+      const pageKey = `hosted-files/previews/${fileId}-page-${p}.webp`;
+      const uploadRes = await uploadBufferToStorage({
+        key: pageKey,
+        buffer: webpBuffer,
+        contentType: "image/webp",
+      });
+
+      if (uploadRes) {
+        pageKeys.push(uploadRes.fileKey);
+        if (p === 1) {
+          firstPageUrl = uploadRes.publicUrl;
+        }
+        totalSize += webpBuffer.length;
+      }
+    }
+
+    if (pageKeys.length > 0) {
+      return {
+        pageKeys,
+        firstPageUrl,
+        totalSize,
+        totalPages,
+      };
+    }
+    return null;
+  } catch (pdfErr) {
+    log.warn("Failed to render PDF pages into images, will fallback to badge preview", {
+      fileId,
+      error: pdfErr instanceof Error ? pdfErr.message : String(pdfErr),
+    });
+    return null;
+  }
+}
+
+/**
  * Asynchronously processes a hosted file to generate a low-resolution / lightweight preview asset.
  * Runs in the background without blocking initial upload.
  */
@@ -65,11 +133,11 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
   });
 
   try {
-    let previewBuffer: Buffer | null = null;
     const previewMime = "image/webp";
     const previewExtension = "webp";
 
     const isImage = file.mimeType.startsWith("image/") && !file.mimeType.includes("svg");
+    const isPdf = file.mimeType === "application/pdf";
 
     if (isImage) {
       const originalBuffer = await getObjectBuffer(file.fileKey);
@@ -78,7 +146,7 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
       }
 
       // Downsample and compress image to high-efficiency WebP
-      previewBuffer = await sharp(originalBuffer)
+      const previewBuffer = await sharp(originalBuffer)
         .rotate() // auto-orient based on EXIF
         .resize({
           width: 1200,
@@ -88,12 +156,74 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
         })
         .webp({ quality: 40, effort: 4 })
         .toBuffer();
-    } else {
-      // Document / PDF: Generate an optimized vector/raster preview badge
-      const svgBuffer = generateDocumentPreviewSvg(file.title, file.mimeType, file.fileSize);
-      previewBuffer = await sharp(svgBuffer).webp({ quality: 80 }).toBuffer();
+
+      const previewKey = `hosted-files/previews/${file.id}-lowres.${previewExtension}`;
+
+      const uploadRes = await uploadBufferToStorage({
+        key: previewKey,
+        buffer: previewBuffer,
+        contentType: previewMime,
+      });
+
+      if (!uploadRes) {
+        throw new Error("Failed to upload preview buffer to storage");
+      }
+
+      await prisma.hostedFile.update({
+        where: { id: fileId },
+        data: {
+          lowResKey: uploadRes.fileKey,
+          lowResUrl: uploadRes.publicUrl,
+          lowResSize: previewBuffer.length,
+          lowResStatus: "READY",
+          pageCount: 1,
+          previewPages: [uploadRes.fileKey],
+        },
+      });
+
+      log.info("Low-res image preview generated successfully", {
+        fileId,
+        originalSize: file.fileSize,
+        previewSize: previewBuffer.length,
+      });
+
+      return { success: true };
     }
 
+    if (isPdf) {
+      const originalBuffer = await getObjectBuffer(file.fileKey);
+      if (!originalBuffer) {
+        throw new Error(`Could not fetch original buffer for key ${file.fileKey}`);
+      }
+
+      const pdfResult = await processPdfPages(file.id, originalBuffer);
+      if (pdfResult) {
+        await prisma.hostedFile.update({
+          where: { id: fileId },
+          data: {
+            lowResKey: pdfResult.pageKeys[0],
+            lowResUrl: pdfResult.firstPageUrl,
+            lowResSize: pdfResult.totalSize,
+            lowResStatus: "READY",
+            pageCount: pdfResult.totalPages,
+            previewPages: pdfResult.pageKeys,
+          },
+        });
+
+        log.info("PDF page previews generated successfully", {
+          fileId,
+          pageCount: pdfResult.totalPages,
+          renderedPages: pdfResult.pageKeys.length,
+          totalPreviewSize: pdfResult.totalSize,
+        });
+
+        return { success: true };
+      }
+    }
+
+    // Fallback for generic documents or unrenderable PDFs: Generate SVG badge
+    const svgBuffer = generateDocumentPreviewSvg(file.title, file.mimeType, file.fileSize);
+    const previewBuffer = await sharp(svgBuffer).webp({ quality: 80 }).toBuffer();
     const previewKey = `hosted-files/previews/${file.id}-lowres.${previewExtension}`;
 
     const uploadRes = await uploadBufferToStorage({
@@ -113,10 +243,12 @@ export async function processLowResPreview(fileId: string): Promise<{ success: b
         lowResUrl: uploadRes.publicUrl,
         lowResSize: previewBuffer.length,
         lowResStatus: "READY",
+        pageCount: 1,
+        previewPages: [uploadRes.fileKey],
       },
     });
 
-    log.info("Low-res preview generated successfully", {
+    log.info("Document fallback preview generated successfully", {
       fileId,
       originalSize: file.fileSize,
       previewSize: previewBuffer.length,

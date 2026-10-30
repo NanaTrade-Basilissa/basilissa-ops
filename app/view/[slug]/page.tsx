@@ -69,7 +69,7 @@ export default async function PublicFileViewPage({ params, searchParams }: ViewP
     );
   }
 
-  const { file, highResResolvedUrl, lowResResolvedUrl } = data;
+  const { file, highResResolvedUrl, lowResResolvedUrl, lowResPages } = data;
 
   // Direct Raw Mode: stream / redirect directly to the raw file asset
   if (file.displayMode === "DIRECT_RAW") {
@@ -85,6 +85,7 @@ export default async function PublicFileViewPage({ params, searchParams }: ViewP
       file={file}
       highResUrl={highResResolvedUrl}
       lowResUrl={lowResResolvedUrl}
+      lowResPages={lowResPages}
       initialMode={isPageMode ? "page" : "branded"}
     />
   );
