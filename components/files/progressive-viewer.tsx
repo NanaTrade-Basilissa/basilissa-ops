@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Download,
   Eye,
@@ -9,12 +9,12 @@ import {
   Maximize2,
   Minimize2,
   RotateCw,
+  RotateCcw,
   Share2,
   ZoomIn,
   ZoomOut,
   Check,
   LayoutTemplate,
-  Monitor,
 } from "lucide-react";
 import type { HostedFileItem } from "@/lib/modules/files/constants";
 
@@ -39,11 +39,23 @@ export function ProgressiveViewer({
   const [viewMode, setViewMode] = useState<"branded" | "page">(defaultMode);
 
   const [isHighResLoaded, setIsHighResLoaded] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [rotation, setRotation] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Pan & Zoom gesture state
+  const [scale, setScale] = useState(1);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const [rotation, setRotation] = useState(0);
+
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const isPinchingRef = useRef(false);
+  const isDraggingRef = useRef(false);
+  const startDistanceRef = useRef(0);
+  const startScaleRef = useRef(1);
+  const startPosRef = useRef({ x: 0, y: 0 });
+  const startTranslateRef = useRef({ x: 0, y: 0 });
+  const lastTapTimeRef = useRef(0);
 
   // Background preload for high-res asset
   useEffect(() => {
@@ -74,13 +86,146 @@ export function ProgressiveViewer({
     return () => document.removeEventListener("fullscreenchange", handleFsChange);
   }, []);
 
-  const handleZoomIn = () => setZoomLevel((z) => Math.min(3, +(z + 0.25).toFixed(2)));
-  const handleZoomOut = () => setZoomLevel((z) => Math.max(0.5, +(z - 0.25).toFixed(2)));
-  const handleResetZoom = () => {
-    setZoomLevel(1);
+  // Zoom manipulation helpers
+  const handleZoomIn = useCallback(() => {
+    setScale((s) => Math.min(5, +(s + 0.5).toFixed(2)));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setScale((s) => {
+      const next = Math.max(1, +(s - 0.5).toFixed(2));
+      if (next <= 1) {
+        setTranslate({ x: 0, y: 0 });
+      }
+      return next;
+    });
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    setScale(1);
+    setTranslate({ x: 0, y: 0 });
     setRotation(0);
+  }, []);
+
+  const handleRotate = useCallback(() => {
+    setRotation((r) => (r + 90) % 360);
+  }, []);
+
+  // Native non-passive touchmove listener to avoid iOS Safari page bounce & native conflict
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    const preventDefaultTouch = (e: TouchEvent) => {
+      if (e.touches.length === 2 || scale > 1) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    el.addEventListener("touchmove", preventDefaultTouch, { passive: false });
+    return () => {
+      el.removeEventListener("touchmove", preventDefaultTouch);
+    };
+  }, [scale]);
+
+  // Touch handlers for 2-finger pinch-to-zoom and 1-finger pan
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      // 2 fingers: pinch-to-zoom gesture
+      isPinchingRef.current = true;
+      isDraggingRef.current = false;
+      const t1 = e.touches[0]!;
+      const t2 = e.touches[1]!;
+      startDistanceRef.current = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      startScaleRef.current = scale;
+    } else if (e.touches.length === 1) {
+      // 1 finger: pan if zoomed in, or detect double tap
+      const now = Date.now();
+      const timeDiff = now - lastTapTimeRef.current;
+      lastTapTimeRef.current = now;
+
+      if (timeDiff < 300) {
+        // Double tap: toggle between 1x (fit) and 2.5x zoom
+        if (scale > 1) {
+          handleResetZoom();
+        } else {
+          setScale(2.5);
+        }
+        return;
+      }
+
+      if (scale > 1) {
+        isDraggingRef.current = true;
+        const t = e.touches[0]!;
+        startPosRef.current = { x: t.clientX, y: t.clientY };
+        startTranslateRef.current = { ...translate };
+      }
+    }
   };
-  const handleRotate = () => setRotation((r) => (r + 90) % 360);
+
+  const onTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (isPinchingRef.current && e.touches.length === 2) {
+      const t1 = e.touches[0]!;
+      const t2 = e.touches[1]!;
+      const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+      if (startDistanceRef.current > 0) {
+        const factor = currentDist / startDistanceRef.current;
+        const newScale = Math.min(5, Math.max(1, +(startScaleRef.current * factor).toFixed(2)));
+        setScale(newScale);
+        if (newScale <= 1) {
+          setTranslate({ x: 0, y: 0 });
+        }
+      }
+    } else if (isDraggingRef.current && e.touches.length === 1 && scale > 1) {
+      const t = e.touches[0]!;
+      const deltaX = t.clientX - startPosRef.current.x;
+      const deltaY = t.clientY - startPosRef.current.y;
+
+      setTranslate({
+        x: startTranslateRef.current.x + deltaX,
+        y: startTranslateRef.current.y + deltaY,
+      });
+    }
+  };
+
+  const onTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length < 2) {
+      isPinchingRef.current = false;
+    }
+    if (e.touches.length === 0) {
+      isDraggingRef.current = false;
+      if (scale <= 1) {
+        setTranslate({ x: 0, y: 0 });
+      }
+    }
+  };
+
+  // Desktop mouse drag handlers when zoomed in
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (scale > 1 && e.button === 0) {
+      isDraggingRef.current = true;
+      startPosRef.current = { x: e.clientX, y: e.clientY };
+      startTranslateRef.current = { ...translate };
+    }
+  };
+
+  const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDraggingRef.current && scale > 1) {
+      const deltaX = e.clientX - startPosRef.current.x;
+      const deltaY = e.clientY - startPosRef.current.y;
+      setTranslate({
+        x: startTranslateRef.current.x + deltaX,
+        y: startTranslateRef.current.y + deltaY,
+      });
+    }
+  };
+
+  const onMouseUp = () => {
+    isDraggingRef.current = false;
+  };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -106,82 +251,148 @@ export function ProgressiveViewer({
       : `${Math.round(file.fileSize / 1024)} KB`;
 
   // ==========================================
-  // MODE 1: "Render as a Page" (Full Screen Asset)
-  // No header, no footer, no download button!
+  // MODE 1: "Render as a Page" (Full Screen Mobile Experience)
+  // - Entire image fitted properly on screen on initial load
+  // - Physical zoom buttons (+ / - / reset)
+  // - 2-finger pinch-to-zoom + 1-finger pan
+  // - Double-tap zoom
+  // - Viewer controls button HIDDEN
   // ==========================================
   if (viewMode === "page") {
     return (
       <div
         ref={containerRef}
-        className="relative min-h-screen w-full bg-zinc-950 font-sans text-zinc-100 antialiased overflow-x-hidden selection:bg-[#EFCE02] selection:text-black"
+        className="relative min-h-[100dvh] w-full bg-zinc-950 font-sans text-zinc-100 antialiased overflow-hidden selection:bg-[#EFCE02] selection:text-black touch-none"
       >
-        {/* Discreet floating mode switcher toggle */}
-        <div className="fixed bottom-4 right-4 z-50">
-          <button
-            type="button"
-            onClick={() => setViewMode("branded")}
-            className="flex items-center gap-1.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 px-3 py-1.5 text-xs font-medium text-zinc-300 shadow-lg backdrop-blur-md transition-all hover:bg-zinc-800 hover:text-white opacity-40 hover:opacity-100"
-            title="Switch to Branded Viewer"
-          >
-            <Monitor className="h-3.5 w-3.5 text-[#EFCE02]" />
-            <span>Viewer Controls</span>
-          </button>
-        </div>
+        {/* Main Pan/Zoom Canvas */}
+        <div
+          ref={viewportRef}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+          className="relative flex h-[100dvh] w-full items-center justify-center overflow-hidden"
+          style={{
+            cursor: scale > 1 ? "grab" : "default",
+          }}
+        >
+          {isImage && (
+            <div
+              className="relative flex max-h-[100dvh] max-w-full items-center justify-center transition-transform duration-75 ease-out select-none will-change-transform"
+              style={{
+                transform: `translate3d(${translate.x}px, ${translate.y}px, 0) scale(${scale}) rotate(${rotation}deg)`,
+                transformOrigin: "center center",
+              }}
+            >
+              {/* Instant low-res preview */}
+              {lowResUrl && (
+                <img
+                  src={lowResUrl}
+                  alt={file.title}
+                  fetchPriority="high"
+                  decoding="async"
+                  draggable={false}
+                  className={`max-h-[100dvh] max-w-[100vw] w-auto h-auto object-contain transition-opacity duration-300 pointer-events-none select-none ${
+                    isHighResLoaded ? "opacity-0 absolute" : "opacity-100 blur-[0.5px]"
+                  }`}
+                />
+              )}
 
-        {/* Pure Full-Page Asset Display */}
-        {isImage && (
-          <div className="flex min-h-screen w-full items-center justify-center p-0">
-            {/* Low-res instant preview with high fetch priority */}
-            {lowResUrl && (
+              {/* High-res asset (fitted to screen width & height on 1x) */}
               <img
-                src={lowResUrl}
+                src={highResUrl}
                 alt={file.title}
-                fetchPriority="high"
+                fetchPriority={lowResUrl ? "auto" : "high"}
                 decoding="async"
-                className={`max-h-screen w-auto max-w-full object-contain transition-opacity duration-300 ${
-                  isHighResLoaded ? "opacity-0 absolute pointer-events-none" : "opacity-100 blur-[0.5px]"
+                draggable={false}
+                onLoad={() => setIsHighResLoaded(true)}
+                className={`max-h-[100dvh] max-w-[100vw] w-auto h-auto object-contain transition-opacity duration-300 select-none ${
+                  isHighResLoaded || !lowResUrl ? "opacity-100" : "opacity-0 absolute pointer-events-none"
                 }`}
               />
-            )}
+            </div>
+          )}
 
-            {/* Seamless high-res swap in place */}
-            <img
-              src={highResUrl}
-              alt={file.title}
-              fetchPriority={lowResUrl ? "auto" : "high"}
-              decoding="async"
-              onLoad={() => setIsHighResLoaded(true)}
-              className={`max-h-screen w-auto max-w-full object-contain transition-opacity duration-300 ${
-                isHighResLoaded || !lowResUrl ? "opacity-100" : "opacity-0 absolute pointer-events-none"
-              }`}
-            />
-          </div>
-        )}
+          {isPdf && (
+            <div className="h-[100dvh] w-screen overflow-hidden">
+              <iframe
+                src={`${highResUrl}#toolbar=0&navpanes=0`}
+                title={file.title}
+                className="h-full w-full border-none"
+              />
+            </div>
+          )}
 
-        {isPdf && (
-          <div className="h-screen w-screen overflow-hidden">
-            <iframe
-              src={`${highResUrl}#toolbar=0&navpanes=0`}
-              title={file.title}
-              className="h-full w-full border-none"
-            />
-          </div>
-        )}
-
-        {!isImage && !isPdf && (
-          <div className="flex min-h-screen w-full items-center justify-center p-4">
-            <div className="flex max-w-md flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-900/90 p-8 text-center shadow-2xl">
-              <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-zinc-800 text-[#EFCE02]">
-                <FileText className="h-10 w-10" />
-              </div>
-              <h2 className="text-lg font-semibold text-white">{file.title}</h2>
-              <p className="mt-1 text-sm text-zinc-400">{file.originalFilename}</p>
-              <div className="mt-4 flex items-center gap-3 text-xs text-zinc-500">
-                <span>{formattedSize}</span>
-                <span>&middot;</span>
-                <span>{file.mimeType}</span>
+          {!isImage && !isPdf && (
+            <div className="flex min-h-[100dvh] w-full items-center justify-center p-4">
+              <div className="flex max-w-md flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-900/90 p-8 text-center shadow-2xl">
+                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-zinc-800 text-[#EFCE02]">
+                  <FileText className="h-10 w-10" />
+                </div>
+                <h2 className="text-lg font-semibold text-white">{file.title}</h2>
+                <p className="mt-1 text-sm text-zinc-400">{file.originalFilename}</p>
               </div>
             </div>
+          )}
+        </div>
+
+        {/* Physical Zoom Controls (Docked sleekly at bottom center for easy thumb access) */}
+        {isImage && (
+          <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom,1.5rem))] left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-950/85 px-3 py-1.5 shadow-2xl backdrop-blur-md">
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              disabled={scale <= 1}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white disabled:opacity-30 active:scale-95"
+              aria-label="Zoom Out"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResetZoom}
+              className="px-2 text-xs font-mono font-medium text-zinc-300 hover:text-[#EFCE02] transition-colors"
+              title="Reset to 100% fit"
+            >
+              {Math.round(scale * 100)}%
+            </button>
+
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              disabled={scale >= 5}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white disabled:opacity-30 active:scale-95"
+              aria-label="Zoom In"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
+
+            <div className="mx-1 h-3.5 w-px bg-zinc-800" />
+
+            <button
+              type="button"
+              onClick={handleRotate}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white active:scale-95"
+              aria-label="Rotate 90 degrees"
+              title="Rotate 90°"
+            >
+              <RotateCw className="h-4 w-4" />
+            </button>
+
+            {scale > 1 && (
+              <button
+                type="button"
+                onClick={handleResetZoom}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-[#EFCE02] active:scale-95"
+                title="Reset zoom"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -245,7 +456,7 @@ export function ProgressiveViewer({
               <button
                 type="button"
                 onClick={handleZoomOut}
-                disabled={zoomLevel <= 0.5}
+                disabled={scale <= 1}
                 className="rounded p-1.5 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white disabled:opacity-40"
                 title="Zoom Out"
                 aria-label="Zoom Out"
@@ -258,12 +469,12 @@ export function ProgressiveViewer({
                 className="px-2 text-xs font-mono text-zinc-400 hover:text-white"
                 title="Reset Zoom"
               >
-                {Math.round(zoomLevel * 100)}%
+                {Math.round(scale * 100)}%
               </button>
               <button
                 type="button"
                 onClick={handleZoomIn}
-                disabled={zoomLevel >= 3}
+                disabled={scale >= 5}
                 className="rounded p-1.5 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white disabled:opacity-40"
                 title="Zoom In"
                 aria-label="Zoom In"
@@ -329,9 +540,9 @@ export function ProgressiveViewer({
         {/* Image Mode */}
         {isImage && (
           <div
-            className="relative flex items-center justify-center transition-transform duration-200 ease-out"
+            className="relative flex items-center justify-center transition-transform duration-100 ease-out select-none"
             style={{
-              transform: `scale(${zoomLevel}) rotate(${rotation}deg)`,
+              transform: `scale(${scale}) rotate(${rotation}deg)`,
               transformOrigin: "center center",
             }}
           >

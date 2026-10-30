@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SiteAnalytics } from "@/components/site-analytics";
 import { Toaster } from "@/components/ui/sonner";
@@ -18,6 +18,13 @@ const geistMono = Geist_Mono({
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://ops.basilissagh.com";
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#FFE300",
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
@@ -26,7 +33,6 @@ export const metadata: Metadata = {
   },
   description:
     "Share feedback about your visit to a Basilissa Ghana branch, and the admin dashboard that reports on it.",
-  themeColor: "#FFE300",
   openGraph: {
     title: `${APP_NAME} Feedback`,
     description:

@@ -1,9 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Lock, ArrowLeft } from "lucide-react";
 import { resolvePublicFileBySlug } from "@/lib/modules/files/server";
 import { ProgressiveViewer } from "@/components/files/progressive-viewer";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: "#09090b",
+};
 
 interface ViewPageProps {
   params: Promise<{ slug: string }>;
