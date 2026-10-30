@@ -202,6 +202,32 @@ export async function uploadBufferToStorage({
 }
 
 /**
+ * Fetches the binary buffer of an object from storage.
+ */
+export async function getObjectBuffer(fileKey: string): Promise<Buffer | null> {
+  const storage = getStorageClient();
+  if (!storage) return null;
+
+  const { client, bucketName, defaultPrefix } = storage;
+  const objectKey = defaultPrefix && !fileKey.startsWith(defaultPrefix) ? `${defaultPrefix}/${fileKey}` : fileKey;
+
+  try {
+    const res = await client.send(
+      new GetObjectCommand({
+        Bucket: bucketName,
+        Key: objectKey,
+      })
+    );
+    if (!res.Body) return null;
+    const byteArray = await res.Body.transformToByteArray();
+    return Buffer.from(byteArray);
+  } catch (error) {
+    log.error("Failed to fetch object buffer from storage", { fileKey, error });
+    return null;
+  }
+}
+
+/**
  * Generates a presigned GET URL for temporary authorized downloading/streaming.
  */
 export async function createPresignedDownloadUrl({

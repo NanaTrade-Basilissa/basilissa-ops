@@ -196,6 +196,16 @@ export const PERMISSION_REGISTRY = {
       publish: { label: "Publish", description: "Publish weekly menus for staff ordering" },
     },
   },
+  files: {
+    label: "Hosted Files",
+    description: "File hosting, vanity URL publishing, and in-app viewer settings",
+    actions: {
+      create: { label: "Upload", description: "Upload new files to object storage" },
+      read: { label: "View", description: "View hosted files and delivery analytics" },
+      update: { label: "Update", description: "Edit slugs, display modes, and regenerate low-res previews" },
+      delete: { label: "Delete", description: "Permanently purge files and slugs from storage" },
+    },
+  },
 } as const;
 
 export type PermissionRegistryType = typeof PERMISSION_REGISTRY;

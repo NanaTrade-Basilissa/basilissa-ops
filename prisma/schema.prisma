@@ -97,6 +97,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   reviewedLeaveRequests LeaveRequest[] @relation("LeaveReviewedBy")
   feedbackRecipients BranchFeedbackRecipient[]
+  hostedFiles        HostedFile[] @relation("UserHostedFiles")
 
   @@index([status])
   @@index([customRoleId])
@@ -2383,5 +2384,58 @@ model TrainingProgress {
   @@index([assignmentId])
   @@map("training_progress")
 }
+
+// -----------------------------------------------------------------------------
+// Hosted Files & Public Vanity Viewer
+// -----------------------------------------------------------------------------
+
+enum HostedFileDisplayMode {
+  IN_APP_VIEWER
+  DIRECT_RAW
+}
+
+enum LowResPreviewStatus {
+  NONE
+  PENDING
+  READY
+  FAILED
+}
+
+model HostedFile {
+  id               String                @id @default(cuid())
+  title            String
+  originalFilename String
+  mimeType         String
+  fileSize         Int                   // in bytes
+  fileKey          String                // S3/R2 storage key for original high-res asset
+  fileUrl          String                // Public or base CDN storage URL
+
+  // Access Control & Vanity URLs
+  isPublic         Boolean               @default(false)
+  slug             String?               @unique
+  displayMode      HostedFileDisplayMode @default(IN_APP_VIEWER)
+
+  // Progressive Optimization Pipeline
+  generateLowRes   Boolean               @default(true)
+  lowResKey        String?               // S3/R2 storage key for compressed low-res asset
+  lowResUrl        String?
+  lowResSize       Int?                  // in bytes
+  lowResStatus     LowResPreviewStatus   @default(NONE)
+
+  // Ownership & Metrics
+  uploadedById     String
+  uploadedBy       User                  @relation("UserHostedFiles", fields: [uploadedById], references: [id], onDelete: Cascade)
+  viewsCount       Int                   @default(0)
+  lastViewedAt     DateTime?
+
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([uploadedById])
+  @@index([slug])
+  @@index([isPublic])
+  @@map("hosted_files")
+}
+
 
 

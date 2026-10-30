@@ -114,7 +114,10 @@ export type SystemPermission =
   // Staff meals and kitchen operations
   | "meals:read"
   | "meals:write"
-  | "meals:manage";
+  | "meals:manage"
+  // Hosted files and vanity URLs
+  | "files:read"
+  | "files:write";
 
 export type Permission = SystemPermission | PermissionKey | (string & {});
 
@@ -259,6 +262,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "announcement:write",
     "meals:read",
     "meals:write",
+    "files:read",
+    "files:write",
   ],
 
   // Everything, including granting roles. Should be one or two people.
@@ -298,6 +303,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "meals:manage",
     "training:read",
     "training:write",
+    "files:read",
+    "files:write",
   ],
 };
 

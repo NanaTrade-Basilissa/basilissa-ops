@@ -4,6 +4,7 @@ import {
   CalendarRange,
   ClipboardCheck,
   ClipboardList,
+  FolderUp,
   GraduationCap,
   History,
   Layers,
@@ -152,6 +153,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/admin/feedback/questions", label: "Questions", icon: ListChecks, exact: false, permission: "question:read" },
       { href: "/admin/announcements", label: "Announcements", icon: Megaphone, exact: false, permission: "announcement:read" },
       { href: "/admin/meals", label: "Staff Meals", icon: UtensilsCrossed, exact: false, permission: "meals:read" },
+      { href: "/admin/files", label: "Hosted Files", icon: FolderUp, exact: false, permission: "files:read" },
     ],
   },
   {

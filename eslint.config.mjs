@@ -32,7 +32,7 @@ import nextTs from "eslint-config-next/typescript";
  * See lib/modules/feedback/server.ts for why modules use several entry files
  * rather than one `index.ts` barrel.
  */
-const MODULES = ["identity", "feedback", "branches", "questions", "attendance", "employees", "assessments", "aptitude", "announcements"];
+const MODULES = ["identity", "feedback", "branches", "questions", "attendance", "employees", "assessments", "aptitude", "announcements", "files"];
 const PUBLIC_ENTRIES = [
   "constants",
   "validation",
