@@ -17,6 +17,7 @@ import {
   LayoutTemplate,
 } from "lucide-react";
 import type { HostedFileItem } from "@/lib/modules/files/constants";
+import { PdfCanvasViewer } from "@/components/files/pdf-canvas-viewer";
 
 interface ProgressiveViewerProps {
   file: HostedFileItem;
@@ -230,13 +231,13 @@ export function ProgressiveViewer({
           )}
 
           {isPdf && (
-            <div className="h-[92vh] w-full max-w-5xl overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl">
-              <iframe
-                src={`${highResUrl}#toolbar=0&navpanes=0`}
-                title={file.title}
-                className="h-full w-full border-none"
-              />
-            </div>
+            <PdfCanvasViewer
+              url={highResUrl}
+              title={file.title}
+              scale={scale}
+              rotation={rotation}
+              onLoaded={() => setIsHighResLoaded(true)}
+            />
           )}
 
           {!isImage && !isPdf && (
@@ -261,7 +262,7 @@ export function ProgressiveViewer({
         </div>
 
         {/* Physical Zoom Controls (Docked sleekly at bottom center for easy thumb access) */}
-        {isImage && (
+        {(isImage || isPdf) && (
           <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom,1.5rem))] left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-950/90 px-3 py-1.5 shadow-2xl backdrop-blur-md">
             <button
               type="button"
@@ -372,7 +373,7 @@ export function ProgressiveViewer({
             <span className="hidden sm:inline">Render as a Page</span>
           </button>
 
-          {isImage && (
+          {(isImage || isPdf) && (
             <div className="hidden items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/90 p-1 sm:flex">
               <button
                 type="button"
@@ -395,7 +396,7 @@ export function ProgressiveViewer({
               <button
                 type="button"
                 onClick={handleZoomIn}
-                disabled={scale >= 5}
+                disabled={scale >= 3}
                 className="rounded p-1.5 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white disabled:opacity-40"
                 title="Zoom In"
                 aria-label="Zoom In"
@@ -494,25 +495,15 @@ export function ProgressiveViewer({
           </div>
         )}
 
-        {/* PDF Mode */}
+        {/* PDF Mode (Rendered onto canvas pages so all pages scroll smoothly) */}
         {isPdf && (
-          <div className="relative h-[84vh] w-full max-w-5xl overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl">
-            {lowResUrl && !isHighResLoaded && (
-              <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 p-4 transition-opacity duration-300">
-                <img
-                  src={lowResUrl}
-                  alt={file.title}
-                  fetchPriority="high"
-                  className="max-h-full max-w-full object-contain"
-                />
-              </div>
-            )}
-
-            <iframe
-              src={`${highResUrl}#toolbar=1&navpanes=0`}
+          <div className="w-full max-w-4xl flex flex-col items-center my-4">
+            <PdfCanvasViewer
+              url={highResUrl}
               title={file.title}
-              onLoad={() => setIsHighResLoaded(true)}
-              className="h-full w-full border-none"
+              scale={scale}
+              rotation={rotation}
+              onLoaded={() => setIsHighResLoaded(true)}
             />
           </div>
         )}
