@@ -36,7 +36,7 @@ function generateDocumentPreviewSvg(title: string, mimeType: string, fileSize: n
 
     <!-- Title and Loading Indication -->
     <text x="400" y="580" text-anchor="middle" fill="#18181B" font-family="system-ui, -apple-system, sans-serif" font-size="26" font-weight="600">${safeTitle}</text>
-    <text x="400" y="620" text-anchor="middle" fill="#71717A" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="400">Progressive Preview &middot; Streaming high-res document...</text>
+    <text x="400" y="620" text-anchor="middle" fill="#71717A" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="400">Progressive Preview &#183; Streaming high-res document...</text>
   </svg>`;
 
   return Buffer.from(svg);
@@ -46,13 +46,17 @@ function generateDocumentPreviewSvg(title: string, mimeType: string, fileSize: n
  * Asynchronously processes a hosted file to generate a low-resolution / lightweight preview asset.
  * Runs in the background without blocking initial upload.
  */
-export async function processLowResPreview(fileId: string): Promise<boolean> {
+export async function processLowResPreview(fileId: string): Promise<{ success: boolean; error?: string }> {
   const file = await prisma.hostedFile.findUnique({
     where: { id: fileId },
   });
 
-  if (!file || !file.generateLowRes) {
-    return false;
+  if (!file) {
+    return { success: false, error: "File not found" };
+  }
+
+  if (!file.generateLowRes) {
+    return { success: true };
   }
 
   await prisma.hostedFile.update({
@@ -118,13 +122,14 @@ export async function processLowResPreview(fileId: string): Promise<boolean> {
       previewSize: previewBuffer.length,
     });
 
-    return true;
+    return { success: true };
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     log.error("Failed to generate low-res preview", { fileId, error });
     await prisma.hostedFile.update({
       where: { id: fileId },
       data: { lowResStatus: "FAILED" },
     });
-    return false;
+    return { success: false, error: errorMsg };
   }
 }

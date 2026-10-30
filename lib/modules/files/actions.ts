@@ -176,7 +176,7 @@ export async function regenerateLowResAction(fileId: string): Promise<ActionResu
 
     await prisma.hostedFile.update({
       where: { id: fileId },
-      data: { lowResStatus: "PENDING" },
+      data: { lowResStatus: "PENDING", generateLowRes: true },
     });
 
     enqueue(FILES_PROCESS_PREVIEW, {

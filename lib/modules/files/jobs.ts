@@ -20,10 +20,10 @@ export async function handleFileProcessPreview(
   const { fileId, title } = fileProcessPreviewPayload.parse(payload);
   log.info("Processing file preview background job", { fileId, title });
 
-  const success = await processLowResPreview(fileId);
-  if (!success) {
+  const result = await processLowResPreview(fileId);
+  if (!result.success) {
     throw new PermanentJobError(
-      `Failed to generate progressive preview for file ${fileId} (${title || "untitled"}). Verify object storage credentials and file integrity.`,
+      `Failed to generate progressive preview for file ${fileId} (${title || "untitled"}): ${result.error || "Unknown error"}`,
     );
   }
 
