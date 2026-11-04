@@ -4,7 +4,7 @@ import { recordAuditBestEffort, SYSTEM_ACTOR } from "@/lib/platform/audit";
 import { enqueue } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
 import { scoreResponse, type ScorableQuestion } from "./scoring";
-import { APTITUDE_NOTIFY_HR } from "./constants";
+import { APTITUDE_NOTIFY_HR, APTITUDE_CANDIDATE_RESULT_SEND } from "./constants";
 
 const log = scoped("aptitude.finalize");
 
@@ -51,13 +51,18 @@ export async function finalizeAttempt(attemptId: string): Promise<FinalizeOutcom
       id: true,
       submittedAt: true,
       deadlineAt: true,
+      declaredName: true,
+      declaredEmail: true,
       answers: { select: { questionId: true, selectedOptionIds: true, text: true } },
       invitation: {
         select: {
           id: true,
+          candidateName: true,
+          candidateEmail: true,
           test: {
             select: {
               id: true,
+              showScoreToCandidate: true,
               sections: {
                 select: {
                   questions: {
@@ -133,6 +138,16 @@ export async function finalizeAttempt(attemptId: string): Promise<FinalizeOutcom
         {},
         tx,
       );
+
+      const candidateEmail = attempt.declaredEmail?.trim() || attempt.invitation.candidateEmail?.trim();
+      if (attempt.invitation.test.showScoreToCandidate && candidateEmail) {
+        await enqueue(
+          APTITUDE_CANDIDATE_RESULT_SEND,
+          { attemptId: attempt.id },
+          {},
+          tx,
+        );
+      }
     });
 
   if (claimedCount === 0) {

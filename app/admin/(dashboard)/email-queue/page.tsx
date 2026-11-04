@@ -32,6 +32,7 @@ const TYPE_FILTERS = [
   { id: "identity.password_reset_send", label: "Password Resets & Invites" },
   { id: "assessments.invitation_send", label: "Assessment Invites" },
   { id: "aptitude.invitation_send", label: "Aptitude Invites" },
+  { id: "aptitude.candidate_result_send", label: "Aptitude Candidate Results" },
 ] as const;
 
 export default async function EmailQueuePage({

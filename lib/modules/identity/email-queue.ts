@@ -93,6 +93,21 @@ export function parseEmailJobPayload(type: string, rawPayload: unknown): {
       };
     }
 
+    case "aptitude.candidate_result_send": {
+      const email =
+        typeof payload.overrideEmail === "string"
+          ? payload.overrideEmail
+          : typeof payload.email === "string"
+          ? payload.email
+          : "Candidate";
+      const attemptId = typeof payload.attemptId === "string" ? payload.attemptId : "";
+      return {
+        typeLabel: "Aptitude Candidate Result",
+        recipient: email,
+        subject: attemptId ? `Aptitude Result: ${attemptId}` : "Aptitude Result",
+      };
+    }
+
     default:
       return {
         typeLabel: type,
@@ -281,6 +296,10 @@ export async function resendEmailJob(
           data: { inviteeEmail: newEmail },
         })
         .catch(() => {});
+    }
+
+    if (job.type === "aptitude.candidate_result_send") {
+      rawPayload.overrideEmail = newEmail;
     }
   }
 

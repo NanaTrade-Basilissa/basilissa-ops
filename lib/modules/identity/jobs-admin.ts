@@ -32,6 +32,7 @@ export function categorizeJob(type: string): { category: JobCategory; typeLabel:
       "assessments.notify_hr": "Assessment HR Result",
       "aptitude.invitation_send": "Aptitude Invitation",
       "aptitude.notify_hr": "Aptitude HR Result",
+      "aptitude.candidate_result_send": "Aptitude Candidate Result",
     };
     return {
       category: "email",

@@ -34,4 +34,5 @@ export const MIN_TIME_LIMIT_MINUTES = 5;
 export const MAX_TIME_LIMIT_MINUTES = 480;
 
 export const APTITUDE_NOTIFY_HR = "aptitude.notify_hr";
+export const APTITUDE_CANDIDATE_RESULT_SEND = "aptitude.candidate_result_send";
 

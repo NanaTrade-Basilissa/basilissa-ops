@@ -12,19 +12,21 @@ import { getEnv } from "@/lib/platform/env";
 import { sendEmail, emailOptionsForJob } from "@/lib/platform/email";
 import { PermanentJobError, type JobContext } from "@/lib/platform/jobs";
 import { scoped } from "@/lib/platform/logger";
-import { DEFAULT_INVITATION_TTL_HOURS, APTITUDE_NOTIFY_HR } from "./constants";
+import { recordAuditBestEffort, SYSTEM_ACTOR } from "@/lib/platform/audit";
+import { DEFAULT_INVITATION_TTL_HOURS, APTITUDE_NOTIFY_HR, APTITUDE_CANDIDATE_RESULT_SEND } from "./constants";
 import { finalizeAttempt } from "./finalize";
 import { getHrNotificationEmails } from "@/lib/modules/identity/jobs";
 import { APP_NAME } from "@/lib/platform/constants";
 import {
   buildAptitudeInvitationEmailHtml,
   buildAptitudeCompletedEmailHtml,
+  buildAptitudeCandidateResultEmailHtml,
 } from "@/lib/email-templates";
 
 const log = scoped("aptitude.invitation-send");
 
 export const APTITUDE_INVITATION_SEND = "aptitude.invitation_send";
-export { APTITUDE_NOTIFY_HR };
+export { APTITUDE_NOTIFY_HR, APTITUDE_CANDIDATE_RESULT_SEND };
 
 export const aptitudeInvitationSendPayload = z.object({
   email: z.string().email(),
@@ -213,4 +215,118 @@ export async function handleAptitudeNotifyHr(payload: unknown, job?: JobContext)
     throw new Error(`Aptitude HR notification failed, will retry: ${detail}`);
   }
 }
+
+export const aptitudeCandidateResultSendPayload = z.object({
+  attemptId: z.string().min(1),
+  overrideEmail: z.string().email().optional(),
+});
+
+export async function handleAptitudeCandidateResultSend(payload: unknown, job?: JobContext): Promise<void> {
+  const { attemptId, overrideEmail } = aptitudeCandidateResultSendPayload.parse(payload);
+
+  const attempt = await prisma.aptitudeAttempt.findUnique({
+    where: { id: attemptId },
+    select: {
+      id: true,
+      submittedAt: true,
+      declaredName: true,
+      declaredEmail: true,
+      scoredPoints: true,
+      maxPoints: true,
+      invitation: {
+        select: {
+          id: true,
+          candidateName: true,
+          candidateEmail: true,
+          test: {
+            select: {
+              id: true,
+              title: true,
+              showScoreToCandidate: true,
+              passMarkPercent: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!attempt) {
+    scoped("aptitude.candidate_result_send").warn("attempt no longer exists, skipping", { attemptId });
+    return;
+  }
+
+  if (!attempt.submittedAt) {
+    scoped("aptitude.candidate_result_send").warn("attempt not submitted yet, skipping", { attemptId });
+    return;
+  }
+
+  // If score is hidden on this test and no admin override email was provided, do not send
+  if (!attempt.invitation.test.showScoreToCandidate && !overrideEmail) {
+    scoped("aptitude.candidate_result_send").info("score hidden from candidate, skipping automatic dispatch", { attemptId });
+    return;
+  }
+
+  const rawTarget =
+    overrideEmail?.trim() ||
+    attempt.declaredEmail?.trim() ||
+    attempt.invitation.candidateEmail?.trim();
+
+  if (!rawTarget) {
+    scoped("aptitude.candidate_result_send").warn("no candidate email found, skipping", { attemptId });
+    return;
+  }
+
+  const targetEmail = rawTarget.toLowerCase();
+  const candidateName = attempt.declaredName || attempt.invitation.candidateName || "Candidate";
+  const testTitle = attempt.invitation.test.title;
+  const scoredPoints = attempt.scoredPoints ?? 0;
+  const maxPoints = attempt.maxPoints ?? 0;
+  const percent = maxPoints > 0 ? Math.round((scoredPoints / maxPoints) * 100) : 0;
+
+  const html = buildAptitudeCandidateResultEmailHtml({
+    testTitle,
+    candidateName,
+    submittedAt: attempt.submittedAt,
+    scoredPoints,
+    maxPoints,
+    percent,
+    passMarkPercent: attempt.invitation.test.passMarkPercent,
+  });
+
+  const result = await sendEmail({
+    to: [targetEmail],
+    from: "Basilissa Aptitude",
+    recipientName: candidateName,
+    subject: `Your Results: ${testTitle} (${percent}%)`,
+    html,
+    context: { attemptId, testId: attempt.invitation.test.id },
+    ...emailOptionsForJob(job),
+  });
+
+  if (result.status === "failed") {
+    const detail = result.error instanceof Error ? result.error.message : String(result.error);
+    if (!result.retryable) {
+      throw new PermanentJobError(`Aptitude candidate result email rejected: ${detail}`, result.error);
+    }
+    throw new Error(`Aptitude candidate result email failed, will retry: ${detail}`);
+  }
+
+  if (result.status === "sent") {
+    await recordAuditBestEffort({
+      actor: SYSTEM_ACTOR,
+      action: "aptitude.candidate_result_sent",
+      entityType: "AptitudeAttempt",
+      entityId: attempt.id,
+      metadata: {
+        targetEmail,
+        scoredPoints,
+        maxPoints,
+        percent,
+        testId: attempt.invitation.test.id,
+      },
+    });
+  }
+}
+
 

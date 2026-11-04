@@ -10,6 +10,7 @@ import {
 import {
   buildAptitudeInvitationEmailHtml,
   buildAptitudeCompletedEmailHtml,
+  buildAptitudeCandidateResultEmailHtml,
 } from "@/lib/email-templates/aptitude";
 import { buildAnnouncementEmailHtml } from "@/lib/email-templates/announcements";
 
@@ -138,6 +139,42 @@ export async function getEmailJobInspection(jobId: string): Promise<EmailJobInsp
               candidateEmail,
               submittedAt: attempt.submittedAt ?? new Date(),
               autoSubmitted: attempt.autoSubmitted,
+              scoredPoints,
+              maxPoints,
+              percent,
+              passMarkPercent: attempt.invitation.test.passMarkPercent,
+            });
+          }
+        }
+        break;
+      }
+
+      case "aptitude.candidate_result_send": {
+        const attemptId = typeof rawPayload.attemptId === "string" ? rawPayload.attemptId : "";
+        const overrideEmail = typeof rawPayload.overrideEmail === "string" ? rawPayload.overrideEmail : "";
+        subject = `Aptitude Results: ${attemptId}`;
+        primaryRecipient = overrideEmail || "Candidate";
+
+        if (attemptId) {
+          const attempt = await prisma.aptitudeAttempt.findUnique({
+            where: { id: attemptId },
+            include: { invitation: { include: { test: true } } },
+          });
+
+          if (attempt) {
+            const candidateName = attempt.declaredName || attempt.invitation.candidateName || "Candidate";
+            const targetEmail = overrideEmail || attempt.declaredEmail || attempt.invitation.candidateEmail;
+            if (targetEmail) primaryRecipient = targetEmail;
+            const testTitle = attempt.invitation.test.title;
+            const scoredPoints = attempt.scoredPoints ?? 0;
+            const maxPoints = attempt.maxPoints ?? 0;
+            const percent = maxPoints > 0 ? Math.round((scoredPoints / maxPoints) * 100) : 0;
+
+            subject = `Your Results: ${testTitle} (${percent}%)`;
+            htmlPreview = buildAptitudeCandidateResultEmailHtml({
+              testTitle,
+              candidateName,
+              submittedAt: attempt.submittedAt ?? new Date(),
               scoredPoints,
               maxPoints,
               percent,

@@ -11,6 +11,9 @@ const mockPrisma = vi.hoisted(() => ({
   aptitudeAttempt: {
     findUnique: vi.fn(),
   },
+  auditLog: {
+    create: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/platform/prisma", () => ({
@@ -36,7 +39,7 @@ vi.mock("@/lib/platform/env", () => ({
 
 const { getHrNotificationEmails } = await import("@/lib/modules/identity/hr-recipients");
 const { handleAssessmentNotifyHr } = await import("@/lib/modules/assessments/jobs");
-const { handleAptitudeNotifyHr } = await import("@/lib/modules/aptitude/jobs");
+const { handleAptitudeNotifyHr, handleAptitudeCandidateResultSend } = await import("@/lib/modules/aptitude/jobs");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -151,3 +154,122 @@ describe("handleAptitudeNotifyHr", () => {
     expect(callArgs.html).toContain('alt="Basilissa"');
   });
 });
+
+describe("handleAptitudeCandidateResultSend", () => {
+  it("sends official scorecard email to candidate when showScoreToCandidate is true", async () => {
+    mockPrisma.aptitudeAttempt.findUnique.mockResolvedValue({
+      id: "attempt_cand_1",
+      submittedAt: new Date("2026-09-15T12:00:00Z"),
+      declaredName: "Kwame Asante",
+      declaredEmail: "kwame@example.com",
+      scoredPoints: 16,
+      maxPoints: 20,
+      invitation: {
+        id: "inv_cand_1",
+        candidateName: "Kwame Asante",
+        candidateEmail: "kwame@example.com",
+        test: {
+          id: "test_cand_1",
+          title: "Abstract Reasoning",
+          showScoreToCandidate: true,
+          passMarkPercent: 70,
+        },
+      },
+    });
+
+    await handleAptitudeCandidateResultSend({ attemptId: "attempt_cand_1" });
+
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    const callArgs = mockSendEmail.mock.calls[0]![0];
+    expect(callArgs.to).toEqual(["kwame@example.com"]);
+    expect(callArgs.subject).toBe("Your Results: Abstract Reasoning (80%)");
+    expect(callArgs.recipientName).toBe("Kwame Asante");
+    expect(callArgs.html).toContain("16 / 20 (80%)");
+    expect(callArgs.html).toContain("Status: Passed (Pass mark: 70%)");
+  });
+
+  it("skips candidate email when showScoreToCandidate is false and no override is provided", async () => {
+    mockPrisma.aptitudeAttempt.findUnique.mockResolvedValue({
+      id: "attempt_cand_hidden",
+      submittedAt: new Date("2026-09-15T12:00:00Z"),
+      declaredName: "Secret Score Candidate",
+      declaredEmail: "secret@example.com",
+      scoredPoints: 10,
+      maxPoints: 20,
+      invitation: {
+        id: "inv_cand_hidden",
+        candidateName: "Secret Score Candidate",
+        candidateEmail: "secret@example.com",
+        test: {
+          id: "test_cand_hidden",
+          title: "Confidential Assessment",
+          showScoreToCandidate: false,
+          passMarkPercent: 60,
+        },
+      },
+    });
+
+    await handleAptitudeCandidateResultSend({ attemptId: "attempt_cand_hidden" });
+
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it("sends candidate email even if showScoreToCandidate is false when an admin override email is provided", async () => {
+    mockPrisma.aptitudeAttempt.findUnique.mockResolvedValue({
+      id: "attempt_cand_manual",
+      submittedAt: new Date("2026-09-15T12:00:00Z"),
+      declaredName: "Manual Override Candidate",
+      declaredEmail: null,
+      scoredPoints: 15,
+      maxPoints: 20,
+      invitation: {
+        id: "inv_cand_manual",
+        candidateName: "Manual Override Candidate",
+        candidateEmail: null,
+        test: {
+          id: "test_cand_manual",
+          title: "Manual Release Test",
+          showScoreToCandidate: false,
+          passMarkPercent: 50,
+        },
+      },
+    });
+
+    await handleAptitudeCandidateResultSend({
+      attemptId: "attempt_cand_manual",
+      overrideEmail: "override@example.com",
+    });
+
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    const callArgs = mockSendEmail.mock.calls[0]![0];
+    expect(callArgs.to).toEqual(["override@example.com"]);
+    expect(callArgs.subject).toBe("Your Results: Manual Release Test (75%)");
+  });
+
+  it("skips gracefully when candidate has no email address", async () => {
+    mockPrisma.aptitudeAttempt.findUnique.mockResolvedValue({
+      id: "attempt_no_email",
+      submittedAt: new Date("2026-09-15T12:00:00Z"),
+      declaredName: "Anonymous Candidate",
+      declaredEmail: null,
+      scoredPoints: 10,
+      maxPoints: 20,
+      invitation: {
+        id: "inv_no_email",
+        candidateName: null,
+        candidateEmail: null,
+        test: {
+          id: "test_no_email",
+          title: "Public Walk-In Test",
+          showScoreToCandidate: true,
+          passMarkPercent: 50,
+        },
+      },
+    });
+
+    await handleAptitudeCandidateResultSend({ attemptId: "attempt_no_email" });
+
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+});
+

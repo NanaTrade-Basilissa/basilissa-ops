@@ -37,6 +37,10 @@ export const HANDLERS: Record<string, JobHandler> = {
     const { handleAptitudeNotifyHr } = await import("@/lib/modules/aptitude/jobs");
     return handleAptitudeNotifyHr(payload, context);
   },
+  "aptitude.candidate_result_send": async (payload, context) => {
+    const { handleAptitudeCandidateResultSend } = await import("@/lib/modules/aptitude/jobs");
+    return handleAptitudeCandidateResultSend(payload, context);
+  },
   "announcements.fanout": async (payload) => {
     const { handleAnnouncementFanout } = await import("@/lib/modules/announcements/jobs");
     return handleAnnouncementFanout(payload);
