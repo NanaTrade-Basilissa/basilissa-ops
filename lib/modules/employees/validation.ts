@@ -15,6 +15,7 @@ export const employeeCodeSchema = z
 
 export const employeeListFilterSchema = z.object({
   branchId: z.string().optional(),
+  department: z.string().optional(),
   status: z.nativeEnum(EmploymentStatus).optional(),
   search: z.string().optional(),
   /** Mobile-app device binding: `bound` has an active one, `unbound` has none. */
@@ -32,6 +33,12 @@ export const employeeInputSchema = z.object({
     .string()
     .trim()
     .max(120)
+    .optional()
+    .transform((value) => (value ? value : null)),
+  department: z
+    .string()
+    .trim()
+    .max(80)
     .optional()
     .transform((value) => (value ? value : null)),
   /**

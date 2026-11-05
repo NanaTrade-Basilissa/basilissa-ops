@@ -7,8 +7,72 @@ import {
   getDatesFromIsoWeek,
   getAllWeeksInYear,
 } from "@/lib/modules/attendance/policy";
+import {
+  inferDepartmentFromJobTitle,
+  resolveEmployeeDepartment,
+  normalizeDepartmentKey,
+  DEPARTMENT_LABELS,
+} from "@/lib/modules/employees/constants";
 
 describe("Annual Leave & Anti-Collision Engine", () => {
+  describe("Functional Department Resolution & Normalization", () => {
+    it("infers KITCHEN from kitchen and culinary titles", () => {
+      expect(inferDepartmentFromJobTitle("Head Chef")).toBe("KITCHEN");
+      expect(inferDepartmentFromJobTitle("Line Cook")).toBe("KITCHEN");
+      expect(inferDepartmentFromJobTitle("Pastry Baker")).toBe("KITCHEN");
+      expect(inferDepartmentFromJobTitle("Grill Assistant")).toBe("KITCHEN");
+      expect(inferDepartmentFromJobTitle("Food Prep")).toBe("KITCHEN");
+    });
+
+    it("infers SERVICE from front-of-house and guest facing titles", () => {
+      expect(inferDepartmentFromJobTitle("Cashier")).toBe("SERVICE");
+      expect(inferDepartmentFromJobTitle("Frontliner")).toBe("SERVICE");
+      expect(inferDepartmentFromJobTitle("Waitstaff")).toBe("SERVICE");
+      expect(inferDepartmentFromJobTitle("Barista")).toBe("SERVICE");
+      expect(inferDepartmentFromJobTitle("Dispatch Rider")).toBe("SERVICE");
+    });
+
+    it("infers SANITATION from cleaning and utility titles", () => {
+      expect(inferDepartmentFromJobTitle("Cleaner")).toBe("SANITATION");
+      expect(inferDepartmentFromJobTitle("Kitchen Steward / Dishwasher")).toBe("SANITATION");
+      expect(inferDepartmentFromJobTitle("Janitorial Staff")).toBe("SANITATION");
+    });
+
+    it("infers MANAGEMENT from supervisory and leadership titles", () => {
+      expect(inferDepartmentFromJobTitle("Branch Manager")).toBe("MANAGEMENT");
+      expect(inferDepartmentFromJobTitle("Shift Supervisor")).toBe("MANAGEMENT");
+      expect(inferDepartmentFromJobTitle("Floor Lead")).toBe("MANAGEMENT");
+    });
+
+    it("prefers explicit employee department over job title", () => {
+      expect(
+        resolveEmployeeDepartment({
+          department: "KITCHEN",
+          jobTitle: "Branch Manager",
+        })
+      ).toBe("KITCHEN");
+    });
+
+    it("falls back to job title inference when department is not set", () => {
+      expect(
+        resolveEmployeeDepartment({
+          department: null,
+          jobTitle: "Line Cook",
+        })
+      ).toBe("KITCHEN");
+    });
+
+    it("normalizes legacy role category keys to modern departments", () => {
+      expect(normalizeDepartmentKey("COOK")).toBe("KITCHEN");
+      expect(normalizeDepartmentKey("FRONT_OF_HOUSE")).toBe("SERVICE");
+      expect(normalizeDepartmentKey("CLEANER")).toBe("SANITATION");
+      expect(normalizeDepartmentKey("SUPERVISOR")).toBe("MANAGEMENT");
+      expect(normalizeDepartmentKey("KITCHEN")).toBe("KITCHEN");
+      expect(normalizeDepartmentKey("UNKNOWN")).toBe("OTHER");
+      expect(DEPARTMENT_LABELS.KITCHEN).toBe("Kitchen");
+      expect(DEPARTMENT_LABELS.COOK).toBe("Kitchen");
+    });
+  });
   describe("Job Category Normalization (Anti-Collision grouping)", () => {
     it("categorizes kitchen cooking staff into COOK", () => {
       expect(normalizeJobCategory("Head Cook")).toBe("COOK");

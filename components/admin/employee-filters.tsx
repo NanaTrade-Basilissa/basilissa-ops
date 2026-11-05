@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FilterBar } from "@/components/admin/filter-bar";
 
+import { DEPARTMENT_OPTIONS } from "@/lib/modules/employees/constants";
+
 type FilterOption = { id: string; label: string };
 
-const FILTER_KEYS = ["branchId", "status", "device", "search"];
+const FILTER_KEYS = ["branchId", "department", "status", "device", "search"];
 const STATUS_OPTIONS = [
   { value: "ACTIVE", label: "Active" },
   { value: "SUSPENDED", label: "Suspended" },
@@ -84,6 +86,21 @@ export function EmployeeFilters({
             {branches.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.label}
+              </option>
+            ))}
+          </NativeSelect>
+
+          <NativeSelect
+            id="filter-department"
+            value={searchParams.get("department") ?? ""}
+            onChange={(e) => setParam("department", e.target.value)}
+            className="h-9 text-xs"
+            containerClassName="w-full sm:w-fit sm:min-w-[140px] sm:shrink-0"
+          >
+            <option value="">All departments</option>
+            {DEPARTMENT_OPTIONS.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
               </option>
             ))}
           </NativeSelect>

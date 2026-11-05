@@ -5,6 +5,7 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
 import { Badge } from "@/components/ui/badge";
+import { DEPARTMENT_LABELS, resolveEmployeeDepartment } from "@/lib/modules/employees/constants";
 
 export type EmployeeRow = {
   id: string;
@@ -12,6 +13,7 @@ export type EmployeeRow = {
   firstName: string;
   lastName: string;
   jobTitle: string | null;
+  department: string | null;
   email: string | null;
   status: string;
   /** Active mobile-app bindings; non-empty means a phone is bound. */
@@ -29,16 +31,25 @@ const columns = columnHelper.columns([
   columnHelper.display({
     id: "name",
     header: "Name",
-    cell: ({ row }) => (
-      <div>
-        <span className="font-medium text-foreground underline-offset-4 hover:underline">
-          {row.original.firstName} {row.original.lastName}
-        </span>
-        {row.original.jobTitle && (
-          <span className="block text-xs text-muted-foreground">{row.original.jobTitle}</span>
-        )}
-      </div>
-    ),
+    cell: ({ row }) => {
+      const dept = resolveEmployeeDepartment(row.original);
+      const deptLabel = DEPARTMENT_LABELS[dept] || dept;
+      return (
+        <div>
+          <span className="font-medium text-foreground underline-offset-4 hover:underline">
+            {row.original.firstName} {row.original.lastName}
+          </span>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {row.original.jobTitle && (
+              <span className="text-xs text-muted-foreground">{row.original.jobTitle}</span>
+            )}
+            <Badge variant="outline" className="text-[10px] py-0 px-1 font-normal text-muted-foreground border-border/70">
+              {deptLabel}
+            </Badge>
+          </div>
+        </div>
+      );
+    },
   }),
   columnHelper.accessor("email", {
     header: "Email",

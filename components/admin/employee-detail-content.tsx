@@ -99,6 +99,7 @@ export function EmployeeDetailContent({
                 email: employee.email ?? "",
                 phone: employee.phone ?? "",
                 jobTitle: employee.jobTitle ?? "",
+                department: employee.department ?? "",
                 status: employee.status,
                 hireDate: employee.hireDate?.toISOString().slice(0, 10) ?? "",
               }}

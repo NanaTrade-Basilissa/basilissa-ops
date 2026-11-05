@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DEPARTMENT_OPTIONS } from "@/lib/modules/employees/constants";
 
 export type EmployeeValues = {
   employeeCode: string;
@@ -16,6 +17,7 @@ export type EmployeeValues = {
   email: string;
   phone: string;
   jobTitle: string;
+  department?: string;
   status: "ACTIVE" | "SUSPENDED" | "TERMINATED";
   hireDate: string;
 };
@@ -101,9 +103,22 @@ export function EmployeeForm({
         {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="jobTitle">Job title</Label>
-        <Input id="jobTitle" name="jobTitle" defaultValue={defaultValues?.jobTitle} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="jobTitle">Job title</Label>
+          <Input id="jobTitle" name="jobTitle" defaultValue={defaultValues?.jobTitle} placeholder="e.g. Cook, Cashier" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="department">Department</Label>
+          <NativeSelect id="department" name="department" defaultValue={defaultValues?.department ?? ""}>
+            <option value="">Auto-infer from title</option>
+            {DEPARTMENT_OPTIONS.map((dept) => (
+              <option key={dept.id} value={dept.id}>
+                {dept.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

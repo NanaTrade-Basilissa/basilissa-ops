@@ -37,6 +37,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
   const raw = await searchParams;
   const parsed = employeeListFilterSchema.safeParse({
     branchId: first(raw.branchId),
+    department: first(raw.department),
     status: first(raw.status),
     search: first(raw.search),
     device: first(raw.device),
@@ -60,6 +61,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
   function pageHref(targetPage: number) {
     const search = new URLSearchParams();
     if (filters.branchId) search.set("branchId", filters.branchId);
+    if (filters.department) search.set("department", filters.department);
     if (filters.status) search.set("status", filters.status);
     if (filters.search) search.set("search", filters.search);
     if (filters.device) search.set("device", filters.device);

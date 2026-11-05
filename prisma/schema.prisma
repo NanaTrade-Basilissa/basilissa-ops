@@ -350,6 +350,8 @@ model Employee {
   lastName  String
   /// Odoo-owned once adoption completes; nullable until then.
   jobTitle  String?
+  /// Functional department (e.g. KITCHEN, SERVICE, SANITATION, MANAGEMENT, OTHER).
+  department String?
   /// A contact address, not a credential — most employees never get a login
   /// account (`userId` stays null), but still need to receive things like an
   /// assessment invitation. Not unique: unlike `User.email`, nothing signs in

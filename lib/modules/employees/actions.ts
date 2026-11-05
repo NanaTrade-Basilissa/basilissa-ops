@@ -36,6 +36,7 @@ const EMPLOYEE_FIELDS = [
   "email",
   "phone",
   "jobTitle",
+  "department",
   "status",
   "hireDate",
 ] as const;
@@ -48,6 +49,7 @@ function parseEmployee(formData: FormData) {
     email: formData.get("email") || undefined,
     phone: formData.get("phone") || undefined,
     jobTitle: formData.get("jobTitle"),
+    department: formData.get("department") || undefined,
     status: formData.get("status"),
     hireDate: formData.get("hireDate"),
   });

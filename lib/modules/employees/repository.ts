@@ -6,6 +6,7 @@ import { deviceNameFromLabel } from "@/lib/platform/push";
 
 export type EmployeeListFilters = {
   branchId?: string;
+  department?: string;
   status?: EmploymentStatus;
   /** Matched against name, employee code and email, case-insensitively. */
   search?: string;
@@ -28,6 +29,9 @@ function employeeListWhere(scope: BranchScope, filters: EmployeeListFilters): Pr
 
   if (filters.branchId) {
     clauses.push({ branchAssignments: { some: { branchId: filters.branchId, validTo: null } } });
+  }
+  if (filters.department) {
+    clauses.push({ department: filters.department });
   }
   if (filters.status) clauses.push({ status: filters.status });
   if (filters.device) {
@@ -66,6 +70,7 @@ const EMPLOYEE_LIST_SELECT = {
   email: true,
   phone: true,
   jobTitle: true,
+  department: true,
   status: true,
   masterSource: true,
   deviceIdentities: {
@@ -128,6 +133,7 @@ export async function getEmployee(employeeId: string, scope: BranchScope) {
       email: true,
       phone: true,
       jobTitle: true,
+      department: true,
       status: true,
       hireDate: true,
       terminationDate: true,
