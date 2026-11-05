@@ -62,6 +62,11 @@ failing lint got merged here once.
   that way.
 - **The assessment answer key must never reach the browser.** See the note at
   the top of `lib/modules/assessments/taking.ts`.
+- **Mobile app `.env` must always point to production (`https://ops.basilissagh.com`).**
+  Never change `EXPO_PUBLIC_API_URL` in `basilissa-employee-app/.env` to a local
+  IP or `localhost`; use `npm run start:dev` / `ios:dev` / `android:dev` for
+  local development, and always verify `.env` has `EXPO_PUBLIC_API_URL=https://ops.basilissagh.com`
+  before any iOS or Android release build.
 
 ## UI components: shadcn/ui, standardised
 

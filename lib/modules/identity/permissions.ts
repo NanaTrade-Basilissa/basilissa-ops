@@ -185,6 +185,14 @@ export const PERMISSION_REGISTRY = {
       manage: { label: "Manage", description: "Retry or cancel background jobs" },
     },
   },
+  releases: {
+    label: "App Releases",
+    description: "Mobile app version releases and forced-update control",
+    actions: {
+      read: { label: "View", description: "View the release history for the mobile apps" },
+      manage: { label: "Manage", description: "Publish a new app release, including mandatory updates" },
+    },
+  },
   meals: {
     label: "Staff Meals",
     description: "Weekly staff meal planning, portions tracking, and kitchen claiming",

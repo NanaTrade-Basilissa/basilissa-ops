@@ -98,6 +98,7 @@ model User {
   reviewedLeaveRequests LeaveRequest[] @relation("LeaveReviewedBy")
   feedbackRecipients BranchFeedbackRecipient[]
   hostedFiles        HostedFile[] @relation("UserHostedFiles")
+  appReleases        AppRelease[] @relation("UserAppReleases")
 
   @@index([status])
   @@index([customRoleId])
@@ -2443,5 +2444,34 @@ model HostedFile {
   @@map("hosted_files")
 }
 
+enum AppPlatform {
+  IOS
+  ANDROID
+}
 
+enum AppUpdateMode {
+  /// Dismissible prompt; the user may continue using the app.
+  FLEXIBLE
+  /// Blocking: every build older than this version must update to continue.
+  REQUIRED
+}
 
+/// A version of the staff mobile app that has gone live in a store. The newest
+/// row per platform is the "latest" version; the newest REQUIRED row is the
+/// minimum version the API will let run.
+model AppRelease {
+  id           String        @id @default(cuid())
+  platform     AppPlatform
+  version      String
+  updateMode   AppUpdateMode @default(FLEXIBLE)
+  releaseNotes String?
+  releasedAt   DateTime      @default(now())
+
+  createdById  String
+  createdBy    User          @relation("UserAppReleases", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime      @default(now())
+
+  @@unique([platform, version])
+  @@index([platform, releasedAt])
+  @@map("app_releases")
+}

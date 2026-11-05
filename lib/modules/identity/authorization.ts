@@ -117,7 +117,10 @@ export type SystemPermission =
   | "meals:manage"
   // Hosted files and vanity URLs
   | "files:read"
-  | "files:write";
+  | "files:write"
+  // Mobile app releases: publishing a version, and whether it is mandatory
+  | "releases:read"
+  | "releases:manage";
 
 export type Permission = SystemPermission | PermissionKey | (string & {});
 
@@ -264,6 +267,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "meals:write",
     "files:read",
     "files:write",
+    "releases:read",
+    "releases:manage",
   ],
 
   // Everything, including granting roles. Should be one or two people.
@@ -305,6 +310,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "training:write",
     "files:read",
     "files:write",
+    "releases:read",
+    "releases:manage",
   ],
 };
 
@@ -351,6 +358,8 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "email_queue:manage": ["email_queue:manage"],
   "jobs:read": ["jobs:read"],
   "jobs:manage": ["jobs:manage"],
+  "releases:read": ["releases:read"],
+  "releases:manage": ["releases:manage"],
   "meals:read": ["meals:read"],
   "meals:write": ["meals:create", "meals:update", "meals:delete", "meals:publish"],
   "meals:manage": ["meals:create", "meals:read", "meals:update", "meals:delete", "meals:publish"],
@@ -373,6 +382,8 @@ export const GRANULAR_TO_SYSTEM: Record<string, string> = {
   "roles:read": "user:read",
   "jobs:read": "jobs:read",
   "jobs:manage": "jobs:manage",
+  "releases:read": "releases:read",
+  "releases:manage": "releases:manage",
   "meals:read": "meals:read",
   "training:read": "training:read",
   "training:write": "training:write",

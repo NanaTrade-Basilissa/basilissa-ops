@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Mail,
+  Rocket,
   Megaphone,
   MessageSquareText,
   Shield,
@@ -164,6 +165,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/admin/audit-trail", label: "Audit Trail", icon: History, exact: false, permission: "user:read" },
       { href: "/admin/jobs", label: "Background Jobs", icon: Layers, exact: false, permission: "jobs:read" },
       { href: "/admin/email-queue", label: "Email Queue", icon: Mail, exact: false, permission: "email_queue:read" },
+      { href: "/admin/releases", label: "App Releases", icon: Rocket, exact: false, permission: "releases:read" },
     ],
   },
 ] as const;

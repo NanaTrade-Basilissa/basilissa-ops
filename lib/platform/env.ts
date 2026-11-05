@@ -107,6 +107,12 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: optional(z.string()),
   R2_BUCKET_NAME: optional(z.string()),
   R2_PUBLIC_DOMAIN: optional(z.string()),
+
+  // Optional: store listing URLs handed to the mobile app by /api/v1/app-version.
+  // Android defaults to the Play listing for com.basilissa.employee. iOS has no
+  // default until the App Store id is known; the app falls back to a store search.
+  APP_STORE_URL_IOS: optional(z.string().url("APP_STORE_URL_IOS must be a valid URL")),
+  APP_STORE_URL_ANDROID: optional(z.string().url("APP_STORE_URL_ANDROID must be a valid URL")),
 });
 
 export type Env = z.infer<typeof envSchema>;
