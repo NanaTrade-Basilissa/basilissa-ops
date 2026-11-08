@@ -278,10 +278,16 @@ export async function saveScheduleOverride(
   const dateKey = String(formData.get("dateKey") ?? "");
   const type = String(formData.get("type") ?? "") as ScheduleExceptionType;
   const shiftId = String(formData.get("shiftId") ?? "") || null;
+  const rawOvertime = formData.get("overtimeMinutes");
+  const overtimeMinutes = rawOvertime != null && rawOvertime !== "" ? Number(rawOvertime) : null;
   const reason = String(formData.get("reason") ?? "").trim();
 
   if (!employeeId || !branchId || !dateKey || !type) {
     return { error: "Missing required fields." };
+  }
+
+  if (type === ScheduleExceptionType.OVERTIME && (!overtimeMinutes || overtimeMinutes <= 0)) {
+    return { error: "Please select or enter an overtime duration.", fieldErrors: { overtimeMinutes: "Required" } };
   }
 
   if ((type === ScheduleExceptionType.SHIFT_CHANGE || type === ScheduleExceptionType.EXTRA_SHIFT) && !shiftId) {
@@ -308,12 +314,14 @@ export async function saveScheduleOverride(
         date,
         type,
         shiftId: type === ScheduleExceptionType.DAY_OFF ? null : shiftId,
+        overtimeMinutes: type === ScheduleExceptionType.OVERTIME ? overtimeMinutes : null,
         reason,
         createdBy: actor.userId,
       },
       update: {
         type,
         shiftId: type === ScheduleExceptionType.DAY_OFF ? null : shiftId,
+        overtimeMinutes: type === ScheduleExceptionType.OVERTIME ? overtimeMinutes : null,
         // A day off is not worked anywhere, so it cannot be a cover shift.
         ...(type === ScheduleExceptionType.DAY_OFF ? { branchId: null } : {}),
         reason,

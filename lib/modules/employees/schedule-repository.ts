@@ -30,6 +30,7 @@ export type EmployeeDaySchedule = {
   exceptionId?: string;
   exceptionType?: ScheduleExceptionType;
   exceptionReason?: string;
+  overtimeMinutes?: number | null;
   /**
    * A cover shift away from the row's home branch, or, on a visitor's row, the
    * branch this grid is for. Null for an ordinary day.
@@ -261,6 +262,7 @@ export async function getWeeklyBranchSchedule(
         type: ex.type,
         shiftId: ex.shiftId,
         branchId: ex.branchId,
+        overtimeMinutes: ex.overtimeMinutes,
       })),
       holidays,
       patterns: livePatterns.get(emp.id) ?? [],
@@ -274,6 +276,7 @@ export async function getWeeklyBranchSchedule(
       startMinute: null,
       endMinute: null,
       isException: false,
+      overtimeMinutes: null,
     });
 
     for (const d of days) {
@@ -300,6 +303,7 @@ export async function getWeeklyBranchSchedule(
           exceptionId: ex?.id,
           exceptionType: ex?.type,
           exceptionReason: ex?.reason,
+          overtimeMinutes: ex?.overtimeMinutes ?? resolved.scheduledOvertimeMinutes ?? null,
           coverBranchName: ex?.branchId ? (ex.branch?.name ?? null) : null,
           isAway: coverElsewhere,
         };

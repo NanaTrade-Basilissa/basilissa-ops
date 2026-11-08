@@ -625,6 +625,8 @@ enum ScheduleExceptionType {
   SHIFT_CHANGE
   /// Working on a day the assignment does not cover — cover, overtime shift.
   EXTRA_SHIFT
+  /// Explicit scheduled overtime.
+  OVERTIME
 }
 
 /// A one-day override of an employee's usual schedule.
@@ -632,17 +634,19 @@ enum ScheduleExceptionType {
 /// Resolved ahead of assignments, so the everyday case of covering someone
 /// else's shift does not require editing a rota.
 model ScheduleException {
-  id         String                @id @default(cuid())
-  employeeId String
+  id              String                @id @default(cuid())
+  employeeId      String
   /// The local calendar date being overridden, in the branch's timezone.
-  date       DateTime              @db.Date
-  type       ScheduleExceptionType
+  date            DateTime              @db.Date
+  type            ScheduleExceptionType
   /// Required for SHIFT_CHANGE and EXTRA_SHIFT; meaningless for DAY_OFF.
-  shiftId    String?
+  shiftId         String?
   /// Set for a cover shift: the branch the person works at that day, which may
   /// not be one they are assigned to. It is what lets their punch be accepted
   /// there, for that shift only. Null means wherever they normally work.
-  branchId   String?
+  branchId        String?
+  /// Minutes of scheduled overtime (e.g. 30, 60, 120).
+  overtimeMinutes Int?
 
   reason    String
   createdBy String?

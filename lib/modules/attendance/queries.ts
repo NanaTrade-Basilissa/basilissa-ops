@@ -300,6 +300,7 @@ export async function getAttendanceDay(
         date: true,
         type: true,
         shiftId: true,
+        overtimeMinutes: true,
       },
     }),
     prisma.attendanceCorrection.findMany({
@@ -356,6 +357,7 @@ export async function getAttendanceDay(
       dateKey,
       type: e.type,
       shiftId: e.shiftId,
+      overtimeMinutes: e.overtimeMinutes,
     })),
     holidays: await loadHolidayKeys(),
     patterns: await loadLivePatternsFor(employeeId),
@@ -813,6 +815,7 @@ export async function getLiveFloorStatus(
         date: true,
         type: true,
         shiftId: true,
+        overtimeMinutes: true,
       },
     }),
   ]);
@@ -832,6 +835,7 @@ export async function getLiveFloorStatus(
         dateKey: todayKey,
         type: e.type,
         shiftId: e.shiftId,
+        overtimeMinutes: e.overtimeMinutes,
       }));
 
     const resolved = resolveScheduleForDate(todayKey, {

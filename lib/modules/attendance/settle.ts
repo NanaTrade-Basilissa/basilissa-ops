@@ -36,7 +36,7 @@ export async function loadScheduleInputs(
     }),
     tx.scheduleException.findMany({
       where: { employeeId },
-      select: { date: true, type: true, shiftId: true, branchId: true },
+      select: { date: true, type: true, shiftId: true, branchId: true, overtimeMinutes: true },
     }),
     tx.shift.findMany({
       where: { OR: [{ branchId }, { branchId: null }] },
@@ -57,6 +57,7 @@ export async function loadScheduleInputs(
       type: entry.type,
       shiftId: entry.shiftId,
       branchId: entry.branchId,
+      overtimeMinutes: entry.overtimeMinutes,
     })),
     holidays,
     patterns,
@@ -155,6 +156,11 @@ export async function settleDay(
     select: { payableOvertimeMinutes: true },
   });
 
+  const approvedOvertime =
+    (existing?.payableOvertimeMinutes ?? 0) > 0
+      ? existing!.payableOvertimeMinutes
+      : (schedule?.scheduledOvertimeMinutes ?? 0);
+
   const projected = projectDay({
     workDateKey,
     events,
@@ -162,7 +168,7 @@ export async function settleDay(
     policy,
     asOf,
     correctionCount: corrections.length,
-    approvedOvertimeMinutes: existing?.payableOvertimeMinutes ?? 0,
+    approvedOvertimeMinutes: approvedOvertime,
   });
 
   const data = {
@@ -190,13 +196,29 @@ export async function settleDay(
     projectionVersion: PROJECTION_VERSION,
   };
 
+  const autoPayableOvertime =
+    (schedule?.scheduledOvertimeMinutes ?? 0) > 0 && projected.overtimeMinutes > 0
+      ? Math.min(projected.overtimeMinutes, schedule!.scheduledOvertimeMinutes!)
+      : 0;
+
   await tx.attendanceDay.upsert({
     where: { employeeId_workDate: { employeeId, workDate } },
-    // payableOvertimeMinutes is deliberately absent from the update: it is set
+    // payableOvertimeMinutes is deliberately absent from regular updates: it is set
     // by approval, and recomputing a day must not silently un-approve overtime
-    // somebody already authorised.
-    create: { employeeId, workDate, ...data },
-    update: data,
+    // somebody already authorised. When scheduled overtime exists and has not yet been approved,
+    // we pre-credit up to the pre-scheduled amount.
+    create: {
+      employeeId,
+      workDate,
+      ...data,
+      ...(autoPayableOvertime > 0 ? { payableOvertimeMinutes: autoPayableOvertime } : {}),
+    },
+    update: {
+      ...data,
+      ...(existing?.payableOvertimeMinutes === 0 && autoPayableOvertime > 0
+        ? { payableOvertimeMinutes: autoPayableOvertime }
+        : {}),
+    },
   });
 
   return projected;

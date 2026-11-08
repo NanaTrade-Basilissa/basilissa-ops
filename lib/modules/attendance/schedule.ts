@@ -49,6 +49,8 @@ export type ExceptionLike = {
   shiftId: string | null;
   /** A cover shift's branch; null or absent for the usual branch. */
   branchId?: string | null;
+  /** Scheduled overtime minutes. */
+  overtimeMinutes?: number | null;
 };
 
 export type ScheduleInputs = {
@@ -79,6 +81,8 @@ export type ResolvedSchedule = {
   source: "exception" | "pattern" | "assignment";
   /** Set when the day is a cover shift at another branch. */
   coverBranchId: string | null;
+  /** Scheduled overtime in minutes, if set for this day. */
+  scheduledOvertimeMinutes?: number;
 };
 
 /** A shift whose end is at or before its start runs into the next day. */
@@ -177,11 +181,61 @@ export function resolveScheduleForDate(
   if (exception) {
     if (exception.type === ScheduleExceptionType.DAY_OFF) return null;
 
+    if (exception.type === ScheduleExceptionType.OVERTIME) {
+      let baseShift = findShift(shifts, exception.shiftId);
+      if (!baseShift) {
+        const pattern = inputs.patterns
+          .filter((entry) => isAssignmentInEffect(entry, dayStart))
+          .sort((a, b) => b.validFrom.getTime() - a.validFrom.getTime())[0];
+        if (pattern) {
+          const shiftId = patternDayFor(workDateKey, pattern);
+          if (shiftId) baseShift = findShift(shifts, shiftId);
+        }
+      }
+      if (!baseShift) {
+        const weekday = isoWeekdayInZone(dayStart, timeZone);
+        const assignment = assignments
+          .filter((entry) => isAssignmentInEffect(entry, dayStart) && entry.daysOfWeek.includes(weekday))
+          .sort((a, b) => b.validFrom.getTime() - a.validFrom.getTime())[0];
+        if (assignment) baseShift = findShift(shifts, assignment.shiftId);
+      }
+
+      if (baseShift) {
+        const built = build(baseShift, workDateKey, timeZone, "exception", exception.branchId ?? null);
+        return {
+          ...built,
+          scheduledOvertimeMinutes: exception.overtimeMinutes ?? 0,
+        };
+      }
+
+      const otMins = exception.overtimeMinutes ?? 60;
+      const startUtc = zonedMinutesToUtc(workDateKey, 8 * 60, timeZone);
+      const endUtc = new Date(startUtc.getTime() + otMins * 60_000);
+      return {
+        workDateKey,
+        shiftId: "overtime",
+        shiftName: "Overtime",
+        scheduledStart: startUtc,
+        scheduledEnd: endUtc,
+        unpaidBreakMinutes: 0,
+        crossesMidnight: false,
+        source: "exception",
+        coverBranchId: exception.branchId ?? null,
+        scheduledOvertimeMinutes: otMins,
+      };
+    }
+
     const shift = findShift(shifts, exception.shiftId);
     // A SHIFT_CHANGE or EXTRA_SHIFT naming a shift that no longer exists is
     // bad data, not a day off. Fall through so the assignment still applies
     // rather than silently unscheduling someone who is at work.
-    if (shift) return build(shift, workDateKey, timeZone, "exception", exception.branchId ?? null);
+    if (shift) {
+      const built = build(shift, workDateKey, timeZone, "exception", exception.branchId ?? null);
+      if (exception.overtimeMinutes) {
+        return { ...built, scheduledOvertimeMinutes: exception.overtimeMinutes };
+      }
+      return built;
+    }
   }
 
   const pattern = inputs.patterns

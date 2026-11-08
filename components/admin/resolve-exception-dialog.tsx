@@ -121,7 +121,56 @@ export function ResolveExceptionDialog({
               Payable Overtime
             </Label>
             {canAuthorizeOvertime ? (
-              <div className="space-y-1">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs px-2"
+                    onClick={() => setOvertimeMins(30)}
+                  >
+                    30m
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs px-2"
+                    onClick={() => setOvertimeMins(60)}
+                  >
+                    1h
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs px-2"
+                    onClick={() => setOvertimeMins(120)}
+                  >
+                    2h
+                  </Button>
+                  {calculatedOvertimeMinutes > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs px-2 text-primary border-primary/30"
+                      onClick={() => setOvertimeMins(calculatedOvertimeMinutes)}
+                    >
+                      Full calc ({calculatedOvertimeMinutes}m)
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs px-2 text-muted-foreground"
+                    onClick={() => setOvertimeMins(0)}
+                  >
+                    0m
+                  </Button>
+                </div>
                 <div className="flex items-center gap-2">
                   <Input
                     id="payableOvertime"
@@ -132,7 +181,9 @@ export function ResolveExceptionDialog({
                     onChange={(e) => setOvertimeMins(Number(e.target.value))}
                     className="w-28"
                   />
-                  <span className="text-sm text-muted-foreground">minutes</span>
+                  <span className="text-sm text-muted-foreground">
+                    minutes ({overtimeMins >= 60 ? `${(overtimeMins / 60).toFixed(1)} hrs` : `${overtimeMins} mins`})
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Calculated overtime was {calculatedOvertimeMinutes}m. You have authority to authorize payable overtime.

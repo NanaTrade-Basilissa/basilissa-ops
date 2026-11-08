@@ -30,6 +30,7 @@ export type EmployeeDaySchedule = {
   exceptionId?: string;
   exceptionType?: ScheduleExceptionType;
   exceptionReason?: string;
+  overtimeMinutes?: number | null;
   coverBranchName?: string | null;
   isAway?: boolean;
 };
@@ -86,6 +87,7 @@ export function WeeklyScheduleGrid({
     exceptionId?: string;
     exceptionType?: ScheduleExceptionType;
     exceptionReason?: string;
+    overtimeMinutes?: number | null;
   } | null>(null);
 
   const todayKey = dateKeyInZone(new Date(), DISPLAY_TIMEZONE);
@@ -106,6 +108,7 @@ export function WeeklyScheduleGrid({
       exceptionId: daySchedule.exceptionId,
       exceptionType: daySchedule.exceptionType,
       exceptionReason: daySchedule.exceptionReason,
+      overtimeMinutes: daySchedule.overtimeMinutes ?? null,
     });
   }
 
@@ -236,6 +239,10 @@ export function WeeklyScheduleGrid({
                               <span className="text-[9px] uppercase font-bold text-sky-600 dark:text-sky-400 mt-0.5">
                                 cover
                               </span>
+                            ) : sched.exceptionType === ScheduleExceptionType.OVERTIME || (sched.overtimeMinutes != null && sched.overtimeMinutes > 0) ? (
+                              <span className="text-[9px] uppercase font-bold text-amber-700 dark:text-amber-300 bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30 mt-0.5">
+                                +{sched.overtimeMinutes ? (sched.overtimeMinutes >= 60 ? `${sched.overtimeMinutes / 60}h` : `${sched.overtimeMinutes}m`) : "OT"}
+                              </span>
                             ) : sched.isException && sched.exceptionReason?.startsWith(GENERATED_PREFIX) ? (
                               <span className="text-[9px] uppercase font-bold text-violet-600 dark:text-violet-400 mt-0.5">
                                 pattern
@@ -333,6 +340,7 @@ export function WeeklyScheduleGrid({
           exceptionId={selectedCell.exceptionId}
           exceptionType={selectedCell.exceptionType}
           exceptionReason={selectedCell.exceptionReason}
+          overtimeMinutes={selectedCell.overtimeMinutes ?? undefined}
           shifts={data.shifts}
         />
       )}

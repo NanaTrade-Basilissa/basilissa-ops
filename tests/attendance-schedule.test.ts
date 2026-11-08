@@ -181,6 +181,45 @@ describe("exceptions", () => {
     expect(resolved?.shiftId).toBe("evening");
   });
 
+  it("resolves scheduled overtime attached to a regular shift", () => {
+    const resolved = resolveScheduleForDate(
+      "2026-03-02",
+      inputs({
+        exceptions: [
+          {
+            dateKey: "2026-03-02",
+            type: ScheduleExceptionType.OVERTIME,
+            shiftId: "day",
+            overtimeMinutes: 120, // 2 hours
+          },
+        ],
+      }),
+    );
+    expect(resolved?.shiftId).toBe("day");
+    expect(resolved?.scheduledOvertimeMinutes).toBe(120);
+    expect(resolved?.source).toBe("exception");
+  });
+
+  it("resolves standalone scheduled overtime preset on an uncovered day off", () => {
+    const resolved = resolveScheduleForDate(
+      "2026-03-08", // Sunday
+      inputs({
+        assignments: [{ shiftId: "day", daysOfWeek: [1, 2, 3, 4, 5], validFrom: FROM_2026, validTo: null }],
+        exceptions: [
+          {
+            dateKey: "2026-03-08",
+            type: ScheduleExceptionType.OVERTIME,
+            shiftId: null,
+            overtimeMinutes: 30, // 30 minutes preset
+          },
+        ],
+      }),
+    );
+    expect(resolved?.shiftId).toBe("overtime");
+    expect(resolved?.shiftName).toBe("Overtime");
+    expect(resolved?.scheduledOvertimeMinutes).toBe(30);
+  });
+
   it("only applies to its own date", () => {
     const withException = inputs({
       exceptions: [{ dateKey: "2026-03-02", type: ScheduleExceptionType.DAY_OFF, shiftId: null }],
