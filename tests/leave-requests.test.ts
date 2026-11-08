@@ -100,6 +100,18 @@ describe("Employee Leave Requests", () => {
         }),
       ).rejects.toThrow("reason for leave is required");
     });
+
+    it("rejects leave requests overlapping December", async () => {
+      await expect(
+        submitLeaveRequest({
+          employeeId: "emp_100",
+          type: LeaveType.SICK,
+          startDate: "2026-12-10",
+          endDate: "2026-12-15",
+          reason: "Holiday rest",
+        }),
+      ).rejects.toThrow("Leave cannot be scheduled during December");
+    });
   });
 
   describe("reviewLeaveRequest", () => {

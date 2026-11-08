@@ -60,6 +60,18 @@ export async function submitLeaveRequest(input: SubmitLeaveRequestInput) {
     throw new Error("Start date cannot be after end date.");
   }
 
+  const startUtc = new Date(`${startDate}T00:00:00.000Z`);
+  const endUtc = new Date(`${endDate}T00:00:00.000Z`);
+
+  // Block leave requests that overlap December
+  const curCheck = new Date(startUtc.getTime());
+  while (curCheck <= endUtc) {
+    if (curCheck.getUTCMonth() === 11) {
+      throw new Error("Leave cannot be scheduled during December due to peak operational demand.");
+    }
+    curCheck.setUTCDate(curCheck.getUTCDate() + 1);
+  }
+
   // Resolve branchId if not explicitly provided
   let effectiveBranchId = branchId;
   if (!effectiveBranchId) {
@@ -70,9 +82,6 @@ export async function submitLeaveRequest(input: SubmitLeaveRequestInput) {
     });
     effectiveBranchId = assignment?.branchId;
   }
-
-  const startUtc = new Date(`${startDate}T00:00:00.000Z`);
-  const endUtc = new Date(`${endDate}T00:00:00.000Z`);
 
   const created = await prisma.leaveRequest.create({
     data: {

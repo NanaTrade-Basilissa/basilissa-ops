@@ -32,6 +32,15 @@ export async function submitSickLeaveRequest(input: SubmitSickLeaveInput) {
   const startUtc = new Date(`${startDate}T00:00:00.000Z`);
   const endUtc = new Date(`${endDate}T00:00:00.000Z`);
 
+  // Block leave requests that overlap December
+  const curCheck = new Date(startUtc.getTime());
+  while (curCheck <= endUtc) {
+    if (curCheck.getUTCMonth() === 11) {
+      throw new Error("Leave cannot be scheduled during December due to peak operational demand.");
+    }
+    curCheck.setUTCDate(curCheck.getUTCDate() + 1);
+  }
+
   const dayCount = Math.max(1, Math.round((endUtc.getTime() - startUtc.getTime()) / 86400000) + 1);
 
   // If sick leave is more than 1 day, a medical report is required by company policy
