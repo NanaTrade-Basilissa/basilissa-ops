@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Mail,
+  RefreshCw,
   Rocket,
   Megaphone,
   MessageSquareText,
@@ -166,6 +167,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/admin/jobs", label: "Background Jobs", icon: Layers, exact: false, permission: "jobs:read" },
       { href: "/admin/email-queue", label: "Email Queue", icon: Mail, exact: false, permission: "email_queue:read" },
       { href: "/admin/releases", label: "App Releases", icon: Rocket, exact: false, permission: "releases:read" },
+      { href: "/admin/odoo", label: "Odoo ERP Sync", icon: RefreshCw, exact: false, permission: "odoo:read" },
     ],
   },
 ] as const;

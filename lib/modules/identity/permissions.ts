@@ -214,6 +214,14 @@ export const PERMISSION_REGISTRY = {
       delete: { label: "Delete", description: "Permanently purge files and slugs from storage" },
     },
   },
+  odoo: {
+    label: "Odoo ERP Sync",
+    description: "Odoo 17 employee synchronisation and end-of-day attendance sync",
+    actions: {
+      read: { label: "View", description: "View Odoo connection status, employee mappings, and attendance sync logs" },
+      manage: { label: "Manage", description: "Trigger employee/attendance sync, link Odoo IDs, and retry failed syncs" },
+    },
+  },
 } as const;
 
 export type PermissionRegistryType = typeof PERMISSION_REGISTRY;

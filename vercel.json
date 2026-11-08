@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/attendance",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/odoo-sync",
+      "schedule": "0 0 * * *"
     }
   ]
 }

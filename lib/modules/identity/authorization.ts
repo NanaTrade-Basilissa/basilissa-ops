@@ -120,7 +120,10 @@ export type SystemPermission =
   | "files:write"
   // Mobile app releases: publishing a version, and whether it is mandatory
   | "releases:read"
-  | "releases:manage";
+  | "releases:manage"
+  // Odoo ERP integration: employee pull and end-of-day attendance sync
+  | "odoo:read"
+  | "odoo:manage";
 
 export type Permission = SystemPermission | PermissionKey | (string & {});
 
@@ -269,6 +272,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "files:write",
     "releases:read",
     "releases:manage",
+    "odoo:read",
+    "odoo:manage",
   ],
 
   // Everything, including granting roles. Should be one or two people.
@@ -312,6 +317,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "files:write",
     "releases:read",
     "releases:manage",
+    "odoo:read",
+    "odoo:manage",
   ],
 };
 
@@ -360,6 +367,8 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "jobs:manage": ["jobs:manage"],
   "releases:read": ["releases:read"],
   "releases:manage": ["releases:manage"],
+  "odoo:read": ["odoo:read"],
+  "odoo:manage": ["odoo:manage"],
   "meals:read": ["meals:read"],
   "meals:write": ["meals:create", "meals:update", "meals:delete", "meals:publish"],
   "meals:manage": ["meals:create", "meals:read", "meals:update", "meals:delete", "meals:publish"],
@@ -384,6 +393,8 @@ export const GRANULAR_TO_SYSTEM: Record<string, string> = {
   "jobs:manage": "jobs:manage",
   "releases:read": "releases:read",
   "releases:manage": "releases:manage",
+  "odoo:read": "odoo:read",
+  "odoo:manage": "odoo:manage",
   "meals:read": "meals:read",
   "training:read": "training:read",
   "training:write": "training:write",

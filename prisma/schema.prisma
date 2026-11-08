@@ -1082,6 +1082,13 @@ enum DayStatus {
   NEEDS_REVIEW
 }
 
+enum OdooSyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+  SKIPPED
+}
+
 /// One employee's attendance for one work date.
 ///
 /// A PROJECTION, not a record. Recomputed from immutable events, the policy in
@@ -1139,12 +1146,21 @@ model AttendanceDay {
   /// logic can be found and replayed rather than silently disagreeing.
   projectionVersion Int @default(1)
 
+  // --- Odoo ERP Sync (End-of-Day) -------------------------------------------
+  odooAttendanceId Int?           @unique
+  odooSyncStatus   OdooSyncStatus @default(PENDING)
+  odooSyncedAt     DateTime?
+  odooSyncedIn     DateTime?
+  odooSyncedOut    DateTime?
+  odooSyncError    String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([employeeId, workDate])
   @@index([branchId, workDate])
   @@index([status, workDate])
+  @@index([odooSyncStatus, workDate])
   @@index([lowestIdentityAssurance])
   @@map("attendance_days")
 }
