@@ -144,6 +144,12 @@ export async function recordDeviceAttlogBatch(
   const ingest = input._ingestFn ?? ingestEvent;
   const outcomes: DeviceAttlogRowOutcome[] = [];
 
+  // The device is a physical object bolted to one location — resolved once per batch
+  const device = await prisma.device.findUnique({
+    where: { providerType_serialNumber: { providerType: ProviderType.FINGERPRINT, serialNumber } },
+    select: { branchId: true, isActive: true, branch: { select: { timezone: true, isActive: true } } },
+  });
+
   for (const entry of parseAttlogBody(rawBody)) {
     if (!entry.ok) {
       await quarantine(serialNumber, "MALFORMED_ATTLOG_LINE", { rawLine: entry.rawLine });
@@ -152,14 +158,6 @@ export async function recordDeviceAttlogBatch(
     }
 
     const { row } = entry;
-
-    // The device is a physical object bolted to one location — its branch is
-    // a property of the device, registered once, never inferred from who
-    // happens to punch on it.
-    const device = await prisma.device.findUnique({
-      where: { providerType_serialNumber: { providerType: ProviderType.FINGERPRINT, serialNumber } },
-      select: { branchId: true, isActive: true, branch: { select: { timezone: true, isActive: true } } },
-    });
 
     if (!device || !device.isActive || !device.branch.isActive) {
       await quarantine(serialNumber, "UNREGISTERED_DEVICE", row);

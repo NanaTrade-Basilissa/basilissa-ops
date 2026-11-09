@@ -20,6 +20,9 @@ import { scoped } from "@/lib/platform/logger";
  * the row for a human, not by an HTTP status the terminal can't act on.
  */
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 const log = scoped("device-iclock-cdata");
 const RATE_LIMIT_MAX = 120;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -61,16 +64,22 @@ export async function POST(request: NextRequest) {
   const rawBody = await request.text();
 
   if (table === "ATTLOG") {
-    const outcomes = await recordDeviceAttlogBatch({ serialNumber: sn, rawBody });
-    const accepted = outcomes.filter((o) => o.status === "ACCEPTED").length;
-    const quarantined = outcomes.filter((o) => o.status === "QUARANTINED").length;
-    const rejected = outcomes.filter((o) => o.status === "REJECTED").length;
-    log.info("device attendance batch processed", { sn, total: outcomes.length, accepted, quarantined, rejected });
-    await recordDeviceActivity(
-      sn,
-      "ATTLOG",
-      `${outcomes.length} row(s): ${accepted} accepted, ${quarantined} quarantined, ${rejected} rejected`,
-    );
+    try {
+      const outcomes = await recordDeviceAttlogBatch({ serialNumber: sn, rawBody });
+      const accepted = outcomes.filter((o) => o.status === "ACCEPTED").length;
+      const quarantined = outcomes.filter((o) => o.status === "QUARANTINED").length;
+      const rejected = outcomes.filter((o) => o.status === "REJECTED").length;
+      log.info("device attendance batch processed", { sn, total: outcomes.length, accepted, quarantined, rejected });
+      await recordDeviceActivity(
+        sn,
+        "ATTLOG",
+        `${outcomes.length} row(s): ${accepted} accepted, ${quarantined} quarantined, ${rejected} rejected`,
+      );
+    } catch (err: unknown) {
+      log.error("failed processing attlog batch", { sn, err });
+      // Always acknowledge terminal so it does not hang
+      return ack();
+    }
   } else if (table === "USER" || table === "OPERLOG") {
     // Acknowledged and discarded, never stored — OPERLOG is where a real
     // unit pushed a full fingerprint template unprompted during testing, and
