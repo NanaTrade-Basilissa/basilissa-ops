@@ -7,6 +7,7 @@ import { recordAudit } from "@/lib/platform/audit";
 import { auditActorFrom, requirePermission } from "@/lib/modules/identity/server";
 import { getOdooConnectionStatus } from "./client";
 import { syncAttendanceToOdoo, syncEmployeesFromOdoo } from "./jobs";
+import { getOdooReconciliationReport, type OdooReconciliationReport } from "./reconcile";
 import type {
   OdooAttendanceSyncSummary,
   OdooConnectionStatus,
@@ -159,6 +160,58 @@ export async function linkEmployeeOdooIdAction(
           odooEmployeeId: nextOdooId,
           masterSource: nextOdooId ? MasterSource.ODOO : MasterSource.LOCAL,
         },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/admin/odoo");
+  revalidatePath("/admin/employees");
+
+  return { ok: true };
+}
+
+export async function getOdooReconciliationReportAction(): Promise<OdooReconciliationReport> {
+  await requirePermission("odoo:read");
+  return getOdooReconciliationReport();
+}
+
+export async function updateLocalEmployeeFromOdooAction(
+  employeeId: string,
+  updates: {
+    phone?: string | null;
+    email?: string | null;
+    jobTitle?: string | null;
+  },
+): Promise<{ ok: boolean; error?: string }> {
+  const actor = await requirePermission("odoo:manage");
+
+  const existing = await prisma.employee.findUnique({
+    where: { id: employeeId },
+  });
+  if (!existing) {
+    return { ok: false, error: "Employee not found." };
+  }
+
+  const dataToUpdate: Record<string, string | null> = {};
+  if (updates.phone !== undefined) dataToUpdate.phone = updates.phone;
+  if (updates.email !== undefined) dataToUpdate.email = updates.email;
+  if (updates.jobTitle !== undefined) dataToUpdate.jobTitle = updates.jobTitle;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.employee.update({
+      where: { id: employeeId },
+      data: dataToUpdate,
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "employee.odoo_profile_updated",
+        entityType: "Employee",
+        entityId: employeeId,
+        before: { phone: existing.phone, email: existing.email, jobTitle: existing.jobTitle },
+        after: dataToUpdate,
       },
       tx,
     );

@@ -24,6 +24,7 @@ export default async function AdminOdooSyncPage() {
 
       <OdooSyncPanel
         initialConnection={data.connection}
+        initialReconciliation={data.reconciliation}
         employeeStats={data.employeeStats}
         attendanceStats={data.attendanceStats}
         employees={data.employees}

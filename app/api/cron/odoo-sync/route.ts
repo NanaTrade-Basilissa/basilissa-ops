@@ -35,7 +35,6 @@ async function handleOdooSyncCron(request: NextRequest) {
   try {
     const result = await runNightlyOdooSyncSweep(now);
     log.info("Nightly Odoo sync cron sweep completed", {
-      employeesFetched: result.employeeSync.totalFetched,
       attendanceCreated: result.attendanceSync.created,
       attendanceUpdated: result.attendanceSync.updated,
       attendanceFailed: result.attendanceSync.failed,

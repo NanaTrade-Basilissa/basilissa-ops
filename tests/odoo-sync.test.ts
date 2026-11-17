@@ -210,7 +210,7 @@ describe("normalizeOdooEmployee & matchOdooEmployeeToLocal", () => {
     });
   });
 
-  it("returns create_new when no local employee matches", () => {
+  it("returns unmatched when no local employee matches (never auto-creates)", () => {
     const brandNew = normalizeOdooEmployee({
       id: 99,
       name: "OWUSU NANA YAA",
@@ -222,7 +222,23 @@ describe("normalizeOdooEmployee & matchOdooEmployeeToLocal", () => {
     expect(brandNew.branchSpec.slug).toBe("tema-community-6");
     expect(brandNew.department).toBe("SERVICE");
     expect(matchOdooEmployeeToLocal(brandNew, localEmployees)).toEqual({
-      kind: "create_new",
+      kind: "unmatched",
+    });
+  });
+
+  it("detects and flags duplicate records in Odoo matching already-linked staff", () => {
+    // ID 999 has the same name as emp_linked (KWAME MENSAH), but with a different Odoo ID
+    const duplicateOdooRecord = normalizeOdooEmployee({
+      id: 999,
+      name: "MENSAH KWAME",
+      active: true,
+    })!;
+
+    expect(matchOdooEmployeeToLocal(duplicateOdooRecord, localEmployees)).toEqual({
+      kind: "duplicate_in_odoo",
+      existingLinkedId: "emp_linked",
+      duplicateOdooId: "999",
+      matchedBy: "name",
     });
   });
 });

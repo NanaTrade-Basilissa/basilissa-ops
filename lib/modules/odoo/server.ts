@@ -3,6 +3,7 @@ import { OdooSyncStatus } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { getOdooConnectionStatus } from "./client";
 import { resolveEffectiveOdooAttendanceWindow } from "./policy";
+import { getOdooReconciliationReport, type OdooReconciliationReport } from "./reconcile";
 import {
   runNightlyOdooSyncSweep,
   syncAttendanceToOdoo,
@@ -11,10 +12,12 @@ import {
 
 export {
   getOdooConnectionStatus,
+  getOdooReconciliationReport,
   runNightlyOdooSyncSweep,
   syncAttendanceToOdoo,
   syncEmployeesFromOdoo,
 };
+export type { OdooReconciliationReport };
 
 export type OdooEmployeeMappingRow = {
   id: string;
@@ -129,9 +132,11 @@ export async function getOdooDashboardData() {
     syncGroupCounts.find((g) => g.odooSyncStatus === status)?._count._all ?? 0;
 
   const linkedCount = employees.filter((e) => Boolean(e.odooEmployeeId)).length;
+  const reconciliation = await getOdooReconciliationReport().catch(() => null);
 
   return {
     connection,
+    reconciliation,
     employeeStats: {
       total: employees.length,
       linked: linkedCount,

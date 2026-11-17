@@ -191,55 +191,20 @@ export async function syncEmployeesFromOdoo(): Promise<OdooEmployeeSyncSummary> 
           candidate.odooEmployeeId = normalized.odooEmployeeId;
         }
         linkedExisting++;
-      } else {
-        // Create new local Employee and primary Branch assignment
-        const branchId = await resolveOrCreateBranchId(normalized.branchSpec);
-        let code = `ODOO-${normalized.odooEmployeeId.padStart(4, "0")}`;
-        let suffix = 1;
-        while (usedCodes.has(code.toUpperCase())) {
-          code = `ODOO-${normalized.odooEmployeeId.padStart(4, "0")}-${suffix++}`;
-        }
-        usedCodes.add(code.toUpperCase());
-
-        const created = await prisma.$transaction(async (tx) => {
-          const emp = await tx.employee.create({
-            data: {
-              employeeCode: code,
-              odooEmployeeId: normalized.odooEmployeeId,
-              masterSource: MasterSource.ODOO,
-              firstName: normalized.firstName,
-              lastName: normalized.lastName,
-              jobTitle: normalized.jobTitle,
-              department: normalized.department,
-              email: normalized.email,
-              phone: normalized.phone,
-              status: normalized.isActive ? EmploymentStatus.ACTIVE : EmploymentStatus.TERMINATED,
-              terminationDate: normalized.isActive ? null : new Date(),
-            },
-            select: {
-              id: true,
-              odooEmployeeId: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              phone: true,
-            },
-          });
-
-          await tx.employeeBranchAssignment.create({
-            data: {
-              employeeId: emp.id,
-              branchId,
-              isPrimary: true,
-              validFrom: new Date(),
-            },
-          });
-
-          return emp;
+      } else if (outcome.kind === "duplicate_in_odoo") {
+        // Record is a duplicate in Odoo (e.g. Batch 2 copy) that shares name/phone/email with an already-linked employee.
+        // Skip it so it NEVER spawns a duplicate employee record locally.
+        skipped++;
+        log.warn("Detected and skipped duplicate record in Odoo", {
+          odooId: normalized.odooEmployeeId,
+          name: normalized.rawName,
+          existingLinkedId: outcome.existingLinkedId,
+          matchedBy: outcome.matchedBy,
         });
-
-        candidates.push(created);
-        createdNew++;
+      } else {
+        // Unmatched employee in Odoo: do NOT auto-create in local DB.
+        // It is preserved for manual review on the Discrepancies panel.
+        skipped++;
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -697,8 +662,10 @@ export async function syncAttendanceToOdoo(
 /**
  * End-of-day (12:00 AM midnight) cron workflow:
  * 1. Auto-close stale unclosed shifts and settle finished attendance days.
- * 2. Pull and cache employees from Odoo so `odooEmployeeId` mappings are fresh.
- * 3. Push completed attendance days (with approved overtime closing times) to Odoo.
+ * 2. Push completed attendance days (with approved overtime closing times) to Odoo.
+ *
+ * NOTE: Employee syncing is intentionally manual / discrepancy-driven and is NOT
+ * run automatically at midnight to prevent any unwanted employee mutations.
  */
 export async function runNightlyOdooSyncSweep(now: Date = new Date()) {
   const autoClose = await autoCloseStaleDays(now).catch((err) => ({
@@ -707,14 +674,12 @@ export async function runNightlyOdooSyncSweep(now: Date = new Date()) {
   const settlement = await runDailySettlementSweep(now).catch((err) => ({
     error: String(err),
   }));
-  const employeeSync = await syncEmployeesFromOdoo();
   const attendanceSync = await syncAttendanceToOdoo({ lookbackDays: 7 });
 
   return {
     timestamp: now.toISOString(),
     autoClose,
     settlement,
-    employeeSync,
     attendanceSync,
   };
 }

@@ -223,17 +223,25 @@ export type LocalEmployeeCandidate = {
 export type EmployeeMatchOutcome =
   | { kind: "already_linked"; localEmployeeId: string }
   | { kind: "link_existing"; localEmployeeId: string; matchedBy: "email" | "phone" | "name" }
-  | { kind: "create_new" };
+  | {
+      kind: "duplicate_in_odoo";
+      existingLinkedId: string;
+      duplicateOdooId: string;
+      matchedBy: "email" | "phone" | "name";
+    }
+  | { kind: "unmatched" };
 
 /**
  * Matches a normalized Odoo employee against existing local employee records.
  *
- * 1. If a local employee already carries `odooEmployeeId`, returns `already_linked`.
- * 2. Otherwise searches unlinked local employees (`odooEmployeeId === null`) by:
+ * 1. If a local employee already carries this exact `odooEmployeeId`, returns `already_linked`.
+ * 2. If this Odoo employee matches an employee who is ALREADY linked to another Odoo ID,
+ *    returns `duplicate_in_odoo` so the duplicate Odoo record is flagged and never auto-created.
+ * 3. Otherwise searches unlinked local employees (`odooEmployeeId === null`) by:
  *    - unique case-insensitive email match
  *    - unique 9-digit phone suffix match
  *    - unique normalized full-name match (either `firstName + lastName` or `lastName + firstName`)
- * 3. If no unique match exists, returns `create_new`.
+ * 4. If no unique match exists, returns `unmatched` (NEVER creates a new local employee automatically).
  */
 export function matchOdooEmployeeToLocal(
   odooEmp: NormalizedOdooEmployee,
@@ -244,8 +252,53 @@ export function matchOdooEmployeeToLocal(
     return { kind: "already_linked", localEmployeeId: exactIdMatch.id };
   }
 
+  // Check if this Odoo employee matches someone ALREADY linked to a different Odoo ID
+  const linked = localEmployees.filter((e) => Boolean(e.odooEmployeeId));
   const unlinked = localEmployees.filter((e) => !e.odooEmployeeId);
 
+  const odooForwardKey = `${normalizeNameToken(odooEmp.firstName)}|${normalizeNameToken(odooEmp.lastName)}`;
+  const odooReverseKey = `${normalizeNameToken(odooEmp.lastName)}|${normalizeNameToken(odooEmp.firstName)}`;
+
+  if (odooEmp.email) {
+    const targetEmail = odooEmp.email.toLowerCase();
+    const linkedEmailMatch = linked.find((e) => e.email?.trim().toLowerCase() === targetEmail);
+    if (linkedEmailMatch) {
+      return {
+        kind: "duplicate_in_odoo",
+        existingLinkedId: linkedEmailMatch.id,
+        duplicateOdooId: odooEmp.odooEmployeeId,
+        matchedBy: "email",
+      };
+    }
+  }
+
+  const targetPhone = normalizePhoneKey(odooEmp.phone);
+  if (targetPhone) {
+    const linkedPhoneMatch = linked.find((e) => normalizePhoneKey(e.phone) === targetPhone);
+    if (linkedPhoneMatch) {
+      return {
+        kind: "duplicate_in_odoo",
+        existingLinkedId: linkedPhoneMatch.id,
+        duplicateOdooId: odooEmp.odooEmployeeId,
+        matchedBy: "phone",
+      };
+    }
+  }
+
+  const linkedNameMatch = linked.find((e) => {
+    const localKey = `${normalizeNameToken(e.firstName)}|${normalizeNameToken(e.lastName)}`;
+    return localKey === odooForwardKey || localKey === odooReverseKey;
+  });
+  if (linkedNameMatch) {
+    return {
+      kind: "duplicate_in_odoo",
+      existingLinkedId: linkedNameMatch.id,
+      duplicateOdooId: odooEmp.odooEmployeeId,
+      matchedBy: "name",
+    };
+  }
+
+  // Next search unlinked local employees for linking
   if (odooEmp.email) {
     const targetEmail = odooEmp.email.toLowerCase();
     const emailMatches = unlinked.filter((e) => e.email?.trim().toLowerCase() === targetEmail);
@@ -254,16 +307,12 @@ export function matchOdooEmployeeToLocal(
     }
   }
 
-  const targetPhone = normalizePhoneKey(odooEmp.phone);
   if (targetPhone) {
     const phoneMatches = unlinked.filter((e) => normalizePhoneKey(e.phone) === targetPhone);
     if (phoneMatches.length === 1) {
       return { kind: "link_existing", localEmployeeId: phoneMatches[0].id, matchedBy: "phone" };
     }
   }
-
-  const odooForwardKey = `${normalizeNameToken(odooEmp.firstName)}|${normalizeNameToken(odooEmp.lastName)}`;
-  const odooReverseKey = `${normalizeNameToken(odooEmp.lastName)}|${normalizeNameToken(odooEmp.firstName)}`;
 
   const nameMatches = unlinked.filter((e) => {
     const localKey = `${normalizeNameToken(e.firstName)}|${normalizeNameToken(e.lastName)}`;
@@ -274,5 +323,5 @@ export function matchOdooEmployeeToLocal(
     return { kind: "link_existing", localEmployeeId: nameMatches[0].id, matchedBy: "name" };
   }
 
-  return { kind: "create_new" };
+  return { kind: "unmatched" };
 }
