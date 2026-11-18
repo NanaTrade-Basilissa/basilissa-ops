@@ -72,8 +72,26 @@ function tryRefreshSessionCookie(rawCookie: string, secret: string): string | nu
   }
 }
 
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+};
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Handle CORS preflight and headers for mobile & web API endpoints
+  if (pathname.startsWith("/api/v1")) {
+    if (request.method === "OPTIONS") {
+      return new NextResponse(null, { status: 200, headers: CORS_HEADERS });
+    }
+    const response = NextResponse.next();
+    for (const [key, value] of Object.entries(CORS_HEADERS)) {
+      response.headers.set(key, value);
+    }
+    return response;
+  }
 
   const isPublic = PUBLIC_ADMIN_PATHS.some((path) => pathname.startsWith(path));
   const isProtected = !isPublic && PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
@@ -114,5 +132,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*", "/api/v1/:path*"],
 };
