@@ -145,7 +145,7 @@ export async function dispatchOtpViaGateway(options: SendOtpOptions): Promise<Se
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -261,7 +261,7 @@ export async function sendSms(options: SendSmsOptions): Promise<SendSmsResult> {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     const response = await fetch(env.SMS_CHARGE_URL || DEFAULT_SMS_CHARGE_URL, {
       method: "POST",

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requestMobileOtp } from "@/lib/modules/attendance/server";
 import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
 
+export const maxDuration = 60;
+
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
