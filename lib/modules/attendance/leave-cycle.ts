@@ -579,7 +579,9 @@ export async function getCycleWeeksForEmployee(
       weeksBooked,
       maxWeeks,
       isEligible,
-      probationEndDateStr: effectiveProbationEnd?.toISOString().slice(0, 10) ?? null,
+      probationEndDateStr: slots.some((s) => s.status === "PROBATION_LOCKED")
+        ? effectiveProbationEnd?.toISOString().slice(0, 10) ?? null
+        : null,
     },
     employee: {
       id: employee.id,
