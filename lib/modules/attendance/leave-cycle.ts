@@ -381,9 +381,29 @@ export async function getCycleWeeksForEmployee(
   const weeksBooked = Math.floor(scheduledDays / 5);
 
   const effectiveProbationEnd =
-    allocation?.probationEndDate ||
     employee.probationEndDate ||
     calculateProbationEndDate(employee.hireDate);
+
+  const cycleYearEnd = new Date(Date.UTC(cycle.year, 11, 31));
+  const isEligible =
+    !effectiveProbationEnd || effectiveProbationEnd.getTime() <= cycleYearEnd.getTime();
+
+  // If allocation has stale probation data from before hireDate was updated, sync it
+  if (
+    allocation &&
+    (allocation.probationEndDate?.getTime() !== effectiveProbationEnd?.getTime() ||
+      allocation.isEligible !== isEligible)
+  ) {
+    await prisma.leaveAllocation
+      .update({
+        where: { id: allocation.id },
+        data: {
+          probationEndDate: effectiveProbationEnd,
+          isEligible,
+        },
+      })
+      .catch((err) => console.error("Failed to sync allocation probation date:", err));
+  }
 
   // Quota for this branch and department (with fallback to legacy category key)
   let maxConcurrent = 1;
@@ -558,7 +578,7 @@ export async function getCycleWeeksForEmployee(
       remainingDays,
       weeksBooked,
       maxWeeks,
-      isEligible: allocation?.isEligible ?? true,
+      isEligible,
       probationEndDateStr: effectiveProbationEnd?.toISOString().slice(0, 10) ?? null,
     },
     employee: {
@@ -914,7 +934,7 @@ export async function runFairAutoScheduler(cycleId: string, dryRun = false) {
     const remainingDays = 15 - alloc.scheduledDays;
     const neededWeeks = Math.ceil(remainingDays / 5);
 
-    const probationEnd = alloc.probationEndDate || calculateProbationEndDate(emp.hireDate);
+    const probationEnd = emp.probationEndDate || calculateProbationEndDate(emp.hireDate);
     const assignedWeeksForEmp: string[] = [];
 
     // Try round-robin assignment across Q1 -> Q2 -> Q3 -> Q4
