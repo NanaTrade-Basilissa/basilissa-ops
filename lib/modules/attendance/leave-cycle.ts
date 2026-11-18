@@ -148,6 +148,32 @@ export function getAllWeeksInYear(year: number): string[] {
 }
 
 /**
+ * Returns true if any day of the ISO week (Monday..Sunday) falls in December of the cycle year.
+ * The entire month of December is blocked for restaurant annual leave due to peak trading.
+ */
+export function isDecemberWeek(isoWeek: string, cycleYear?: number): boolean {
+  const { startDate, endDate, year } = getDatesFromIsoWeek(isoWeek);
+  const targetYear = cycleYear ?? year;
+  const cur = new Date(startDate.getTime());
+  while (cur.getTime() <= endDate.getTime()) {
+    if (cur.getUTCFullYear() === targetYear && cur.getUTCMonth() === 11) {
+      return true;
+    }
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return false;
+}
+
+/**
+ * Default restaurant blackout weeks for a given cycle year:
+ * Easter (~W14) plus every ISO week overlapping the month of December.
+ */
+export function getDefaultBlackoutWeeks(year: number): string[] {
+  const decWeeks = getAllWeeksInYear(year).filter((w) => isDecemberWeek(w, year));
+  return Array.from(new Set([`${year}-W14`, ...decWeeks]));
+}
+
+/**
  * 12-Month Probation Engine.
  * Staff cannot take annual leave before their 1-year work anniversary.
  */
@@ -184,8 +210,8 @@ export async function getOrCreateCurrentLeaveCycle(targetYear?: number) {
     const windowStart = new Date(Date.UTC(year - 1, 10, 1)); // Nov 1 previous year
     const windowEnd = new Date(Date.UTC(year - 1, 11, 20));   // Dec 20 previous year
 
-    // Default restaurant blackout weeks: Easter (~W14), Christmas/New Year (~W51, W52)
-    const blackoutWeeks = [`${year}-W14`, `${year}-W51`, `${year}-W52`];
+    // Default restaurant blackout weeks: Easter (~W14) + all of December
+    const blackoutWeeks = getDefaultBlackoutWeeks(year);
 
     cycle = await prisma.leaveCycle.create({
       data: {
@@ -203,6 +229,18 @@ export async function getOrCreateCurrentLeaveCycle(targetYear?: number) {
 
     // Populate initial allocations for all active employees
     await syncLeaveAllocations(cycle.id);
+  } else {
+    // Ensure all December weeks are present in blackoutWeeks for existing cycles
+    const requiredBlackouts = getDefaultBlackoutWeeks(cycle.year);
+    const existingSet = new Set(cycle.blackoutWeeks || []);
+    if (requiredBlackouts.some((w) => !existingSet.has(w))) {
+      const merged = Array.from(new Set([...(cycle.blackoutWeeks || []), ...requiredBlackouts])).sort();
+      cycle = await prisma.leaveCycle.update({
+        where: { id: cycle.id },
+        data: { blackoutWeeks: merged },
+        include: { allocations: true },
+      });
+    }
   }
 
   return cycle;
@@ -470,7 +508,24 @@ export async function getCycleWeeksForEmployee(
       continue;
     }
 
-    // 2. 12-Month Probation check
+    // 2. Blackout week check (Easter & entire month of December)
+    const isDec = isDecemberWeek(isoWeek, cycle.year);
+    if (blackoutSet.has(isoWeek) || isDec) {
+      slots.push({
+        isoWeek,
+        startDateStr,
+        endDateStr,
+        weekNumber,
+        status: "BLACKOUT_LOCKED",
+        statusLabel: isDec
+          ? "December Peak Season (Blocked)"
+          : "Peak Company Trading Week (Locked)",
+        isClickable: false,
+      });
+      continue;
+    }
+
+    // 3. 12-Month Probation check
     if (effectiveProbationEnd && startDate.getTime() < effectiveProbationEnd.getTime()) {
       slots.push({
         isoWeek,
@@ -479,20 +534,6 @@ export async function getCycleWeeksForEmployee(
         weekNumber,
         status: "PROBATION_LOCKED",
         statusLabel: `Probation Active (Eligible after ${effectiveProbationEnd.toISOString().slice(0, 10)})`,
-        isClickable: false,
-      });
-      continue;
-    }
-
-    // 3. Blackout week check (Easter, Christmas, New Year)
-    if (blackoutSet.has(isoWeek)) {
-      slots.push({
-        isoWeek,
-        startDateStr,
-        endDateStr,
-        weekNumber,
-        status: "BLACKOUT_LOCKED",
-        statusLabel: "Peak Company Trading Week (Locked)",
         isClickable: false,
       });
       continue;
@@ -626,9 +667,14 @@ export async function bookWeeklyAnnualLeave(input: {
   // Parse ISO week
   const { startDate, endDate, startDateStr, endDateStr } = getDatesFromIsoWeek(isoWeek);
 
-  // Check blackout weeks
-  if (cycle.blackoutWeeks.includes(isoWeek)) {
-    throw new Error(`Week ${isoWeek} is a blackout trading week and cannot be selected.`);
+  // Check blackout weeks & December restriction
+  const isDec = isDecemberWeek(isoWeek, cycle.year);
+  if (cycle.blackoutWeeks.includes(isoWeek) || isDec) {
+    throw new Error(
+      isDec
+        ? `Week ${isoWeek} falls in December and is blocked due to peak restaurant trading.`
+        : `Week ${isoWeek} is a blackout trading week and cannot be selected.`
+    );
   }
 
   const employee = await prisma.employee.findUnique({
@@ -864,7 +910,9 @@ export async function runFairAutoScheduler(cycleId: string, dryRun = false) {
   });
 
   const blackoutSet = new Set(cycle.blackoutWeeks || []);
-  const allWeeks = getAllWeeksInYear(cycle.year).filter((w) => !blackoutSet.has(w));
+  const allWeeks = getAllWeeksInYear(cycle.year).filter(
+    (w) => !blackoutSet.has(w) && !isDecemberWeek(w, cycle.year)
+  );
 
   // Partition weeks across 4 quarters to enforce even distribution
   const quarterWeeks: Record<number, string[]> = {

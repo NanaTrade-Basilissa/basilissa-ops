@@ -1125,6 +1125,10 @@ export async function saveLeaveCycleAction(data: {
   try {
     const windowStart = new Date(`${data.windowStart}T00:00:00.000Z`);
     const windowEnd = new Date(`${data.windowEnd}T23:59:59.999Z`);
+    const { getDefaultBlackoutWeeks, syncLeaveAllocations } = await import("./leave-cycle");
+    const mergedBlackoutWeeks = Array.from(
+      new Set([...(data.blackoutWeeks || []), ...getDefaultBlackoutWeeks(data.year)])
+    );
 
     if (data.id) {
       await prisma.leaveCycle.update({
@@ -1133,7 +1137,7 @@ export async function saveLeaveCycleAction(data: {
           title: data.title?.trim() || null,
           windowStart,
           windowEnd,
-          blackoutWeeks: data.blackoutWeeks,
+          blackoutWeeks: mergedBlackoutWeeks,
           status: data.status,
         },
       });
@@ -1144,12 +1148,11 @@ export async function saveLeaveCycleAction(data: {
           title: data.title?.trim() || `${data.year} Annual Leave Planning`,
           windowStart,
           windowEnd,
-          blackoutWeeks: data.blackoutWeeks,
+          blackoutWeeks: mergedBlackoutWeeks,
           status: data.status,
         },
       });
       // Sync allocations for active employees
-      const { syncLeaveAllocations } = await import("./leave-cycle");
       await syncLeaveAllocations(cycle.id);
     }
 
