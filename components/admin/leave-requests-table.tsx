@@ -90,13 +90,23 @@ export function LeaveRequestsTable({
   canReview?: boolean;
 }) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [selectedLeaveRequest, setSelectedLeaveRequest] = useState<SerializedLeaveRequest | null>(null);
 
   const columns = columnHelper.columns([
     columnHelper.accessor("employeeName", {
       header: "Employee",
       cell: ({ row }) => (
         <div className="space-y-0.5">
-          <span className="font-medium text-foreground">{row.original.employeeName}</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedEmployeeId(row.original.employeeId);
+            }}
+            className="font-medium text-foreground hover:underline text-left"
+          >
+            {row.original.employeeName}
+          </button>
           <span className="block font-mono text-xs text-muted-foreground">
             {row.original.employeeCode}
             {row.original.jobTitle ? <span className="font-sans"> &middot; {row.original.jobTitle}</span> : null}
@@ -121,16 +131,17 @@ export function LeaveRequestsTable({
             )}
           </div>
           {row.original.attachmentUrl && (
-            <a
-              href={row.original.attachmentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-[11px] text-rose-600 hover:underline font-medium"
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedLeaveRequest(row.original);
+              }}
+              className="inline-flex items-center gap-1 text-[11px] text-rose-600 hover:underline font-medium cursor-pointer"
             >
               <FileText className="size-3" />
-              <span>Medical Report</span>
-            </a>
+              <span>Preview Medical Report</span>
+            </button>
           )}
         </div>
       ),
@@ -188,33 +199,33 @@ export function LeaveRequestsTable({
               const r = row.original;
               return (
                 <div className="flex justify-end">
-                  {r.status === "PENDING" ? (
-                    <TableRowActions
-                      actions={[
-                        {
-                          label: "Review request",
-                          icon: Clock,
-                          dialog: (props) => (
-                            <LeaveReviewDialog
-                              {...props}
-                              leaveRequestId={r.id}
-                              employeeName={r.employeeName}
-                              employeeCode={r.employeeCode}
-                              leaveType={r.type}
-                              startDate={r.startDate}
-                              endDate={r.endDate}
-                              daysCount={r.daysCount}
-                              reason={r.reason}
-                              branchName={r.branchName}
-                              attachmentUrl={r.attachmentUrl}
-                            />
-                          ),
-                        },
-                      ]}
-                    />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Settled</span>
-                  )}
+                  <TableRowActions
+                    actions={[
+                      {
+                        label: r.status === "PENDING" ? "Review request" : "View details",
+                        icon: r.status === "PENDING" ? Clock : FileText,
+                        dialog: (props) => (
+                          <LeaveReviewDialog
+                            {...props}
+                            leaveRequestId={r.id}
+                            employeeName={r.employeeName}
+                            employeeCode={r.employeeCode}
+                            leaveType={r.type}
+                            startDate={r.startDate}
+                            endDate={r.endDate}
+                            daysCount={r.daysCount}
+                            reason={r.reason}
+                            branchName={r.branchName}
+                            attachmentUrl={r.attachmentUrl}
+                            status={r.status}
+                            reviewedBy={r.reviewedBy}
+                            managerNotes={r.managerNotes}
+                            canReview={canReview}
+                          />
+                        ),
+                      },
+                    ]}
+                  />
                 </div>
               );
             },
@@ -229,8 +240,30 @@ export function LeaveRequestsTable({
         columns={columns}
         data={requests}
         emptyMessage="No leave or day-off requests have been submitted."
-        onRowClick={(row) => setSelectedEmployeeId(row.employeeId)}
+        onRowClick={(row) => setSelectedLeaveRequest(row)}
       />
+      {selectedLeaveRequest && (
+        <LeaveReviewDialog
+          open={selectedLeaveRequest !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelectedLeaveRequest(null);
+          }}
+          leaveRequestId={selectedLeaveRequest.id}
+          employeeName={selectedLeaveRequest.employeeName}
+          employeeCode={selectedLeaveRequest.employeeCode}
+          leaveType={selectedLeaveRequest.type}
+          startDate={selectedLeaveRequest.startDate}
+          endDate={selectedLeaveRequest.endDate}
+          daysCount={selectedLeaveRequest.daysCount}
+          reason={selectedLeaveRequest.reason}
+          branchName={selectedLeaveRequest.branchName}
+          attachmentUrl={selectedLeaveRequest.attachmentUrl}
+          status={selectedLeaveRequest.status}
+          reviewedBy={selectedLeaveRequest.reviewedBy}
+          managerNotes={selectedLeaveRequest.managerNotes}
+          canReview={canReview}
+        />
+      )}
       <EmployeeDetailSheet
         employeeId={selectedEmployeeId}
         open={selectedEmployeeId !== null}

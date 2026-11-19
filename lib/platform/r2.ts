@@ -257,7 +257,14 @@ export async function createPresignedDownloadUrl({
  * If the file is an external public asset (e.g. sample video or Unsplash photo), it returns the original URL.
  */
 export async function resolveStorageUrl(fileUrl: string, fileKey?: string | null): Promise<string> {
-  if (!fileKey) return fileUrl;
+  let effectiveKey = fileKey;
+  if (!effectiveKey && fileUrl) {
+    const match = fileUrl.match(/((?:leave-attachments|training-materials|training-thumbnails)\/[^?#]+)/);
+    if (match?.[1]) {
+      effectiveKey = match[1];
+    }
+  }
+  if (!effectiveKey) return fileUrl;
 
   // External sample URLs that do not belong to our bucket
   if (
@@ -269,10 +276,10 @@ export async function resolveStorageUrl(fileUrl: string, fileKey?: string | null
   }
 
   try {
-    const presigned = await createPresignedDownloadUrl({ key: fileKey, expiresInSeconds: 86400 });
+    const presigned = await createPresignedDownloadUrl({ key: effectiveKey, expiresInSeconds: 86400 });
     return presigned || fileUrl;
   } catch (error) {
-    log.error("Failed to generate presigned download URL", { fileKey, error });
+    log.error("Failed to generate presigned download URL", { fileKey: effectiveKey, error });
     return fileUrl;
   }
 }
