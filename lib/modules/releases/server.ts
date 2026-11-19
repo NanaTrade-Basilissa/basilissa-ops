@@ -7,12 +7,15 @@ import type { AppPlatformKey, UpdateStatus } from "./version";
 import { resolveUpdateStatus } from "./version";
 import type { AppReleaseItem } from "./constants";
 
+export const DEFAULT_IOS_STORE_URL =
+  "https://apps.apple.com/us/app/basilissa-staff/id6817812545";
+
 export const DEFAULT_ANDROID_STORE_URL =
   "https://play.google.com/store/apps/details?id=com.basilissa.employee";
 
 export function storeUrlFor(platform: AppPlatformKey): string | null {
   const env = getEnv();
-  if (platform === "IOS") return env.APP_STORE_URL_IOS ?? null;
+  if (platform === "IOS") return env.APP_STORE_URL_IOS ?? DEFAULT_IOS_STORE_URL;
   return env.APP_STORE_URL_ANDROID ?? DEFAULT_ANDROID_STORE_URL;
 }
 
