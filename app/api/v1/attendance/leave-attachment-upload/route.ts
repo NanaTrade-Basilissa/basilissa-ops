@@ -8,6 +8,8 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
+  "image/heic",
+  "image/heif",
 ]);
 
 export async function POST(request: NextRequest) {
@@ -39,6 +41,8 @@ export async function POST(request: NextRequest) {
       else if (ext === "jpg" || ext === "jpeg") mimeType = "image/jpeg";
       else if (ext === "png") mimeType = "image/png";
       else if (ext === "webp") mimeType = "image/webp";
+      else if (ext === "heic") mimeType = "image/heic";
+      else if (ext === "heif") mimeType = "image/heif";
     }
 
     if (!ALLOWED_MIME_TYPES.has(mimeType)) {
