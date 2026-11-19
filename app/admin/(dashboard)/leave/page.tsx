@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AlertTriangle, CalendarCheck, Clock } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
+import { resolveStorageUrl } from "@/lib/platform/r2";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { StatCard } from "@/components/admin/stat-card";
 import { LeaveRequestsTable, type SerializedLeaveRequest } from "@/components/admin/leave-requests-table";
@@ -60,27 +61,31 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
     },
   });
 
-  const serialized: SerializedLeaveRequest[] = requests.map((r) => ({
-    id: r.id,
-    employeeId: r.employeeId,
-    employeeName: `${r.employee.firstName} ${r.employee.lastName}`.trim(),
-    employeeCode: r.employee.employeeCode,
-    jobTitle: r.employee.jobTitle,
-    branchId: r.branchId,
-    branchName: r.branch?.name ?? null,
-    type: r.type,
-    startDate: r.startDate.toISOString().slice(0, 10),
-    endDate: r.endDate.toISOString().slice(0, 10),
-    isoWeek: r.isoWeek,
-    attachmentUrl: r.attachmentUrl,
-    daysCount: Math.max(1, Math.round((r.endDate.getTime() - r.startDate.getTime()) / DAY_MS) + 1),
-    reason: r.reason,
-    status: r.status,
-    reviewedBy: r.reviewer?.name ?? null,
-    reviewedAt: r.reviewedAt?.toISOString() ?? null,
-    managerNotes: r.managerNotes,
-    createdAt: r.createdAt.toISOString(),
-  }));
+  const serialized: SerializedLeaveRequest[] = await Promise.all(
+    requests.map(async (r) => ({
+      id: r.id,
+      employeeId: r.employeeId,
+      employeeName: `${r.employee.firstName} ${r.employee.lastName}`.trim(),
+      employeeCode: r.employee.employeeCode,
+      jobTitle: r.employee.jobTitle,
+      branchId: r.branchId,
+      branchName: r.branch?.name ?? null,
+      type: r.type,
+      startDate: r.startDate.toISOString().slice(0, 10),
+      endDate: r.endDate.toISOString().slice(0, 10),
+      isoWeek: r.isoWeek,
+      attachmentUrl: r.attachmentUrl
+        ? await resolveStorageUrl(r.attachmentUrl, r.attachmentKey)
+        : null,
+      daysCount: Math.max(1, Math.round((r.endDate.getTime() - r.startDate.getTime()) / DAY_MS) + 1),
+      reason: r.reason,
+      status: r.status,
+      reviewedBy: r.reviewer?.name ?? null,
+      reviewedAt: r.reviewedAt?.toISOString() ?? null,
+      managerNotes: r.managerNotes,
+      createdAt: r.createdAt.toISOString(),
+    }))
+  );
 
   const count = (status: SerializedLeaveRequest["status"]) => requests.filter((r) => r.status === status).length;
 

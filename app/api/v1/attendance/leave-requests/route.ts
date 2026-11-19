@@ -6,6 +6,7 @@ import {
   getEmployeeLeaveRequests,
 } from "@/lib/modules/attendance/server";
 import { rateLimit, getClientIp } from "@/lib/platform/rate-limit";
+import { resolveStorageUrl } from "@/lib/platform/r2";
 import { LeaveType } from "@prisma/client";
 
 const RATE_LIMIT_MAX = 30;
@@ -19,6 +20,8 @@ const createLeaveRequestSchema = z
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid endDate format (YYYY-MM-DD)"),
     reason: z.string().max(500, "Reason is too long").optional().default("Personal Leave"),
     branchId: z.string().optional(),
+    attachmentUrl: z.string().url().optional(),
+    attachmentKey: z.string().optional(),
     deviceToken: z.string().optional(),
   })
   .refine((data) => Boolean(data.type || data.leaveType), {
@@ -82,7 +85,7 @@ export async function POST(request: NextRequest) {
   }
 
   const resolvedType = (parsed.data.type || parsed.data.leaveType)!;
-  const { startDate, endDate, reason, branchId } = parsed.data;
+  const { startDate, endDate, reason, branchId, attachmentUrl, attachmentKey } = parsed.data;
   const { employeeId } = tokenVerification.payload;
 
   try {
@@ -93,7 +96,13 @@ export async function POST(request: NextRequest) {
       endDate,
       reason,
       branchId,
+      attachmentUrl,
+      attachmentKey,
     });
+
+    const resolvedAttachmentUrl = leaveRequest.attachmentUrl
+      ? await resolveStorageUrl(leaveRequest.attachmentUrl, leaveRequest.attachmentKey)
+      : null;
 
     return NextResponse.json(
       {
@@ -106,6 +115,7 @@ export async function POST(request: NextRequest) {
           endDate: leaveRequest.endDate.toISOString().slice(0, 10),
           reason: leaveRequest.reason,
           status: leaveRequest.status,
+          attachmentUrl: resolvedAttachmentUrl,
           branchName: leaveRequest.branch?.name ?? null,
           createdAt: leaveRequest.createdAt.toISOString(),
         },
@@ -157,10 +167,8 @@ export async function GET(request: NextRequest) {
 
   const { requests, total } = await getEmployeeLeaveRequests(employeeId, take, skip);
 
-  return NextResponse.json({
-    ok: true,
-    total,
-    leaveRequests: requests.map((r) => ({
+  const leaveRequests = await Promise.all(
+    requests.map(async (r) => ({
       id: r.id,
       type: r.type,
       leaveType: r.type,
@@ -168,12 +176,21 @@ export async function GET(request: NextRequest) {
       endDate: r.endDate.toISOString().slice(0, 10),
       reason: r.reason,
       status: r.status,
+      attachmentUrl: r.attachmentUrl
+        ? await resolveStorageUrl(r.attachmentUrl, r.attachmentKey)
+        : null,
       branchName: r.branch?.name ?? null,
       reviewedBy: r.reviewer?.name ?? null,
       reviewedAt: r.reviewedAt?.toISOString() ?? null,
       managerNotes: r.managerNotes,
       reviewNotes: r.managerNotes ?? null,
       createdAt: r.createdAt.toISOString(),
-    })),
+    }))
+  );
+
+  return NextResponse.json({
+    ok: true,
+    total,
+    leaveRequests,
   });
 }

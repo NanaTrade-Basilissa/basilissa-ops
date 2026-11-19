@@ -14,6 +14,8 @@ export interface SubmitLeaveRequestInput {
   endDate: string;   // YYYY-MM-DD
   reason: string;
   branchId?: string;
+  attachmentUrl?: string;
+  attachmentKey?: string;
 }
 
 export interface ReviewLeaveRequestInput {
@@ -50,7 +52,7 @@ export function getDateRangeKeys(startDateStr: string, endDateStr: string): stri
  * Submits a new leave request on behalf of an employee.
  */
 export async function submitLeaveRequest(input: SubmitLeaveRequestInput) {
-  const { employeeId, type, startDate, endDate, reason, branchId } = input;
+  const { employeeId, type, startDate, endDate, reason, branchId, attachmentUrl, attachmentKey } = input;
 
   if (!reason || reason.trim().length === 0) {
     throw new Error("A reason for leave is required.");
@@ -92,6 +94,8 @@ export async function submitLeaveRequest(input: SubmitLeaveRequestInput) {
       endDate: endUtc,
       reason: reason.trim(),
       status: LeaveStatus.PENDING,
+      attachmentUrl: attachmentUrl || null,
+      attachmentKey: attachmentKey || null,
     },
     include: {
       employee: {
