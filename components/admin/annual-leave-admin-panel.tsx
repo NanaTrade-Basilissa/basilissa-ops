@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   CalendarRange,
@@ -8,6 +8,8 @@ import {
   Play,
   Settings2,
   Sparkles,
+  CalendarOff,
+  RotateCcw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,74 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { saveLeaveCycleAction, runAutoSchedulerAction, saveBranchQuotaAction } from "@/lib/modules/attendance/actions";
+import {
+  saveLeaveCycleAction,
+  runAutoSchedulerAction,
+  reverseAutoSchedulerAction,
+  saveBranchQuotaAction,
+} from "@/lib/modules/attendance/actions";
+import { cn } from "@/lib/utils";
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+interface CalendarWeekOption {
+  isoWeek: string;
+  weekNumber: number;
+  label: string;
+  monthIndex: number; // 0-11 (based on Thursday / primary month of the ISO week)
+}
+
+/**
+ * Generates the 52 ISO weeks for a year, grouped by the month each week primarily belongs to.
+ */
+function buildYearWeeksByMonth(year: number): { monthIndex: number; monthName: string; weeks: CalendarWeekOption[] }[] {
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7; // 1 = Mon .. 7 = Sun
+  const week1Monday = new Date(jan4.getTime() - (jan4Day - 1) * 86400000);
+
+  const byMonth: CalendarWeekOption[][] = Array.from({ length: 12 }, () => []);
+
+  for (let w = 1; w <= 52; w++) {
+    const start = new Date(week1Monday.getTime() + (w - 1) * 7 * 86400000);
+    const end = new Date(start.getTime() + 6 * 86400000);
+    const thu = new Date(start.getTime() + 3 * 86400000);
+
+    const monthIndex = thu.getUTCFullYear() === year ? thu.getUTCMonth() : start.getUTCMonth();
+    const startLabel = `${SHORT_MONTHS[start.getUTCMonth()]} ${start.getUTCDate()}`;
+    const endLabel =
+      start.getUTCMonth() === end.getUTCMonth()
+        ? `${end.getUTCDate()}`
+        : `${SHORT_MONTHS[end.getUTCMonth()]} ${end.getUTCDate()}`;
+
+    byMonth[monthIndex].push({
+      isoWeek: `${year}-W${String(w).padStart(2, "0")}`,
+      weekNumber: w,
+      label: `${startLabel}–${endLabel}`,
+      monthIndex,
+    });
+  }
+
+  return MONTH_NAMES.map((monthName, monthIndex) => ({
+    monthIndex,
+    monthName,
+    weeks: byMonth[monthIndex],
+  }));
+}
 
 const STAFFING_DEPARTMENTS = [
   { key: "KITCHEN", label: "Kitchen", fallback: "COOK" },
@@ -41,6 +110,7 @@ interface AnnualLeaveAdminPanelProps {
     windowEndStr: string;
     blackoutWeeks: string[];
     autoScheduledAt: string | null;
+    autoScheduledCount: number;
     totalEligible: number;
     fullyScheduledCount: number;
     partiallyScheduledCount: number;
@@ -63,7 +133,7 @@ export function AnnualLeaveAdminPanel({
 
   // Dialog & Tabs
   const [isCycleDialogOpen, setIsCycleDialogOpen] = useState(false);
-  const [dialogTab, setDialogTab] = useState<"window" | "quotas">("window");
+  const [dialogTab, setDialogTab] = useState<"window" | "blackouts" | "quotas">("window");
 
   // Cycle form state
   const [cycleYear, setCycleYear] = useState(currentCycle?.year ?? new Date().getFullYear() + 1);
@@ -71,6 +141,10 @@ export function AnnualLeaveAdminPanel({
   const [windowStart, setWindowStart] = useState(currentCycle?.windowStartStr ?? "");
   const [windowEnd, setWindowEnd] = useState(currentCycle?.windowEndStr ?? "");
   const [cycleStatus, setCycleStatus] = useState(currentCycle?.status ?? "OPEN");
+  const [blackoutWeeks, setBlackoutWeeks] = useState<string[]>(currentCycle?.blackoutWeeks ?? []);
+
+  const monthsWithWeeks = useMemo(() => buildYearWeeksByMonth(cycleYear), [cycleYear]);
+  const blackoutSet = useMemo(() => new Set(blackoutWeeks), [blackoutWeeks]);
 
   // Local quota cache: branchId -> { deptKey -> number }
   const [localQuotas, setLocalQuotas] = useState<Record<string, Record<string, number>>>(() => {
@@ -84,8 +158,27 @@ export function AnnualLeaveAdminPanel({
     return initial;
   });
 
-  // Auto-Scheduler Confirmation Dialog
+  // Auto-Scheduler Confirmation & Undo Dialogs
   const [isAutoScheduleOpen, setIsAutoScheduleOpen] = useState(false);
+  const [isReverseAutoScheduleOpen, setIsReverseAutoScheduleOpen] = useState(false);
+
+  function toggleWeek(isoWeek: string) {
+    setBlackoutWeeks((prev) =>
+      prev.includes(isoWeek) ? prev.filter((w) => w !== isoWeek) : [...prev, isoWeek].sort()
+    );
+  }
+
+  function toggleMonth(monthWeeks: CalendarWeekOption[]) {
+    const monthIsoWeeks = monthWeeks.map((w) => w.isoWeek);
+    const allBlocked = monthIsoWeeks.every((w) => blackoutSet.has(w));
+    setBlackoutWeeks((prev) => {
+      if (allBlocked) {
+        const removeSet = new Set(monthIsoWeeks);
+        return prev.filter((w) => !removeSet.has(w));
+      }
+      return Array.from(new Set([...prev, ...monthIsoWeeks])).sort();
+    });
+  }
 
   function handleSaveCycle() {
     if (!windowStart || !windowEnd) {
@@ -100,7 +193,7 @@ export function AnnualLeaveAdminPanel({
         title: cycleTitle || undefined,
         windowStart,
         windowEnd,
-        blackoutWeeks: currentCycle?.blackoutWeeks ?? [`${cycleYear}-W14`, `${cycleYear}-W51`, `${cycleYear}-W52`],
+        blackoutWeeks,
         status: cycleStatus,
       });
 
@@ -122,6 +215,21 @@ export function AnnualLeaveAdminPanel({
         setIsAutoScheduleOpen(false);
       } else {
         toast.error(res.error || "Auto-scheduler failed.");
+      }
+    });
+  }
+
+  function handleReverseAutoScheduler() {
+    if (!currentCycle) return;
+    startTransition(async () => {
+      const res = await reverseAutoSchedulerAction(currentCycle.id);
+      if (res.ok) {
+        toast.success(
+          `Reversed ${res.deletedRequestsCount ?? 0} auto-scheduled leave record(s) and re-opened the window. Manual staff bookings were preserved.`
+        );
+        setIsReverseAutoScheduleOpen(false);
+      } else {
+        toast.error(res.error || "Failed to undo auto-scheduled leave.");
       }
     });
   }
@@ -223,8 +331,33 @@ export function AnnualLeaveAdminPanel({
                   </div>
                 </div>
 
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <CalendarOff className="size-3.5 text-rose-500" />
+                    <span>
+                      <strong className="text-foreground">{currentCycle.blackoutWeeks.length}</strong> busy{" "}
+                      {currentCycle.blackoutWeeks.length === 1 ? "week" : "weeks"} blocked from annual leave booking
+                    </span>
+                  </div>
+                  {canManage && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-primary"
+                      onClick={() => {
+                        setBlackoutWeeks(currentCycle.blackoutWeeks);
+                        setDialogTab("blackouts");
+                        setIsCycleDialogOpen(true);
+                      }}
+                    >
+                      Manage Busy Months / Weeks
+                    </Button>
+                  )}
+                </div>
+
                 <p className="text-xs text-muted-foreground">
-                  Eligible staff choose up to 3 weeks (15 days) of annual leave via the mobile app, adhering to branch department staffing limits and blackout periods.
+                  Eligible staff choose up to 3 weeks (15 days) of annual leave via the mobile app, adhering to branch department staffing limits and busy periods.
                 </p>
               </>
             )}
@@ -246,19 +379,37 @@ export function AnnualLeaveAdminPanel({
             <div className="rounded border border-purple-200 bg-purple-50/70 p-2.5 text-xs text-purple-950 space-y-1">
               <p className="font-semibold text-purple-900">Balanced Allocation</p>
               <p className="text-purple-800/90 leading-relaxed">
-                Evenly distributes leave blocks across quarters while strictly enforcing branch department limits and skipping peak company trading weeks.
+                Evenly distributes leave blocks across quarters while strictly enforcing branch department limits and skipping busy trading weeks.
               </p>
             </div>
 
             {canManage && (
-              <Button
-                onClick={() => setIsAutoScheduleOpen(true)}
-                disabled={isPending || !currentCycle}
-                className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white text-xs"
-              >
-                <Play className="size-3.5" />
-                <span>Run Auto-Scheduler</span>
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  onClick={() => setIsAutoScheduleOpen(true)}
+                  disabled={isPending || !currentCycle}
+                  className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white text-xs"
+                >
+                  <Play className="size-3.5" />
+                  <span>Run Auto-Scheduler</span>
+                </Button>
+
+                {currentCycle && (currentCycle.autoScheduledCount > 0 || currentCycle.status === "FINALIZED") && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsReverseAutoScheduleOpen(true)}
+                    disabled={isPending}
+                    className="w-full gap-2 border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 text-xs"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    <span>
+                      Undo Auto-Schedule
+                      {currentCycle.autoScheduledCount > 0 ? ` (${currentCycle.autoScheduledCount})` : ""}
+                    </span>
+                  </Button>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -270,11 +421,11 @@ export function AnnualLeaveAdminPanel({
           <DialogHeader className="p-6 pb-3 border-b border-border/60">
             <DialogTitle>Configure Annual Leave Window</DialogTitle>
             <DialogDescription className="text-xs">
-              Set mobile booking window dates and configure maximum simultaneous leave limits by functional department.
+              Set mobile booking window dates, mark busy months/weeks, and configure department staffing limits.
             </DialogDescription>
 
             {/* Modal Internal Tab Switcher */}
-            <div className="flex gap-2 pt-3">
+            <div className="flex flex-wrap gap-2 pt-3">
               <Button
                 type="button"
                 variant={dialogTab === "window" ? "secondary" : "ghost"}
@@ -284,6 +435,16 @@ export function AnnualLeaveAdminPanel({
               >
                 <CalendarRange className="size-3.5" />
                 <span>Window Settings</span>
+              </Button>
+              <Button
+                type="button"
+                variant={dialogTab === "blackouts" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setDialogTab("blackouts")}
+                className="text-xs gap-1.5 h-8"
+              >
+                <CalendarOff className="size-3.5" />
+                <span>Busy Months / Weeks ({blackoutWeeks.length})</span>
               </Button>
               <Button
                 type="button"
@@ -364,6 +525,82 @@ export function AnnualLeaveAdminPanel({
               </div>
             )}
 
+            {dialogTab === "blackouts" && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Click a month button to block an entire busy month, or click individual weeks below. Blocked weeks are locked on the mobile planner and skipped by the auto-scheduler.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {monthsWithWeeks.map((month) => {
+                    const blockedInMonth = month.weeks.filter((w) => blackoutSet.has(w.isoWeek)).length;
+                    const allBlocked = month.weeks.length > 0 && blockedInMonth === month.weeks.length;
+                    return (
+                      <div
+                        key={month.monthIndex}
+                        className={cn(
+                          "rounded-lg border p-3 space-y-2 transition-colors",
+                          allBlocked
+                            ? "border-rose-300 bg-rose-50/40"
+                            : blockedInMonth > 0
+                            ? "border-amber-200 bg-amber-50/20"
+                            : "border-border/80 bg-background"
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-foreground">
+                              {month.monthName} {cycleYear}
+                            </span>
+                            {blockedInMonth > 0 && (
+                              <Badge
+                                variant="outline"
+                                className="h-4 px-1.5 text-[10px] border-rose-200 bg-rose-50 text-rose-700"
+                              >
+                                {blockedInMonth}/{month.weeks.length}
+                              </Badge>
+                            )}
+                          </div>
+                          <Button
+                            type="button"
+                            variant={allBlocked ? "destructive" : "outline"}
+                            size="sm"
+                            onClick={() => toggleMonth(month.weeks)}
+                            className="h-6 px-2 text-[11px]"
+                          >
+                            {allBlocked ? "Clear Month" : "Block Month"}
+                          </Button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {month.weeks.map((week) => {
+                            const isBlocked = blackoutSet.has(week.isoWeek);
+                            return (
+                              <button
+                                key={week.isoWeek}
+                                type="button"
+                                onClick={() => toggleWeek(week.isoWeek)}
+                                className={cn(
+                                  "rounded-md border px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer",
+                                  isBlocked
+                                    ? "border-rose-400 bg-rose-600 text-white hover:bg-rose-700"
+                                    : "border-border bg-muted/40 text-foreground hover:border-rose-300 hover:bg-rose-50"
+                                )}
+                              >
+                                W{String(week.weekNumber).padStart(2, "0")} · {week.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {dialogTab === "quotas" && (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
@@ -422,15 +659,23 @@ export function AnnualLeaveAdminPanel({
 
           <DialogFooter className="p-4 border-t border-border/60 bg-muted/20 flex justify-between items-center">
             <span className="text-[11px] text-muted-foreground">
-              {dialogTab === "quotas" ? "Quotas save on change" : ""}
+              {dialogTab === "quotas"
+                ? "Quotas save automatically"
+                : dialogTab === "blackouts"
+                ? `${blackoutWeeks.length} busy week(s) selected`
+                : ""}
             </span>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setIsCycleDialogOpen(false)}>
                 Close
               </Button>
-              {dialogTab === "window" && (
+              {(dialogTab === "window" || dialogTab === "blackouts") && (
                 <Button size="sm" onClick={handleSaveCycle} disabled={isPending}>
-                  {isPending ? "Saving..." : "Save Window Settings"}
+                  {isPending
+                    ? "Saving..."
+                    : dialogTab === "blackouts"
+                    ? "Save Busy Weeks"
+                    : "Save Window Settings"}
                 </Button>
               )}
             </div>
@@ -460,6 +705,42 @@ export function AnnualLeaveAdminPanel({
             </Button>
             <Button size="sm" onClick={handleRunAutoScheduler} disabled={isPending} className="bg-purple-600 hover:bg-purple-700 text-white">
               {isPending ? "Assigning..." : "Execute Auto-Scheduler"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Undo Auto-Scheduler Confirm Dialog */}
+      <Dialog open={isReverseAutoScheduleOpen} onOpenChange={setIsReverseAutoScheduleOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Undo Auto-Scheduled Leave</DialogTitle>
+            <DialogDescription className="text-xs">
+              Safely remove auto-scheduled annual leave for {currentCycle?.year} and re-open the selection window.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 text-xs space-y-2 text-muted-foreground">
+            <p>
+              &bull; Removes <strong className="text-foreground">{currentCycle?.autoScheduledCount ?? 0}</strong>{" "}
+              auto-scheduled annual leave request(s) and their generated DAY_OFF roster exceptions.
+            </p>
+            <p>
+              &bull; <strong className="text-emerald-700">100% of manual bookings made by staff are preserved</strong>{" "}
+              and each employee&apos;s scheduled day count is recalculated accurately.
+            </p>
+            <p>&bull; Sets the {currentCycle?.year} cycle status back to <strong className="text-foreground">OPEN</strong>.</p>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsReverseAutoScheduleOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleReverseAutoScheduler}
+              disabled={isPending}
+            >
+              {isPending ? "Reversing..." : "Yes, Undo Auto-Schedule"}
             </Button>
           </DialogFooter>
         </DialogContent>

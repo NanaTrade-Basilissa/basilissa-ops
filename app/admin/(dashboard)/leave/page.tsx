@@ -91,10 +91,15 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
 
   // Load or initialize LeaveCycle
   const cycle = await getOrCreateCurrentLeaveCycle();
-  const allocations = await prisma.leaveAllocation.findMany({
-    where: { cycleId: cycle.id },
-    select: { isEligible: true, scheduledDays: true },
-  });
+  const [allocations, autoScheduledCount] = await Promise.all([
+    prisma.leaveAllocation.findMany({
+      where: { cycleId: cycle.id },
+      select: { isEligible: true, scheduledDays: true },
+    }),
+    prisma.leaveRequest.count({
+      where: { cycleId: cycle.id, isAutoScheduled: true },
+    }),
+  ]);
 
   const totalEligible = allocations.filter((a) => a.isEligible).length;
   const fullyScheduledCount = allocations.filter((a) => a.isEligible && a.scheduledDays >= 15).length;
@@ -110,6 +115,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
     windowEndStr: cycle.windowEnd.toISOString().slice(0, 10),
     blackoutWeeks: cycle.blackoutWeeks,
     autoScheduledAt: cycle.autoScheduledAt?.toISOString() ?? null,
+    autoScheduledCount,
     totalEligible,
     fullyScheduledCount,
     partiallyScheduledCount,

@@ -1126,9 +1126,7 @@ export async function saveLeaveCycleAction(data: {
     const windowStart = new Date(`${data.windowStart}T00:00:00.000Z`);
     const windowEnd = new Date(`${data.windowEnd}T23:59:59.999Z`);
     const { getDefaultBlackoutWeeks, syncLeaveAllocations } = await import("./leave-cycle");
-    const mergedBlackoutWeeks = Array.from(
-      new Set([...(data.blackoutWeeks || []), ...getDefaultBlackoutWeeks(data.year)])
-    );
+    const cleanBlackoutWeeks = Array.from(new Set(data.blackoutWeeks || [])).sort();
 
     if (data.id) {
       await prisma.leaveCycle.update({
@@ -1137,18 +1135,20 @@ export async function saveLeaveCycleAction(data: {
           title: data.title?.trim() || null,
           windowStart,
           windowEnd,
-          blackoutWeeks: mergedBlackoutWeeks,
+          blackoutWeeks: cleanBlackoutWeeks,
           status: data.status,
         },
       });
     } else {
+      const initialBlackoutWeeks =
+        cleanBlackoutWeeks.length > 0 ? cleanBlackoutWeeks : getDefaultBlackoutWeeks(data.year);
       const cycle = await prisma.leaveCycle.create({
         data: {
           year: data.year,
           title: data.title?.trim() || `${data.year} Annual Leave Planning`,
           windowStart,
           windowEnd,
-          blackoutWeeks: mergedBlackoutWeeks,
+          blackoutWeeks: initialBlackoutWeeks,
           status: data.status,
         },
       });
@@ -1181,6 +1181,40 @@ export async function runAutoSchedulerAction(cycleId: string): Promise<ActionRes
   } catch (err) {
     console.error("runAutoSchedulerAction error:", err);
     return { ok: false, error: err instanceof Error ? err.message : "Failed to run auto-scheduler" };
+  }
+}
+
+export async function reverseAutoSchedulerAction(
+  cycleId: string
+): Promise<ActionResult & { deletedRequestsCount?: number; deletedExceptionsCount?: number }> {
+  const actor = await requirePermission("attendance:write");
+  if (!actor) return { ok: false, error: "Unauthorized" };
+
+  try {
+    const { reverseFairAutoScheduler } = await import("./leave-cycle");
+    const result = await reverseFairAutoScheduler(cycleId);
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "leave_cycle.auto_schedule_reversed",
+      entityType: "LeaveCycle",
+      entityId: cycleId,
+      after: result,
+    });
+
+    revalidatePath("/admin/leave");
+    revalidatePath("/admin/shifts");
+    return {
+      ok: true,
+      deletedRequestsCount: result.deletedRequestsCount,
+      deletedExceptionsCount: result.deletedExceptionsCount,
+    };
+  } catch (err) {
+    console.error("reverseAutoSchedulerAction error:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to reverse auto-scheduled leave",
+    };
   }
 }
 

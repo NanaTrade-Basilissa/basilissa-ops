@@ -229,18 +229,6 @@ export async function getOrCreateCurrentLeaveCycle(targetYear?: number) {
 
     // Populate initial allocations for all active employees
     await syncLeaveAllocations(cycle.id);
-  } else {
-    // Ensure all December weeks are present in blackoutWeeks for existing cycles
-    const requiredBlackouts = getDefaultBlackoutWeeks(cycle.year);
-    const existingSet = new Set(cycle.blackoutWeeks || []);
-    if (requiredBlackouts.some((w) => !existingSet.has(w))) {
-      const merged = Array.from(new Set([...(cycle.blackoutWeeks || []), ...requiredBlackouts])).sort();
-      cycle = await prisma.leaveCycle.update({
-        where: { id: cycle.id },
-        data: { blackoutWeeks: merged },
-        include: { allocations: true },
-      });
-    }
   }
 
   return cycle;
@@ -1121,4 +1109,114 @@ export async function runFairAutoScheduler(cycleId: string, dryRun = false) {
     processedCount: assignedSummary.length,
     summary: assignedSummary,
   };
+}
+
+/**
+ * Safely reverses auto-scheduled annual leave for a cycle without touching any
+ * manual staff bookings. Runs atomically inside a single transaction.
+ */
+export async function reverseFairAutoScheduler(cycleId: string) {
+  const cycle = await prisma.leaveCycle.findUnique({
+    where: { id: cycleId },
+    select: { id: true, year: true, status: true },
+  });
+
+  if (!cycle) {
+    throw new Error("LeaveCycle not found.");
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const autoRequests = await tx.leaveRequest.findMany({
+      where: {
+        cycleId,
+        isAutoScheduled: true,
+      },
+      select: {
+        id: true,
+        employeeId: true,
+        isoWeek: true,
+      },
+    });
+
+    const autoWeeks = Array.from(
+      new Set(autoRequests.map((r) => r.isoWeek).filter((w): w is string => Boolean(w)))
+    );
+    const autoEmployeeIds = Array.from(new Set(autoRequests.map((r) => r.employeeId)));
+
+    // 1. Remove ONLY ScheduleException rows created by the auto-scheduler for this cycle
+    let deletedExceptionsCount = 0;
+    if (autoWeeks.length > 0 && autoEmployeeIds.length > 0) {
+      const expectedReasons = autoWeeks.map((w) => `Auto-Scheduled Annual Leave: ${w}`);
+      const deletedEx = await tx.scheduleException.deleteMany({
+        where: {
+          employeeId: { in: autoEmployeeIds },
+          type: ScheduleExceptionType.DAY_OFF,
+          reason: { in: expectedReasons },
+        },
+      });
+      deletedExceptionsCount = deletedEx.count;
+    }
+
+    // 2. Remove ONLY auto-scheduled LeaveRequest rows (manual staff bookings remain untouched)
+    const deletedReqs = await tx.leaveRequest.deleteMany({
+      where: {
+        cycleId,
+        isAutoScheduled: true,
+      },
+    });
+
+    // 3. Recalculate every allocation's scheduledDays strictly from remaining manual bookings
+    const remainingManual = await tx.leaveRequest.groupBy({
+      by: ["employeeId"],
+      where: {
+        cycleId,
+        type: LeaveType.ANNUAL,
+        status: { in: [LeaveStatus.PENDING, LeaveStatus.APPROVED] },
+      },
+      _count: { _all: true },
+    });
+
+    const manualDaysByEmp = new Map<string, number>();
+    for (const row of remainingManual) {
+      manualDaysByEmp.set(row.employeeId, row._count._all * 5);
+    }
+
+    const allocations = await tx.leaveAllocation.findMany({
+      where: { cycleId },
+      select: { id: true, employeeId: true },
+    });
+
+    for (const alloc of allocations) {
+      await tx.leaveAllocation.update({
+        where: { id: alloc.id },
+        data: {
+          scheduledDays: manualDaysByEmp.get(alloc.employeeId) ?? 0,
+          autoAssigned: false,
+        },
+      });
+    }
+
+    // 4. Re-open the leave cycle
+    await tx.leaveCycle.update({
+      where: { id: cycleId },
+      data: {
+        status: LeaveCycleStatus.OPEN,
+        autoScheduledAt: null,
+      },
+    });
+
+    return {
+      deletedRequestsCount: deletedReqs.count,
+      deletedExceptionsCount,
+      updatedAllocationsCount: allocations.length,
+    };
+  });
+
+  log.info("Fair auto-scheduler reversed", {
+    cycleId,
+    year: cycle.year,
+    ...result,
+  });
+
+  return result;
 }
