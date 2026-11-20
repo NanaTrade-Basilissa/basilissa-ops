@@ -499,11 +499,6 @@ function QuestionStep({
       <fieldset className="flex flex-1 flex-col gap-5">
         <legend className="font-heading text-xl leading-snug font-bold text-balance text-foreground sm:text-2xl">
           {question.text}
-          {question.type === "TEXT" && !question.isRequired && (
-            <span className="ml-2 align-middle text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Optional
-            </span>
-          )}
         </legend>
 
         {question.type === "RATING" ? (
@@ -556,7 +551,7 @@ function QuestionStep({
                 className="min-h-36 resize-none rounded-xl bg-card text-sm leading-relaxed"
               />
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>{question.isRequired ? "Required" : "Optional — feel free to skip"}</span>
+                <span>{question.isRequired ? "Required" : ""}</span>
                 <span>
                   {textValue.length} / {MAX_TEXT_RESPONSE_LENGTH}
                 </span>
