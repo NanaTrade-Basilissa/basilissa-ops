@@ -2,7 +2,13 @@ import { escapeHtml } from "@/lib/platform/email";
 import { formatAccraDateTime } from "@/lib/platform/date";
 import { renderProtocolEmail } from "./layout";
 
-export type NotificationAnswer = { questionText: string; score: number; label: string };
+export type NotificationAnswer = {
+  questionText: string;
+  type?: "RATING" | "TEXT";
+  score: number | null;
+  label: string;
+  textResponse?: string | null;
+};
 
 export type FeedbackNotificationPayload = {
   submissionId: string;
@@ -18,8 +24,20 @@ export function buildFeedbackNotificationEmail(
   dashboardUrl: string,
 ): string {
   const rows = payload.answers
-    .map(
-      (a) => `
+    .map((a) => {
+      if (a.type === "TEXT" || a.score === null) {
+        const comment = a.textResponse?.trim();
+        return `
+        <tr>
+          <td colspan="2" style="padding:14px 0;border-bottom:1px solid #E4E4E7;font-family:'Inter',Arial,sans-serif;font-size:14px;color:#131313;vertical-align:top;line-height:1.5;">
+            <div style="font-weight:500;margin-bottom:6px;">${escapeHtml(a.questionText)}</div>
+            <div style="background:#F9FAFB;border:1px solid #E4E4E7;border-radius:6px;padding:10px 12px;font-size:13px;color:${comment ? "#27272A" : "#A1A1AA"};font-style:${comment ? "normal" : "italic"};">
+              ${comment ? escapeHtml(comment).replace(/\n/g, "<br/>") : "No comment provided"}
+            </div>
+          </td>
+        </tr>`;
+      }
+      return `
         <tr>
           <td style="padding:14px 0;border-bottom:1px solid #E4E4E7;font-family:'Inter',Arial,sans-serif;font-size:14px;color:#131313;vertical-align:top;line-height:1.5;">
             ${escapeHtml(a.questionText)}
@@ -28,8 +46,8 @@ export function buildFeedbackNotificationEmail(
             <span style="color:#71717A;margin-right:8px;font-size:13px;">${escapeHtml(a.label)}</span>
             <span style="font-weight:700;color:#131313;background:#F4F4F5;padding:3px 8px;border-radius:4px;font-size:13px;">${a.score}/5</span>
           </td>
-        </tr>`,
-    )
+        </tr>`;
+    })
     .join("");
 
   const formattedDate = formatAccraDateTime(payload.submittedAt);

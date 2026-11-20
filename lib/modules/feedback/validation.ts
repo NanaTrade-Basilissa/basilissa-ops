@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FEEDBACK_QUESTION_COUNT } from "./constants";
+import { MAX_TEXT_RESPONSE_LENGTH } from "./constants";
 
 // ---------------------------------------------------------------------------
 // Public feedback submission
@@ -11,19 +11,22 @@ export const feedbackAnswerSchema = z.object({
     .number({ invalid_type_error: "score must be a number" })
     .int("score must be a whole number")
     .min(1, "score must be between 1 and 5")
-    .max(5, "score must be between 1 and 5"),
+    .max(5, "score must be between 1 and 5")
+    .nullable()
+    .optional(),
+  textResponse: z
+    .string()
+    .trim()
+    .max(MAX_TEXT_RESPONSE_LENGTH, `Response must be under ${MAX_TEXT_RESPONSE_LENGTH} characters`)
+    .nullable()
+    .optional(),
 });
 
 export const feedbackSubmissionSchema = z
   .object({
     branchSlug: z.string().min(1, "branchSlug is required").max(200),
     submissionToken: z.string().uuid("submissionToken must be a valid UUID"),
-    answers: z
-      .array(feedbackAnswerSchema)
-      .length(
-        FEEDBACK_QUESTION_COUNT,
-        `Exactly ${FEEDBACK_QUESTION_COUNT} answers are required`,
-      ),
+    answers: z.array(feedbackAnswerSchema).min(1, "At least one answer is required"),
   })
   .refine(
     (data) => new Set(data.answers.map((a) => a.questionId)).size === data.answers.length,

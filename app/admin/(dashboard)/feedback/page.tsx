@@ -69,7 +69,7 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
       select: { id: true, name: true },
     }),
     prisma.question.findMany({
-      where: { isActive: true },
+      where: { isActive: true, type: "RATING" },
       orderBy: { order: "asc" },
       select: { id: true, text: true, order: true, ratingLabels: true },
     }),

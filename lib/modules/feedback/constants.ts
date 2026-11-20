@@ -35,6 +35,14 @@ export const FEEDBACK_QUESTIONS = [
 
 export const FEEDBACK_QUESTION_COUNT = FEEDBACK_QUESTIONS.length;
 
+/** Maximum number of active questions (rating + open-ended combined) shown on the customer form. */
+export const MAX_ACTIVE_FEEDBACK_QUESTIONS = 10;
+
+/** Character limit for open-ended customer feedback text answers. */
+export const MAX_TEXT_RESPONSE_LENGTH = 1000;
+
+export type FeedbackQuestionKind = "RATING" | "TEXT";
+
 /** sessionStorage key used to make the public feedback form idempotent. */
 export const FEEDBACK_TOKEN_STORAGE_KEY = "basilissa:feedback:submission";
 

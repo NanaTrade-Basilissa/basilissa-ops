@@ -63,7 +63,8 @@ export default async function AllFeedbackSubmissionsPage({ searchParams }: { sea
           select: {
             id: true,
             score: true,
-            question: { select: { text: true, order: true } },
+            textResponse: true,
+            question: { select: { text: true, order: true, type: true } },
           },
           orderBy: { question: { order: "asc" } },
         },

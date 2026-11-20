@@ -36,7 +36,8 @@ export async function handleFeedbackNotify(payload: unknown, job?: JobContext): 
       answers: {
         select: {
           score: true,
-          question: { select: { text: true, ratingLabels: true, order: true } },
+          textResponse: true,
+          question: { select: { text: true, type: true, ratingLabels: true, order: true } },
         },
       },
     },
@@ -59,8 +60,10 @@ export async function handleFeedbackNotify(payload: unknown, job?: JobContext): 
       .sort((a, b) => a.question.order - b.question.order)
       .map((answer) => ({
         questionText: answer.question.text,
+        type: answer.question.type,
         score: answer.score,
-        label: answer.question.ratingLabels[answer.score - 1] ?? "",
+        label: answer.score != null ? (answer.question.ratingLabels[answer.score - 1] ?? "") : "",
+        textResponse: answer.textResponse,
       })),
   }, emailOptionsForJob(job));
 

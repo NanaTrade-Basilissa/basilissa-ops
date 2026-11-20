@@ -33,7 +33,14 @@ export type RecentSubmissionRow = {
   overallScore: number;
   branchId: string;
   branchName: string;
-  answers: { questionId: string; questionOrder: number; questionText: string; score: number }[];
+  answers: {
+    questionId: string;
+    questionOrder: number;
+    questionText: string;
+    questionType: "RATING" | "TEXT";
+    score: number | null;
+    textResponse: string | null;
+  }[];
 };
 
 export type DashboardData = {
@@ -166,18 +173,20 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   let ratingDistribution: RatingBucket[];
   if (filters.questionId) {
     const answerScores = await prisma.feedbackAnswer.findMany({
-      where: { questionId: filters.questionId, submissionId: { in: submissionIds } },
+      where: { questionId: filters.questionId, submissionId: { in: submissionIds }, score: { not: null } },
       select: { score: true },
     });
-    ratingDistribution = bucketScores(answerScores.map((a) => a.score));
+    ratingDistribution = bucketScores(
+      answerScores.map((a) => a.score).filter((s): s is number => s !== null),
+    );
   } else {
     ratingDistribution = bucketScores(matchingSubmissions.map((s) => Math.round(s.overallScore)));
   }
 
-  // --- Per-question averages ------------------------------------------------
+  // --- Per-question averages (RATING questions only) ------------------------
   const questionAnswerGroups = await prisma.feedbackAnswer.groupBy({
     by: ["questionId"],
-    where: { submissionId: { in: submissionIds } },
+    where: { submissionId: { in: submissionIds }, score: { not: null } },
     _avg: { score: true },
     _count: { _all: true },
   });
@@ -185,7 +194,7 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     questionAnswerGroups.map((g) => [g.questionId, { avg: g._avg.score, count: g._count._all }]),
   );
   const questionAverages: QuestionAverageRow[] = activeQuestions
-    .filter((q) => !filters.questionId || q.id === filters.questionId)
+    .filter((q) => q.type === "RATING" && (!filters.questionId || q.id === filters.questionId))
     .map((q) => {
       const row = questionAvgById.get(q.id);
       return {
@@ -222,11 +231,17 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   let trend: TrendPoint[];
   if (filters.questionId) {
     const trendAnswers = await prisma.feedbackAnswer.findMany({
-      where: { questionId: filters.questionId, submissionId: { in: trendSubmissions.map((s) => s.id) } },
+      where: {
+        questionId: filters.questionId,
+        submissionId: { in: trendSubmissions.map((s) => s.id) },
+        score: { not: null },
+      },
       select: { score: true, submission: { select: { submittedAt: true } } },
     });
     trend = bucketTrend(
-      trendAnswers.map((a) => ({ date: a.submission.submittedAt, score: a.score })),
+      trendAnswers
+        .filter((a): a is { score: number; submission: { submittedAt: Date } } => a.score !== null)
+        .map((a) => ({ date: a.submission.submittedAt, score: a.score })),
       trendFrom,
       trendTo,
     );
@@ -249,7 +264,12 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
       overallScore: true,
       branch: { select: { id: true, name: true } },
       answers: {
-        select: { questionId: true, score: true, question: { select: { order: true, text: true } } },
+        select: {
+          questionId: true,
+          score: true,
+          textResponse: true,
+          question: { select: { order: true, text: true, type: true } },
+        },
       },
     },
   });
@@ -266,7 +286,9 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
         questionId: a.questionId,
         questionOrder: a.question.order,
         questionText: a.question.text,
+        questionType: a.question.type,
         score: a.score,
+        textResponse: a.textResponse,
       })),
   }));
 

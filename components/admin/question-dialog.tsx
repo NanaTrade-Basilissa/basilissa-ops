@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import type { QuestionFormState } from "@/lib/modules/questions/actions";
+import type { FeedbackQuestionKind } from "@/lib/modules/feedback/constants";
 import { QuestionForm } from "@/components/admin/question-form";
 import {
   Dialog,
@@ -26,7 +27,13 @@ export function QuestionDialog({
   onOpenChange: controlledOnOpenChange,
 }: {
   action: (prevState: QuestionFormState, formData: FormData) => Promise<QuestionFormState>;
-  defaultValues?: { text: string; isActive: boolean; ratingLabels?: string[] };
+  defaultValues?: {
+    text: string;
+    type?: FeedbackQuestionKind;
+    isRequired?: boolean;
+    isActive: boolean;
+    ratingLabels?: string[];
+  };
   submitLabel: string;
   activeCount: number;
   activeCap: number;

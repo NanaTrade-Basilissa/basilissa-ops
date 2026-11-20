@@ -251,8 +251,10 @@ export async function getEmailJobInspection(jobId: string): Promise<EmailJobInsp
                   .sort((a, b) => a.question.order - b.question.order)
                   .map((a) => ({
                     questionText: a.question.text,
+                    type: a.question.type,
                     score: a.score,
-                    label: a.question.ratingLabels[a.score - 1] ?? "",
+                    label: a.score != null ? (a.question.ratingLabels[a.score - 1] ?? "") : "",
+                    textResponse: a.textResponse,
                   })),
               },
               `${appUrl}/admin/feedback/${submission.id}`,

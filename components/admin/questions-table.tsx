@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, CheckCircle2, Pencil, PowerOff } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, MessageSquareText, Pencil, PowerOff, Star } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { moveQuestion, toggleQuestionActive, updateQuestion } from "@/lib/modules/questions/actions";
+import type { FeedbackQuestionKind } from "@/lib/modules/feedback/constants";
 import { QuestionDialog } from "@/components/admin/question-dialog";
 import { TableRowActions } from "@/components/admin/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,8 @@ import { Button } from "@/components/ui/button";
 export type QuestionRow = {
   id: string;
   text: string;
+  type: FeedbackQuestionKind;
+  isRequired: boolean;
   isActive: boolean;
   ratingLabels: string[];
 };
@@ -49,6 +52,8 @@ function QuestionTitleCell({
         description="Editing the text does not affect past feedback answers."
         defaultValues={{
           text: row.text,
+          type: row.type,
+          isRequired: row.isRequired,
           isActive: row.isActive,
           ratingLabels: row.ratingLabels,
         }}
@@ -99,6 +104,8 @@ function QuestionActionsCell({
               description="Editing the text does not affect past feedback answers."
               defaultValues={{
                 text: row.text,
+                type: row.type,
+                isRequired: row.isRequired,
                 isActive: row.isActive,
                 ratingLabels: row.ratingLabels,
               }}
@@ -170,6 +177,21 @@ export function QuestionsTable({
           maxActive={maxActive}
         />
       ),
+    }),
+    columnHelper.accessor("type", {
+      header: "Type",
+      cell: ({ row }) =>
+        row.original.type === "TEXT" ? (
+          <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-blue-700">
+            <MessageSquareText className="size-3" />
+            <span>Open-Ended{row.original.isRequired ? "" : " · Optional"}</span>
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-800">
+            <Star className="size-3" />
+            <span>Rating (1–5)</span>
+          </Badge>
+        ),
     }),
     columnHelper.accessor("isActive", {
       header: "Status",

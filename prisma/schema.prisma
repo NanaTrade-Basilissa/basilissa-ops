@@ -420,18 +420,26 @@ model EmployeeBranchAssignment {
   @@map("employee_branch_assignments")
 }
 
-/// One of the five fixed rating questions shown to every customer, in order.
+enum FeedbackQuestionType {
+  RATING
+  TEXT
+}
+
+/// A feedback question shown to customers, in order.
+/// Can be either a 1-5 rating question or an open-ended text question.
 model Question {
-  id        String   @id @default(cuid())
-  text      String
-  order     Int      @unique
-  isActive  Boolean  @default(true)
+  id           String               @id @default(cuid())
+  text         String
+  type         FeedbackQuestionType @default(RATING)
+  isRequired   Boolean              @default(true)
+  order        Int                  @unique
+  isActive     Boolean              @default(true)
   /// The five response labels shown for scores 1-5, in order. Defaults to
   /// the generic Very Poor..Excellent scale but is editable per question so
   /// e.g. a likelihood question can use Very Unlikely..Very Likely instead.
-  ratingLabels String[] @default(["Very Poor", "Poor", "Average", "Good", "Excellent"])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  ratingLabels String[]             @default(["Very Poor", "Poor", "Average", "Good", "Excellent"])
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
   answers FeedbackAnswer[]
 
@@ -448,8 +456,8 @@ model FeedbackSubmission {
   /// refresh) a no-op instead of a duplicate row.
   submissionToken String   @unique
   branchId        String
-  /// Average of the five answer scores (1-5), kept denormalized for fast
-  /// dashboard aggregation.
+  /// Average of the rating answer scores (1-5), kept denormalized for fast
+  /// dashboard aggregation. Open-ended text answers do not affect this score.
   overallScore    Float
   submittedAt     DateTime @default(now())
   createdAt       DateTime @default(now())
@@ -464,12 +472,15 @@ model FeedbackSubmission {
   @@map("feedback_submissions")
 }
 
-/// A single question's answer within a submission. Score is an integer 1-5.
+/// A single question's answer within a submission.
+/// For RATING questions, score is an integer 1-5 and textResponse is null.
+/// For TEXT questions, score is null and textResponse holds the written reply.
 model FeedbackAnswer {
   id           String   @id @default(cuid())
   submissionId String
   questionId   String
-  score        Int
+  score        Int?
+  textResponse String?
   createdAt    DateTime @default(now())
 
   submission FeedbackSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)

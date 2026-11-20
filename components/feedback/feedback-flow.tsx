@@ -1,18 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, ChevronLeft, Loader2, MapPin, Store } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, MapPin, Send, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Logo } from "@/components/brand/logo";
-import { FEEDBACK_TOKEN_STORAGE_KEY } from "@/lib/modules/feedback/constants";
+import {
+  FEEDBACK_TOKEN_STORAGE_KEY,
+  MAX_TEXT_RESPONSE_LENGTH,
+  type FeedbackQuestionKind,
+} from "@/lib/modules/feedback/constants";
 import { cn } from "@/lib/utils";
 
 type BranchOption = { id: string; name: string; slug: string; location: string };
-type QuestionItem = { id: string; text: string; order: number; ratingLabels: string[] };
+type QuestionItem = {
+  id: string;
+  text: string;
+  type: FeedbackQuestionKind;
+  isRequired: boolean;
+  order: number;
+  ratingLabels: string[];
+};
+
+type AnswerDraft = { score?: number; textResponse?: string };
 
 type Step = "welcome" | "branch" | "question" | "submitting" | "thank-you" | "submit-error";
 
@@ -70,7 +84,7 @@ export function FeedbackFlow({
   const [step, setStep] = useState<Step>("welcome");
   const [selectedBranch, setSelectedBranch] = useState<BranchOption | null>(preselectedBranch);
   const [questionIndex, setQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [answers, setAnswers] = useState<Record<string, AnswerDraft>>({});
   const [token, setToken] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -125,7 +139,7 @@ export function FeedbackFlow({
     setStep("question");
   }
 
-  async function submit(finalAnswers: Record<string, number>) {
+  async function submit(finalAnswers: Record<string, AnswerDraft>) {
     if (!selectedBranch || !token) return;
     setStep("submitting");
     setErrorMessage(null);
@@ -137,7 +151,11 @@ export function FeedbackFlow({
         body: JSON.stringify({
           branchSlug: selectedBranch.slug,
           submissionToken: token,
-          answers: questions.map((q) => ({ questionId: q.id, score: finalAnswers[q.id] })),
+          answers: questions.map((q) =>
+            q.type === "RATING"
+              ? { questionId: q.id, score: finalAnswers[q.id]?.score ?? null }
+              : { questionId: q.id, textResponse: finalAnswers[q.id]?.textResponse?.trim() || null },
+          ),
         }),
       });
 
@@ -162,9 +180,9 @@ export function FeedbackFlow({
     }
   }
 
-  function handleAnswer(score: number) {
+  function handleRatingAnswer(score: number) {
     if (!currentQuestion) return;
-    const next = { ...answers, [currentQuestion.id]: score };
+    const next: Record<string, AnswerDraft> = { ...answers, [currentQuestion.id]: { score } };
     setAnswers(next);
 
     const isLastQuestion = questionIndex === totalQuestions - 1;
@@ -175,6 +193,29 @@ export function FeedbackFlow({
 
     // Small delay so the selected state is visible before advancing.
     window.setTimeout(() => setQuestionIndex((i) => i + 1), 220);
+  }
+
+  function handleTextChange(text: string) {
+    if (!currentQuestion) return;
+    setAnswers((prev) => ({
+      ...prev,
+      [currentQuestion.id]: { textResponse: text },
+    }));
+  }
+
+  function handleTextContinue(skip = false) {
+    if (!currentQuestion) return;
+    const next: Record<string, AnswerDraft> = skip
+      ? { ...answers, [currentQuestion.id]: { textResponse: "" } }
+      : answers;
+    if (skip) setAnswers(next);
+
+    const isLastQuestion = questionIndex === totalQuestions - 1;
+    if (isLastQuestion) {
+      void submit(next);
+      return;
+    }
+    setQuestionIndex((i) => i + 1);
   }
 
   function handleBack() {
@@ -214,6 +255,7 @@ export function FeedbackFlow({
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 py-6 sm:py-10">
         {step === "welcome" && (
           <WelcomeStep
+            totalQuestions={totalQuestions}
             selectedBranch={selectedBranch}
             requestedBranchInactive={requestedBranchInactive}
             onStart={handleStart}
@@ -232,8 +274,11 @@ export function FeedbackFlow({
             questionIndex={questionIndex}
             totalQuestions={totalQuestions}
             question={currentQuestion}
-            selectedScore={answers[currentQuestion.id]}
-            onAnswer={handleAnswer}
+            selectedScore={answers[currentQuestion.id]?.score}
+            textValue={answers[currentQuestion.id]?.textResponse ?? ""}
+            onRatingAnswer={handleRatingAnswer}
+            onTextChange={handleTextChange}
+            onTextContinue={handleTextContinue}
             onBack={handleBack}
           />
         )}
@@ -273,11 +318,13 @@ function FullScreenState({ children }: { children: React.ReactNode }) {
 }
 
 function WelcomeStep({
+  totalQuestions,
   selectedBranch,
   requestedBranchInactive,
   onStart,
   onChangeBranch,
 }: {
+  totalQuestions: number;
   selectedBranch: BranchOption | null;
   requestedBranchInactive: boolean;
   onStart: () => void;
@@ -293,7 +340,7 @@ function WelcomeStep({
           How was your visit to Basilissa?
         </h1>
         <p className="mx-auto max-w-xs text-sm text-muted-foreground">
-          Five quick questions. Takes less than a minute, and helps us serve you better next time.
+          {totalQuestions} quick {totalQuestions === 1 ? "question" : "questions"}. Takes less than a minute, and helps us serve you better next time.
         </p>
       </div>
 
@@ -403,7 +450,10 @@ function QuestionStep({
   totalQuestions,
   question,
   selectedScore,
-  onAnswer,
+  textValue,
+  onRatingAnswer,
+  onTextChange,
+  onTextContinue,
   onBack,
 }: {
   branchName: string;
@@ -412,9 +462,16 @@ function QuestionStep({
   totalQuestions: number;
   question: QuestionItem;
   selectedScore: number | undefined;
-  onAnswer: (score: number) => void;
+  textValue: string;
+  onRatingAnswer: (score: number) => void;
+  onTextChange: (value: string) => void;
+  onTextContinue: (skip?: boolean) => void;
   onBack: () => void;
 }) {
+  const isLastQuestion = questionIndex === totalQuestions - 1;
+  const trimmedLength = textValue.trim().length;
+  const canContinueText = !question.isRequired || trimmedLength > 0;
+
   return (
     <div className="flex flex-1 flex-col gap-6">
       <div className="space-y-3">
@@ -442,45 +499,105 @@ function QuestionStep({
       <fieldset className="flex flex-1 flex-col gap-5">
         <legend className="font-heading text-xl leading-snug font-bold text-balance text-foreground sm:text-2xl">
           {question.text}
+          {question.type === "TEXT" && !question.isRequired && (
+            <span className="ml-2 align-middle text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Optional
+            </span>
+          )}
         </legend>
 
-        <div className="flex flex-col gap-2.5">
-          {question.ratingLabels.map((label, i) => {
-            const value = i + 1;
-            const checked = selectedScore === value;
-            return (
-              <label
-                key={value}
-                className={cn(
-                  "flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3.5 shadow-xs transition-colors",
-                  checked
-                    ? "border-primary bg-primary/10"
-                    : "border-border bg-card hover:border-primary/40 hover:bg-primary/5",
-                )}
-              >
-                <input
-                  type="radio"
-                  name={`question-${question.id}`}
-                  value={value}
-                  checked={checked}
-                  onChange={() => onAnswer(value)}
-                  className="sr-only"
-                />
-                <span
+        {question.type === "RATING" ? (
+          <div className="flex flex-col gap-2.5">
+            {question.ratingLabels.map((label, i) => {
+              const value = i + 1;
+              const checked = selectedScore === value;
+              return (
+                <label
+                  key={value}
                   className={cn(
-                    "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold",
-                    checked ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                    "flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3.5 shadow-xs transition-colors",
+                    checked
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-card hover:border-primary/40 hover:bg-primary/5",
                   )}
-                  aria-hidden
                 >
-                  {value}
+                  <input
+                    type="radio"
+                    name={`question-${question.id}`}
+                    value={value}
+                    checked={checked}
+                    onChange={() => onRatingAnswer(value)}
+                    className="sr-only"
+                  />
+                  <span
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+                      checked ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                    )}
+                    aria-hidden
+                  >
+                    {value}
+                  </span>
+                  <span className="text-sm font-medium text-foreground">{label}</span>
+                  {checked && <CheckCircle2 className="ml-auto size-5 text-foreground" />}
+                </label>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col gap-4">
+            <div className="space-y-1.5">
+              <Textarea
+                value={textValue}
+                onChange={(e) => onTextChange(e.target.value)}
+                maxLength={MAX_TEXT_RESPONSE_LENGTH}
+                placeholder="Share your thoughts here…"
+                rows={5}
+                className="min-h-36 resize-none rounded-xl bg-card text-sm leading-relaxed"
+              />
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{question.isRequired ? "Required" : "Optional — feel free to skip"}</span>
+                <span>
+                  {textValue.length} / {MAX_TEXT_RESPONSE_LENGTH}
                 </span>
-                <span className="text-sm font-medium text-foreground">{label}</span>
-                {checked && <CheckCircle2 className="ml-auto size-5 text-foreground" />}
-              </label>
-            );
-          })}
-        </div>
+              </div>
+            </div>
+
+            <div className="mt-auto flex flex-col gap-2 pt-2">
+              <Button
+                type="button"
+                size="lg"
+                className="h-12 w-full text-base gap-2"
+                disabled={!canContinueText}
+                onClick={() => onTextContinue(false)}
+              >
+                {isLastQuestion ? (
+                  <>
+                    <Send className="size-4" />
+                    <span>Submit feedback</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Continue</span>
+                    <ChevronRight className="size-4" />
+                  </>
+                )}
+              </Button>
+
+              {!question.isRequired && trimmedLength === 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => onTextContinue(true)}
+                >
+                  {isLastQuestion ? "Skip & submit feedback" : "Skip this question"}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </fieldset>
     </div>
   );

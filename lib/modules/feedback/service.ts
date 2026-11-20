@@ -59,24 +59,64 @@ export async function submitFeedback(
   const activeQuestions = await prisma.question.findMany({
     where: { isActive: true },
     orderBy: { order: "asc" },
-    select: { id: true, text: true, ratingLabels: true },
+    select: { id: true, text: true, type: true, isRequired: true, ratingLabels: true },
   });
 
-  const activeQuestionIds = new Set(activeQuestions.map((q) => q.id));
-  const submittedQuestionIds = new Set(answers.map((a) => a.questionId));
-  const questionSetMatches =
-    activeQuestionIds.size === submittedQuestionIds.size &&
-    [...activeQuestionIds].every((id) => submittedQuestionIds.has(id));
+  const activeById = new Map(activeQuestions.map((q) => [q.id, q]));
+  const answerByQuestionId = new Map(answers.map((a) => [a.questionId, a]));
 
-  if (!questionSetMatches) {
-    return {
-      ok: false,
-      reason: "QUESTION_SET_CHANGED",
-      message: "The feedback questions have changed. Please reload and try again.",
-    };
+  // Every submitted answer must belong to a currently active question.
+  for (const submitted of answers) {
+    if (!activeById.has(submitted.questionId)) {
+      return {
+        ok: false,
+        reason: "QUESTION_SET_CHANGED",
+        message: "The feedback questions have changed. Please reload and try again.",
+      };
+    }
   }
 
-  const overallScore = answers.reduce((sum, a) => sum + a.score, 0) / answers.length;
+  // Validate each active question according to its type.
+  const normalizedAnswers: { questionId: string; score: number | null; textResponse: string | null }[] = [];
+  for (const question of activeQuestions) {
+    const submitted = answerByQuestionId.get(question.id);
+    if (question.type === "RATING") {
+      if (!submitted || typeof submitted.score !== "number" || submitted.score < 1 || submitted.score > 5) {
+        return {
+          ok: false,
+          reason: "QUESTION_SET_CHANGED",
+          message: "The feedback questions have changed. Please reload and try again.",
+        };
+      }
+      normalizedAnswers.push({
+        questionId: question.id,
+        score: submitted.score,
+        textResponse: null,
+      });
+    } else {
+      const trimmedText = submitted?.textResponse?.trim() || "";
+      if (question.isRequired && trimmedText.length === 0) {
+        return {
+          ok: false,
+          reason: "QUESTION_SET_CHANGED",
+          message: "Please complete all required questions and try again.",
+        };
+      }
+      normalizedAnswers.push({
+        questionId: question.id,
+        score: null,
+        textResponse: trimmedText.length > 0 ? trimmedText : null,
+      });
+    }
+  }
+
+  // Compute overallScore strictly from RATING answers so open-ended questions
+  // never skew branch or question ratings.
+  const scoredAnswers = normalizedAnswers.filter((a): a is { questionId: string; score: number; textResponse: null } => a.score !== null);
+  const overallScore =
+    scoredAnswers.length > 0
+      ? scoredAnswers.reduce((sum, a) => sum + a.score, 0) / scoredAnswers.length
+      : 0;
 
   const submission = await prisma.$transaction(async (tx) => {
     const created = await tx.feedbackSubmission.create({
@@ -84,10 +124,11 @@ export async function submitFeedback(
     });
 
     await tx.feedbackAnswer.createMany({
-      data: answers.map((a) => ({
+      data: normalizedAnswers.map((a) => ({
         submissionId: created.id,
         questionId: a.questionId,
         score: a.score,
+        textResponse: a.textResponse,
       })),
     });
 
@@ -110,7 +151,14 @@ export async function submitFeedback(
 
 export type PublicFeedbackForm = {
   branches: { id: string; name: string; slug: string; location: string }[];
-  questions: { id: string; text: string; order: number; ratingLabels: string[] }[];
+  questions: {
+    id: string;
+    text: string;
+    type: "RATING" | "TEXT";
+    isRequired: boolean;
+    order: number;
+    ratingLabels: string[];
+  }[];
   preselectedBranch: { id: string; name: string; slug: string; location: string } | null;
   requestedBranchInactive: boolean;
 };
@@ -134,7 +182,7 @@ export async function getPublicFeedbackForm(
     prisma.question.findMany({
       where: { isActive: true },
       orderBy: { order: "asc" },
-      select: { id: true, text: true, order: true, ratingLabels: true },
+      select: { id: true, text: true, type: true, isRequired: true, order: true, ratingLabels: true },
     }),
   ]);
 

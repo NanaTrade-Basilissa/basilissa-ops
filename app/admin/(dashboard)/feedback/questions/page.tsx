@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Plus } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
 import { createQuestion } from "@/lib/modules/questions/actions";
-import { FEEDBACK_QUESTION_COUNT } from "@/lib/modules/feedback/constants";
+import { MAX_ACTIVE_FEEDBACK_QUESTIONS } from "@/lib/modules/feedback/constants";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { QuestionDialog } from "@/components/admin/question-dialog";
@@ -25,15 +25,15 @@ export default async function FeedbackQuestionsPage({ searchParams }: { searchPa
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">
-          {activeCount} / {FEEDBACK_QUESTION_COUNT} active
+          {activeCount} / {MAX_ACTIVE_FEEDBACK_QUESTIONS} active
         </p>
         <QuestionDialog
           action={createQuestion}
           submitLabel="Create question"
           title="Create a question"
-          description="New questions are added to the end of the order."
+          description="Add a 1–5 rating question or an open-ended text question."
           activeCount={activeCount}
-          activeCap={FEEDBACK_QUESTION_COUNT}
+          activeCap={MAX_ACTIVE_FEEDBACK_QUESTIONS}
           trigger={
             <Button>
               <Plus className="size-4" />
@@ -49,7 +49,7 @@ export default async function FeedbackQuestionsPage({ searchParams }: { searchPa
         </Alert>
       )}
 
-      <QuestionsTable questions={questions} activeCount={activeCount} maxActive={FEEDBACK_QUESTION_COUNT} />
+      <QuestionsTable questions={questions} activeCount={activeCount} maxActive={MAX_ACTIVE_FEEDBACK_QUESTIONS} />
     </div>
   );
 }

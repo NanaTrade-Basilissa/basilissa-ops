@@ -6,22 +6,29 @@ import { prisma } from "@/lib/platform/prisma";
 import { requirePermission, auditActorFrom } from "@/lib/modules/identity/server";
 import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
 import { questionInputSchema } from "./validation";
-import { FEEDBACK_QUESTION_COUNT } from "@/lib/modules/feedback/constants";
+import { MAX_ACTIVE_FEEDBACK_QUESTIONS } from "@/lib/modules/feedback/constants";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 
 export type QuestionFormState = FormState;
 
 /** Fields worth diffing. Order is audited separately, by moveQuestion. */
-const AUDITED_FIELDS = ["text", "isActive", "ratingLabels", "order"] as const;
+const AUDITED_FIELDS = ["text", "type", "isRequired", "isActive", "ratingLabels", "order"] as const;
 
-const ACTIVE_CAP = FEEDBACK_QUESTION_COUNT;
-const CAP_MESSAGE = `Only ${ACTIVE_CAP} questions can be active at a time - the customer form always shows exactly ${ACTIVE_CAP}. Deactivate another question first.`;
+const ACTIVE_CAP = MAX_ACTIVE_FEEDBACK_QUESTIONS;
+const CAP_MESSAGE = `Only ${ACTIVE_CAP} questions can be active at a time. Deactivate another question first.`;
 
 function parseQuestionForm(formData: FormData) {
+  const rawType = formData.get("type");
+  const type = rawType === "TEXT" ? "TEXT" : "RATING";
   return questionInputSchema.safeParse({
     text: formData.get("text"),
+    type,
+    isRequired: type === "RATING" ? true : formData.get("isRequired") === "on",
     isActive: formData.get("isActive") === "on",
-    ratingLabels: [1, 2, 3, 4, 5].map((score) => formData.get(`ratingLabel${score}`)),
+    ratingLabels:
+      type === "RATING"
+        ? [1, 2, 3, 4, 5].map((score) => String(formData.get(`ratingLabel${score}`) ?? ""))
+        : undefined,
   });
 }
 
@@ -53,6 +60,8 @@ export async function createQuestion(
     const question = await tx.question.create({
       data: {
         text: parsed.data.text,
+        type: parsed.data.type,
+        isRequired: parsed.data.isRequired,
         isActive: parsed.data.isActive,
         ratingLabels: parsed.data.ratingLabels,
         order: nextOrder,
@@ -94,7 +103,13 @@ export async function updateQuestion(
     const before = await tx.question.findUniqueOrThrow({ where: { id: questionId } });
     const after = await tx.question.update({
       where: { id: questionId },
-      data: { text: parsed.data.text, isActive: parsed.data.isActive, ratingLabels: parsed.data.ratingLabels },
+      data: {
+        text: parsed.data.text,
+        type: parsed.data.type,
+        isRequired: parsed.data.isRequired,
+        isActive: parsed.data.isActive,
+        ratingLabels: parsed.data.ratingLabels,
+      },
     });
     await recordAudit(
       {

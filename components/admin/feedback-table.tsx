@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { MessageSquareText } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { Badge, ratingBadgeVariant } from "@/components/ui/badge";
@@ -21,8 +22,9 @@ export type FeedbackRow = {
   branch: { id: string; name: string };
   answers?: {
     id: string;
-    score: number;
-    question: { text: string; order: number };
+    score: number | null;
+    textResponse?: string | null;
+    question: { text: string; order: number; type?: "RATING" | "TEXT" };
   }[];
 };
 
@@ -40,14 +42,32 @@ const columns = columnHelper.columns([
   columnHelper.display({
     id: "branch",
     header: "Branch",
-    cell: ({ row }) => (
-      <Link
-        href={`/admin/branches/${row.original.branch.id}`}
-        className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
-      >
-        {row.original.branch.name}
-      </Link>
-    ),
+    cell: ({ row }) => {
+      const hasComment = row.original.answers?.some(
+        (a) => a.textResponse && a.textResponse.trim().length > 0,
+      );
+      return (
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/admin/branches/${row.original.branch.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="font-medium text-foreground underline-offset-4 hover:underline cursor-pointer text-left"
+          >
+            {row.original.branch.name}
+          </Link>
+          {hasComment && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-blue-200 bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0"
+              title="Includes written comment"
+            >
+              <MessageSquareText className="size-2.5" />
+              <span>Note</span>
+            </Badge>
+          )}
+        </div>
+      );
+    },
   }),
   columnHelper.accessor("overallScore", {
     header: () => <div className="text-right">Overall</div>,
@@ -98,17 +118,33 @@ export function FeedbackTable({ submissions }: { submissions: FeedbackRow[] }) {
                   </h4>
                   {selectedSubmission.answers && selectedSubmission.answers.length > 0 ? (
                     <div className="divide-y divide-border rounded-lg border bg-card">
-                      {selectedSubmission.answers.map((a) => (
-                        <div key={a.id} className="p-3 flex items-start justify-between gap-3">
-                          <div className="space-y-0.5">
-                            <span className="text-xs font-mono text-muted-foreground">Q{a.question.order}</span>
-                            <p className="text-xs font-medium text-foreground">{a.question.text}</p>
+                      {selectedSubmission.answers.map((a) => {
+                        const isText = a.question.type === "TEXT" || a.score === null;
+                        return (
+                          <div key={a.id} className="p-3 space-y-1.5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="space-y-0.5">
+                                <span className="text-xs font-mono text-muted-foreground">Q{a.question.order}</span>
+                                <p className="text-xs font-medium text-foreground">{a.question.text}</p>
+                              </div>
+                              {!isText && a.score !== null && (
+                                <Badge variant={ratingBadgeVariant(a.score)} className="shrink-0 font-mono">
+                                  {a.score} / 5
+                                </Badge>
+                              )}
+                            </div>
+                            {isText && (
+                              <div className="rounded-md border border-border/70 bg-muted/40 p-2.5 text-xs text-foreground whitespace-pre-wrap">
+                                {a.textResponse && a.textResponse.trim().length > 0 ? (
+                                  a.textResponse
+                                ) : (
+                                  <span className="italic text-muted-foreground">No response provided</span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <Badge variant={ratingBadgeVariant(a.score)} className="shrink-0 font-mono">
-                            {a.score} / 5
-                          </Badge>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground italic">No detailed question responses available.</p>
