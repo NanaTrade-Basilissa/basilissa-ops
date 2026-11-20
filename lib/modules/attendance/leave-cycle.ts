@@ -25,6 +25,20 @@ export const ROLE_CATEGORIES = {
 export type JobRoleCategory = (typeof ROLE_CATEGORIES)[keyof typeof ROLE_CATEGORIES];
 
 /**
+ * Canonical case-insensitive key for matching employees with the same Odoo job title
+ * (e.g. "Cook", "Frontliner", "Branch Supervisor", "Chef").
+ */
+export function normalizeJobTitleKey(jobTitle?: string | null): string {
+  const cleaned = (jobTitle ?? "").trim().replace(/\s+/g, " ");
+  return cleaned ? cleaned.toLowerCase() : "unassigned";
+}
+
+export function resolveJobTitleLabel(jobTitle?: string | null): string {
+  const cleaned = (jobTitle ?? "").trim().replace(/\s+/g, " ");
+  return cleaned || "Staff";
+}
+
+/**
  * Standardizes raw job titles into critical restaurant operational role categories.
  */
 export function normalizeJobCategory(jobTitle?: string | null): JobRoleCategory {
@@ -338,7 +352,7 @@ export async function getCycleWeeksForEmployee(
     id: string;
     fullName: string;
     jobTitle: string | null;
-    department?: DepartmentKey;
+    department?: string;
     departmentLabel?: string;
     jobCategory: JobRoleCategory | string;
     branchId: string | null;
@@ -374,8 +388,9 @@ export async function getCycleWeeksForEmployee(
 
   const primaryBranch = employee.branchAssignments[0]?.branch || null;
   const branchId = primaryBranch?.id || null;
+  const jobTitleKey = normalizeJobTitleKey(employee.jobTitle);
+  const jobTitleLabel = resolveJobTitleLabel(employee.jobTitle);
   const dept = resolveEmployeeDepartment(employee);
-  const deptLabel = DEPARTMENT_LABELS[dept] || dept;
   const legacyJobCategory = normalizeJobCategory(employee.jobTitle);
 
   // Allocation
@@ -431,27 +446,16 @@ export async function getCycleWeeksForEmployee(
       .catch((err) => console.error("Failed to sync allocation probation date:", err));
   }
 
-  // Quota for this branch and department (with fallback to legacy category key)
+  // Quota for this branch and job title (case-insensitive match on jobCategory)
   let maxConcurrent = 1;
   if (branchId) {
-    const quota =
-      (await prisma.branchLeaveQuota.findUnique({
-        where: {
-          branchId_jobCategory: {
-            branchId,
-            jobCategory: dept,
-          },
-        },
-      })) ??
-      (await prisma.branchLeaveQuota.findUnique({
-        where: {
-          branchId_jobCategory: {
-            branchId,
-            jobCategory: legacyJobCategory,
-          },
-        },
-      }));
-    if (quota) maxConcurrent = quota.maxConcurrent;
+    const branchQuotas = await prisma.branchLeaveQuota.findMany({
+      where: { branchId },
+    });
+    const matchedQuota = branchQuotas.find(
+      (q) => normalizeJobTitleKey(q.jobCategory) === jobTitleKey
+    );
+    if (matchedQuota) maxConcurrent = matchedQuota.maxConcurrent;
   }
 
   // Fetch all approved/pending leaves for this cycle & branch
@@ -527,13 +531,13 @@ export async function getCycleWeeksForEmployee(
       continue;
     }
 
-    // 4. Department Anti-Collision Check
-    // Count how many colleagues in the SAME department at this branch already booked this week
+    // 4. Job Title Anti-Collision Check
+    // Count how many colleagues with the SAME job title at this branch already booked this week
     const roleColleaguesLeaves = branchLeaves.filter(
       (l) =>
         l.isoWeek === isoWeek &&
         l.employeeId !== employeeId &&
-        resolveEmployeeDepartment(l.employee) === dept
+        normalizeJobTitleKey(l.employee.jobTitle) === jobTitleKey
     );
 
     if (roleColleaguesLeaves.length >= maxConcurrent) {
@@ -544,7 +548,7 @@ export async function getCycleWeeksForEmployee(
         endDateStr,
         weekNumber,
         status: "COLLISION_LOCKED",
-        statusLabel: `Staffing limit reached for ${deptLabel} (${colleague.firstName} ${colleague.lastName.charAt(0)}.)`,
+        statusLabel: `Staffing limit reached for ${jobTitleLabel} (${colleague.firstName} ${colleague.lastName.charAt(0)}.)`,
         isClickable: false,
         bookedByName: `${colleague.firstName} ${colleague.lastName}`,
       });
@@ -616,8 +620,8 @@ export async function getCycleWeeksForEmployee(
       id: employee.id,
       fullName: `${employee.firstName} ${employee.lastName}`.trim(),
       jobTitle: employee.jobTitle,
-      department: dept,
-      departmentLabel: deptLabel,
+      department: employee.department ?? dept,
+      departmentLabel: jobTitleLabel,
       jobCategory: legacyJobCategory,
       branchId,
       branchName: primaryBranch?.name || null,
@@ -685,33 +689,21 @@ export async function bookWeeklyAnnualLeave(input: {
   const branchId = employee.branchAssignments[0]?.branchId;
   if (!branchId) throw new Error("Employee is not assigned to a primary branch.");
 
-  const dept = resolveEmployeeDepartment(employee);
-  const deptLabel = DEPARTMENT_LABELS[dept] || dept;
-  const legacyJobCategory = normalizeJobCategory(employee.jobTitle);
+  const jobTitleKey = normalizeJobTitleKey(employee.jobTitle);
+  const jobTitleLabel = resolveJobTitleLabel(employee.jobTitle);
 
-  // Check Quota / Anti-Collision within a transaction
+  // Check Quota / Anti-Collision within a transaction (by Job Title at this branch)
   return await prisma.$transaction(async (tx) => {
-    // 1. Quota (checks department first, then legacy category fallback)
-    const quotaRecord =
-      (await tx.branchLeaveQuota.findUnique({
-        where: {
-          branchId_jobCategory: {
-            branchId,
-            jobCategory: dept,
-          },
-        },
-      })) ??
-      (await tx.branchLeaveQuota.findUnique({
-        where: {
-          branchId_jobCategory: {
-            branchId,
-            jobCategory: legacyJobCategory,
-          },
-        },
-      }));
+    // 1. Quota for this branch & job title
+    const branchQuotas = await tx.branchLeaveQuota.findMany({
+      where: { branchId },
+    });
+    const quotaRecord = branchQuotas.find(
+      (q) => normalizeJobTitleKey(q.jobCategory) === jobTitleKey
+    );
     const maxConcurrent = quotaRecord?.maxConcurrent ?? 1;
 
-    // 2. Count active leaves in same department & branch & week
+    // 2. Count active leaves with same job title at this branch & week
     const existingRoleLeaves = await tx.leaveRequest.findMany({
       where: {
         branchId,
@@ -724,13 +716,13 @@ export async function bookWeeklyAnnualLeave(input: {
     });
 
     const roleLeaves = existingRoleLeaves.filter(
-      (l) => resolveEmployeeDepartment(l.employee) === dept
+      (l) => normalizeJobTitleKey(l.employee.jobTitle) === jobTitleKey
     );
 
     if (roleLeaves.length >= maxConcurrent) {
       const colleague = roleLeaves[0].employee;
       throw new Error(
-        `Week ${isoWeek} has reached the maximum leave limit for ${deptLabel} staff at your branch (${colleague.firstName} ${colleague.lastName}).`
+        `Week ${isoWeek} has reached the maximum leave limit for ${jobTitleLabel} staff at your branch (${colleague.firstName} ${colleague.lastName}).`
       );
     }
 
@@ -930,22 +922,21 @@ export async function runFairAutoScheduler(cycleId: string, dryRun = false) {
     },
   });
 
-  // Track branch-department-week concurrency in-memory: key = `${branchId}:${department}:${isoWeek}`
+  // Track branch-jobTitle-week concurrency in-memory: key = `${branchId}:${jobTitleKey}:${isoWeek}`
   const branchRoleWeekOccupancy = new Map<string, number>();
   for (const l of existingLeaves) {
     if (l.branchId && l.isoWeek) {
-      const dept = resolveEmployeeDepartment(l.employee);
-      const key = `${l.branchId}:${dept}:${l.isoWeek}`;
+      const jtKey = normalizeJobTitleKey(l.employee.jobTitle);
+      const key = `${l.branchId}:${jtKey}:${l.isoWeek}`;
       branchRoleWeekOccupancy.set(key, (branchRoleWeekOccupancy.get(key) || 0) + 1);
     }
   }
 
-  // Pre-load branch quotas supporting both department keys and legacy categories
+  // Pre-load branch quotas keyed by normalized job title
   const quotas = await prisma.branchLeaveQuota.findMany();
   const quotaMap = new Map<string, number>();
   for (const q of quotas) {
-    quotaMap.set(`${q.branchId}:${q.jobCategory}`, q.maxConcurrent);
-    quotaMap.set(`${q.branchId}:${normalizeDepartmentKey(q.jobCategory)}`, q.maxConcurrent);
+    quotaMap.set(`${q.branchId}:${normalizeJobTitleKey(q.jobCategory)}`, q.maxConcurrent);
   }
 
   const assignedSummary: {
@@ -962,12 +953,9 @@ export async function runFairAutoScheduler(cycleId: string, dryRun = false) {
     const branch = emp.branchAssignments[0]?.branch;
     if (!branch) continue;
 
-    const dept = resolveEmployeeDepartment(emp);
-    const legacyCategory = normalizeJobCategory(emp.jobTitle);
-    const maxConcurrent =
-      quotaMap.get(`${branch.id}:${dept}`) ??
-      quotaMap.get(`${branch.id}:${legacyCategory}`) ??
-      1;
+    const jtKey = normalizeJobTitleKey(emp.jobTitle);
+    const jtLabel = resolveJobTitleLabel(emp.jobTitle);
+    const maxConcurrent = quotaMap.get(`${branch.id}:${jtKey}`) ?? 1;
 
     const remainingDays = 15 - alloc.scheduledDays;
     const neededWeeks = Math.ceil(remainingDays / 5);
@@ -993,8 +981,8 @@ export async function runFairAutoScheduler(cycleId: string, dryRun = false) {
           continue;
         }
 
-        // Concurrency check
-        const occKey = `${branch.id}:${dept}:${candidateWeek}`;
+        // Concurrency check (same job title at same branch)
+        const occKey = `${branch.id}:${jtKey}:${candidateWeek}`;
         const currentOcc = branchRoleWeekOccupancy.get(occKey) || 0;
 
         if (currentOcc < maxConcurrent) {
@@ -1081,8 +1069,8 @@ export async function runFairAutoScheduler(cycleId: string, dryRun = false) {
       employeeId: emp.id,
       employeeName: `${emp.firstName} ${emp.lastName}`.trim(),
       branchName: branch.name,
-      department: dept,
-      jobCategory: legacyCategory,
+      department: emp.department ?? "",
+      jobCategory: jtLabel,
       weeksAssigned: assignedWeeksForEmp,
     });
   }

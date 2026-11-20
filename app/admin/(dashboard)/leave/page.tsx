@@ -122,7 +122,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
     unscheduledCount,
   };
 
-  // Load all branches and their quotas
+  // Load all branches, their quotas, and the active job titles present at each branch
   const branches = await prisma.branch.findMany({
     where: { isActive: true },
     select: {
@@ -131,6 +131,15 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
       leaveQuotas: {
         select: { jobCategory: true, maxConcurrent: true },
       },
+      employees: {
+        where: {
+          validTo: null,
+          employee: { status: "ACTIVE" },
+        },
+        select: {
+          employee: { select: { id: true, jobTitle: true } },
+        },
+      },
     },
     orderBy: { name: "asc" },
   });
@@ -138,12 +147,35 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
   const branchQuotaData = branches.map((b) => {
     const quotaMap: Record<string, number> = {};
     for (const q of b.leaveQuotas) {
-      quotaMap[q.jobCategory] = q.maxConcurrent;
+      quotaMap[q.jobCategory.trim().toLowerCase()] = q.maxConcurrent;
     }
+
+    // Count active staff per distinct job title at this branch
+    const jobTitleCounts = new Map<string, { name: string; staffCount: number }>();
+    const seenEmployees = new Set<string>();
+    for (const a of b.employees) {
+      if (seenEmployees.has(a.employee.id)) continue;
+      seenEmployees.add(a.employee.id);
+      const rawTitle = (a.employee.jobTitle ?? "").trim().replace(/\s+/g, " ");
+      if (!rawTitle) continue;
+      const key = rawTitle.toLowerCase();
+      const existing = jobTitleCounts.get(key);
+      if (existing) {
+        existing.staffCount += 1;
+      } else {
+        jobTitleCounts.set(key, { name: rawTitle, staffCount: 1 });
+      }
+    }
+
+    const jobTitles = Array.from(jobTitleCounts.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+
     return {
       id: b.id,
       name: b.name,
       quotas: quotaMap,
+      jobTitles,
     };
   });
 

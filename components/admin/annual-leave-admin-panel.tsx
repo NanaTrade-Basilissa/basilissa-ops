@@ -93,13 +93,6 @@ function buildYearWeeksByMonth(year: number): { monthIndex: number; monthName: s
   }));
 }
 
-const STAFFING_DEPARTMENTS = [
-  { key: "KITCHEN", label: "Kitchen", fallback: "COOK" },
-  { key: "SERVICE", label: "Service", fallback: "FRONT_OF_HOUSE" },
-  { key: "SANITATION", label: "Sanitation", fallback: "CLEANER" },
-  { key: "MANAGEMENT", label: "Management", fallback: "SUPERVISOR" },
-] as const;
-
 interface AnnualLeaveAdminPanelProps {
   currentCycle: {
     id: string;
@@ -120,6 +113,7 @@ interface AnnualLeaveAdminPanelProps {
     id: string;
     name: string;
     quotas: Record<string, number>;
+    jobTitles: { name: string; staffCount: number }[];
   }[];
   canManage: boolean;
 }
@@ -146,13 +140,14 @@ export function AnnualLeaveAdminPanel({
   const monthsWithWeeks = useMemo(() => buildYearWeeksByMonth(cycleYear), [cycleYear]);
   const blackoutSet = useMemo(() => new Set(blackoutWeeks), [blackoutWeeks]);
 
-  // Local quota cache: branchId -> { deptKey -> number }
+  // Local quota cache: branchId -> { normalizedJobTitleKey -> number }
   const [localQuotas, setLocalQuotas] = useState<Record<string, Record<string, number>>>(() => {
     const initial: Record<string, Record<string, number>> = {};
     for (const b of branches) {
       initial[b.id] = {};
-      for (const d of STAFFING_DEPARTMENTS) {
-        initial[b.id][d.key] = b.quotas[d.key] ?? b.quotas[d.fallback] ?? 1;
+      for (const jt of b.jobTitles) {
+        const key = jt.name.trim().toLowerCase();
+        initial[b.id][key] = b.quotas[key] ?? 1;
       }
     }
     return initial;
@@ -234,19 +229,20 @@ export function AnnualLeaveAdminPanel({
     });
   }
 
-  function handleSaveQuota(branchId: string, departmentKey: string, maxConcurrent: number) {
+  function handleSaveQuota(branchId: string, jobTitleName: string, maxConcurrent: number) {
+    const key = jobTitleName.trim().toLowerCase();
     setLocalQuotas((prev) => ({
       ...prev,
       [branchId]: {
         ...(prev[branchId] || {}),
-        [departmentKey]: maxConcurrent,
+        [key]: maxConcurrent,
       },
     }));
 
     startTransition(async () => {
-      const res = await saveBranchQuotaAction({ branchId, jobCategory: departmentKey, maxConcurrent });
+      const res = await saveBranchQuotaAction({ branchId, jobCategory: jobTitleName.trim(), maxConcurrent });
       if (res.ok) {
-        toast.success(`Updated ${departmentKey.toLowerCase()} quota to ${maxConcurrent}.`);
+        toast.success(`Updated ${jobTitleName} limit to ${maxConcurrent}.`);
       } else {
         toast.error(res.error || "Failed to update quota.");
       }
@@ -604,52 +600,69 @@ export function AnnualLeaveAdminPanel({
             {dialogTab === "quotas" && (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Specify the maximum number of employees in each department permitted on leave during the same week at each branch. Changes save automatically.
+                  Specify the maximum number of employees with the <strong>same job title</strong> permitted on leave during the same week at each branch. Changes save automatically.
                 </p>
                 <div className="divide-y divide-border/60 rounded-md border border-border/80">
                   {branches.map((b) => (
-                    <div key={b.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <h4 className="font-semibold text-sm">{b.name}</h4>
-                        <p className="text-[11px] text-muted-foreground">Concurrent leave limits per week</p>
+                    <div key={b.id} className="p-3 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold text-sm">{b.name}</h4>
+                          <p className="text-[11px] text-muted-foreground">
+                            Max staff per job title allowed on leave in the same week
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-[10px]">
+                          {b.jobTitles.length} job {b.jobTitles.length === 1 ? "title" : "titles"}
+                        </Badge>
                       </div>
-                      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
-                        {STAFFING_DEPARTMENTS.map((dept) => {
-                          const currentVal = localQuotas[b.id]?.[dept.key] ?? 1;
-                          return (
-                            <div
-                              key={dept.key}
-                              className="flex items-center justify-between sm:justify-start gap-1.5 bg-muted/40 rounded px-2.5 py-1 text-xs"
-                            >
-                              <span className="text-[11px] font-medium text-muted-foreground">
-                                {dept.label}:
-                              </span>
-                              <input
-                                type="number"
-                                min="1"
-                                max="10"
-                                value={currentVal}
-                                onChange={(e) => {
-                                  const val = parseInt(e.target.value, 10) || 1;
-                                  setLocalQuotas((prev) => ({
-                                    ...prev,
-                                    [b.id]: {
-                                      ...(prev[b.id] || {}),
-                                      [dept.key]: val,
-                                    },
-                                  }));
-                                }}
-                                onBlur={(e) => {
-                                  const val = Math.max(1, parseInt(e.target.value, 10) || 1);
-                                  handleSaveQuota(b.id, dept.key, val);
-                                }}
-                                className="w-12 h-6 text-xs text-center border border-border rounded bg-background"
-                                disabled={!canManage || isPending}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
+                      {b.jobTitles.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">
+                          No active staff job titles assigned to this branch yet.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {b.jobTitles.map((jt) => {
+                            const key = jt.name.trim().toLowerCase();
+                            const currentVal = localQuotas[b.id]?.[key] ?? 1;
+                            return (
+                              <div
+                                key={key}
+                                className="flex items-center justify-between gap-2 bg-muted/40 rounded px-2.5 py-1.5 text-xs"
+                              >
+                                <span className="text-xs font-medium text-foreground truncate" title={jt.name}>
+                                  {jt.name}{" "}
+                                  <span className="text-[11px] text-muted-foreground font-normal">
+                                    ({jt.staffCount})
+                                  </span>
+                                </span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="20"
+                                  value={currentVal}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10) || 1;
+                                    setLocalQuotas((prev) => ({
+                                      ...prev,
+                                      [b.id]: {
+                                        ...(prev[b.id] || {}),
+                                        [key]: val,
+                                      },
+                                    }));
+                                  }}
+                                  onBlur={(e) => {
+                                    const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                                    handleSaveQuota(b.id, jt.name, val);
+                                  }}
+                                  className="w-12 h-6 text-xs text-center border border-border rounded bg-background shrink-0"
+                                  disabled={!canManage || isPending}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

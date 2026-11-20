@@ -365,7 +365,7 @@ export async function fetchAllOdooEmployees(): Promise<{
   modelUsed: "hr.employee" | "hr.employee.public";
   records: RawOdooEmployeeRecord[];
 }> {
-  const fields = "id,name,job_title,work_email,work_phone,mobile_phone,department_id,company_id,active";
+  const fields = "id,name,job_id,job_title,work_email,work_phone,mobile_phone,department_id,company_id,active";
   const pageSize = 200;
 
   const fetchFromModel = async (
@@ -408,6 +408,42 @@ export async function fetchAllOdooEmployees(): Promise<{
     }
     throw err;
   }
+}
+
+export type RawOdooDepartmentRecord = {
+  id: number;
+  name: string;
+  complete_name?: string;
+  active?: boolean;
+};
+
+/**
+ * Fetches all departments from Odoo (`hr.department`).
+ */
+export async function fetchAllOdooDepartments(): Promise<RawOdooDepartmentRecord[]> {
+  const all: RawOdooDepartmentRecord[] = [];
+  let offset = 0;
+  const pageSize = 200;
+
+  while (true) {
+    const page = await odooRequest<OdooListResponse<RawOdooDepartmentRecord>>("/hr.department", {
+      query: {
+        fields: "id,name,complete_name,active",
+        limit: pageSize,
+        offset,
+        order: "id asc",
+      },
+    });
+
+    all.push(...page.records);
+    offset += page.records.length;
+
+    if (page.records.length === 0 || offset >= page.count) {
+      break;
+    }
+  }
+
+  return all;
 }
 
 /**

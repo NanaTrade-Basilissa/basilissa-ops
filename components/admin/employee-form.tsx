@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import type { FormState } from "@/lib/platform/forms";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,29 @@ export function EmployeeForm({
 }) {
   const [state, formAction, isPending] = useActionState<FormState, FormData>(action, undefined);
   const errors = state?.fieldErrors ?? {};
+  const [odooJobTitles, setOdooJobTitles] = useState<string[]>([]);
+  const [odooDepartments, setOdooDepartments] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/admin/odoo/catalog")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data?.ok) return;
+        if (Array.isArray(data.jobTitles)) {
+          setOdooJobTitles(data.jobTitles.map((j: { name: string }) => j.name));
+        }
+        if (Array.isArray(data.departments)) {
+          setOdooDepartments(data.departments.map((d: { name: string }) => d.name));
+        }
+      })
+      .catch(() => {
+        // fallback to defaults
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (state?.success) onSuccess?.();
@@ -106,17 +129,43 @@ export function EmployeeForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="jobTitle">Job title</Label>
-          <Input id="jobTitle" name="jobTitle" defaultValue={defaultValues?.jobTitle} placeholder="e.g. Cook, Cashier" />
+          {odooJobTitles.length > 0 ? (
+            <NativeSelect id="jobTitle" name="jobTitle" defaultValue={defaultValues?.jobTitle ?? ""}>
+              <option value="">Select job title...</option>
+              {defaultValues?.jobTitle && !odooJobTitles.includes(defaultValues.jobTitle) && (
+                <option value={defaultValues.jobTitle}>{defaultValues.jobTitle}</option>
+              )}
+              {odooJobTitles.map((title) => (
+                <option key={title} value={title}>
+                  {title}
+                </option>
+              ))}
+            </NativeSelect>
+          ) : (
+            <Input id="jobTitle" name="jobTitle" defaultValue={defaultValues?.jobTitle} placeholder="e.g. Cook, Frontliner" />
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="department">Department</Label>
           <NativeSelect id="department" name="department" defaultValue={defaultValues?.department ?? ""}>
-            <option value="">Auto-infer from title</option>
-            {DEPARTMENT_OPTIONS.map((dept) => (
-              <option key={dept.id} value={dept.id}>
-                {dept.label}
-              </option>
-            ))}
+            <option value="">Select department...</option>
+            {defaultValues?.department &&
+              !(odooDepartments.length > 0
+                ? odooDepartments.includes(defaultValues.department)
+                : DEPARTMENT_OPTIONS.some((d) => d.id === defaultValues.department)) && (
+                <option value={defaultValues.department}>{defaultValues.department}</option>
+              )}
+            {odooDepartments.length > 0
+              ? odooDepartments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))
+              : DEPARTMENT_OPTIONS.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.label}
+                  </option>
+                ))}
           </NativeSelect>
         </div>
       </div>

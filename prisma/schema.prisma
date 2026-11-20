@@ -387,6 +387,34 @@ model Employee {
   @@map("employees")
 }
 
+/// Cached job positions fetched from Odoo (`hr.employee.job_id` / `hr.job`).
+model OdooJobTitle {
+  id        String   @id @default(cuid())
+  odooId    Int      @unique
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  syncedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, name])
+  @@map("odoo_job_titles")
+}
+
+/// Cached departments fetched from Odoo (`hr.department`).
+model OdooDepartment {
+  id        String   @id @default(cuid())
+  odooId    Int      @unique
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  syncedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, name])
+  @@map("odoo_departments")
+}
+
 /// Which branches an employee may work at, and from when.
 ///
 /// Many-to-many from the start because relief and cover work is normal in

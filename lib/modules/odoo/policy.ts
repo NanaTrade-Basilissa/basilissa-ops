@@ -120,6 +120,7 @@ export function resolveEffectiveOdooAttendanceWindow(
 export type RawOdooEmployeeRecord = {
   id: number;
   name: string | false;
+  job_id?: [number, string] | false;
   job_title?: string | false;
   work_email?: string | false;
   work_phone?: string | false;
@@ -187,14 +188,17 @@ export function normalizeOdooEmployee(raw: RawOdooEmployeeRecord): NormalizedOdo
   const firstName = split ? split.firstName : rawName;
   const lastName = split ? split.lastName : "Staff";
 
-  const jobTitle = cleanOdooString(raw.job_title);
+  const odooJobName = Array.isArray(raw.job_id) ? cleanOdooString(raw.job_id[1]) : null;
+  const jobTitle = odooJobName ?? cleanOdooString(raw.job_title);
   const email = cleanOdooString(raw.work_email)?.toLowerCase() ?? null;
   const phone = cleanOdooString(raw.work_phone) ?? cleanOdooString(raw.mobile_phone) ?? null;
 
-  const odooDepartmentName = Array.isArray(raw.department_id) ? raw.department_id[1] : "";
+  const odooDepartmentName = Array.isArray(raw.department_id)
+    ? cleanOdooString(raw.department_id[1]) ?? ""
+    : "";
   const odooCompanyName = Array.isArray(raw.company_id) ? raw.company_id[1] : "";
   const branchSpec = resolveBranchSpecForOdooEmployee(odooDepartmentName, odooCompanyName);
-  const department = inferDepartmentFromJobTitle(jobTitle);
+  const department = odooDepartmentName || inferDepartmentFromJobTitle(jobTitle);
 
   return {
     odooEmployeeId: String(raw.id),

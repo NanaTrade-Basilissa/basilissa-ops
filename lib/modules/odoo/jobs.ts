@@ -5,6 +5,7 @@ import { scoped } from "@/lib/platform/logger";
 import { autoCloseStaleDays, runDailySettlementSweep } from "@/lib/modules/attendance/jobs";
 import {
   createOdooAttendance,
+  fetchAllOdooDepartments,
   fetchAllOdooEmployees,
   findConflictingOdooAttendances,
   getOdooEnvConfig,
@@ -27,6 +28,61 @@ const log = scoped("odoo:jobs");
 
 function normalizeSlugToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Fetches departments (`hr.department`) and job titles (`hr.employee.job_id`) from Odoo
+ * and upserts them into our local `OdooDepartment` and `OdooJobTitle` cache tables.
+ */
+export async function syncOdooCatalogFromRecords(rawEmployeeRecords?: {
+  job_id?: [number, string] | false;
+  job_title?: string | false;
+  department_id?: [number, string] | false;
+}[]): Promise<{ departmentsSynced: number; jobTitlesSynced: number }> {
+  const now = new Date();
+  let departmentsSynced = 0;
+  let jobTitlesSynced = 0;
+
+  // 1. Sync Odoo departments
+  try {
+    const depts = await fetchAllOdooDepartments();
+    for (const d of depts) {
+      const name = d.name?.trim();
+      if (!name) continue;
+      await prisma.odooDepartment.upsert({
+        where: { odooId: d.id },
+        create: { odooId: d.id, name, isActive: d.active !== false, syncedAt: now },
+        update: { name, isActive: d.active !== false, syncedAt: now },
+      });
+      departmentsSynced++;
+    }
+  } catch (err) {
+    log.warn("Could not fetch hr.department directly from Odoo", { error: String(err) });
+  }
+
+  // 2. Sync Odoo job titles from employee records (since hr.job is not exposed on REST)
+  const employees = rawEmployeeRecords ?? (await fetchAllOdooEmployees()).records;
+  const seenJobIds = new Map<number, string>();
+  for (const emp of employees) {
+    if (Array.isArray(emp.job_id) && emp.job_id.length >= 2) {
+      const id = Number(emp.job_id[0]);
+      const name = String(emp.job_id[1] ?? "").trim();
+      if (Number.isFinite(id) && name) {
+        seenJobIds.set(id, name);
+      }
+    }
+  }
+
+  for (const [odooId, name] of seenJobIds.entries()) {
+    await prisma.odooJobTitle.upsert({
+      where: { odooId },
+      create: { odooId, name, isActive: true, syncedAt: now },
+      update: { name, isActive: true, syncedAt: now },
+    });
+    jobTitlesSynced++;
+  }
+
+  return { departmentsSynced, jobTitlesSynced };
 }
 
 /**
@@ -69,6 +125,11 @@ export async function syncEmployeesFromOdoo(): Promise<OdooEmployeeSyncSummary> 
       errors: [msg],
     };
   }
+
+  // Refresh cached Odoo departments & job titles alongside employee sync
+  await syncOdooCatalogFromRecords(rawRecords).catch((err) => {
+    log.warn("Failed to refresh Odoo job title/department cache", { error: String(err) });
+  });
 
   const [existingEmployees, existingBranches] = await Promise.all([
     prisma.employee.findMany({

@@ -3,11 +3,17 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 
-const PROD_URL =
-  process.env.PROD_DATABASE_URL ||
-  "postgresql://neondb_owner:npg_4VBlpLw8NtMO@ep-long-wave-av3xbpld-pooler.c-11.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require";
-const ODOO_API_URL = process.env.ODOO_API_URL || "https://erp.nanatradeltd.com";
-const ODOO_API_KEY = process.env.ODOO_API_KEY || "504bc7865c993914ec48a3ba69c6d9fa9fdb3220";
+const rawProdUrl = process.env.PROD_DATABASE_URL || process.env.DATABASE_URL;
+const rawOdooUrl = process.env.ODOO_API_URL;
+const rawOdooKey = process.env.ODOO_API_KEY;
+
+if (!rawProdUrl || !rawOdooUrl || !rawOdooKey) {
+  throw new Error("Missing required environment variables: DATABASE_URL (or PROD_DATABASE_URL), ODOO_API_URL, ODOO_API_KEY");
+}
+
+const PROD_URL: string = rawProdUrl;
+const ODOO_API_URL: string = rawOdooUrl;
+const ODOO_API_KEY: string = rawOdooKey;
 
 const prisma = new PrismaClient({
   datasources: { db: { url: PROD_URL } },
