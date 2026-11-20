@@ -6,6 +6,15 @@ A customer feedback system being grown into an operations platform: employee
 attendance with geofencing and biometrics, HR assessments, and eventual Odoo
 ERP synchronisation. Next.js 16, React 19, Postgres 16, Prisma 6.
 
+## CRITICAL: Production Is Live — Database Safety Rules
+
+This platform is **live in production** with real staff actively using the mobile app and admin dashboard.
+
+- **Always check which database is targeted FIRST** before running any migration, seed, script, or query (`localhost:5432` local Docker Postgres vs. `neon.tech` production Neon DB).
+- **NEVER mutate the production database without explicit instruction from the user** confirming the change should run on production.
+- **Default to local Docker Postgres** for all development and testing.
+- When an explicitly approved production change is needed, **preview affected row counts read-only first** and wrap writes in an atomic transaction. Never run `prisma migrate reset` or `--force-reset` against production.
+
 ## Read these before changing anything
 
 The code is not the state of this project. These are, and they are layered so
