@@ -185,14 +185,40 @@ export async function assignBranch(
       });
     }
 
+    const sameDayExisting = await tx.employeeBranchAssignment.findUnique({
+      where: {
+        employeeId_branchId_validFrom: {
+          employeeId,
+          branchId: parsed.data.branchId,
+          validFrom: parsed.data.validFrom,
+        },
+      },
+    });
+
+    // Close any other open assignment for the same branch before activating this one.
     await tx.employeeBranchAssignment.updateMany({
-      where: { employeeId, branchId: parsed.data.branchId, validTo: null },
+      where: {
+        employeeId,
+        branchId: parsed.data.branchId,
+        validTo: null,
+        ...(sameDayExisting ? { id: { not: sameDayExisting.id } } : {}),
+      },
       data: { validTo: parsed.data.validFrom },
     });
 
-    const created = await tx.employeeBranchAssignment.create({
-      data: { employeeId, ...parsed.data },
-    });
+    // If an assignment already exists for the exact same (employeeId, branchId, validFrom),
+    // update/re-open it in place instead of violating the unique constraint (P2002).
+    const assignment = sameDayExisting
+      ? await tx.employeeBranchAssignment.update({
+          where: { id: sameDayExisting.id },
+          data: {
+            isPrimary: parsed.data.isPrimary,
+            validTo: null,
+          },
+        })
+      : await tx.employeeBranchAssignment.create({
+          data: { employeeId, ...parsed.data },
+        });
 
     await recordAudit(
       {
@@ -204,7 +230,7 @@ export async function assignBranch(
           branchId: parsed.data.branchId,
           isPrimary: parsed.data.isPrimary,
           validFrom: parsed.data.validFrom.toISOString(),
-          assignmentId: created.id,
+          assignmentId: assignment.id,
         },
       },
       tx,
@@ -212,6 +238,7 @@ export async function assignBranch(
   });
 
   revalidatePath(`/admin/employees/${employeeId}`);
+  revalidatePath("/admin/employees");
   return { success: true };
 }
 
