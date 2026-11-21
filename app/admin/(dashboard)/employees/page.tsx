@@ -19,11 +19,13 @@ import { EmployeeFilters } from "@/components/admin/employee-filters";
 import { EmployeeTopActions } from "@/components/admin/employee-top-actions";
 import { EmployeesTable } from "@/components/admin/employees-table";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 
 export const metadata: Metadata = { title: "Employees" };
 export const dynamic = "force-dynamic";
 
-const PAGE_SIZE = 25;
+const ALLOWED_PAGE_SIZES = [10, 20, 50] as const;
+const DEFAULT_PAGE_SIZE = 20;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -45,9 +47,13 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
   });
   const filters = parsed.success ? parsed.data : {};
   const page = filters.page ?? 1;
+  const rawPageSize = Number(first(raw.pageSize));
+  const pageSize = (ALLOWED_PAGE_SIZES as readonly number[]).includes(rawPageSize)
+    ? rawPageSize
+    : DEFAULT_PAGE_SIZE;
 
   const [employees, total, branches] = await Promise.all([
-    listEmployees(scope, filters, { skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
+    listEmployees(scope, filters, { skip: (page - 1) * pageSize, take: pageSize }),
     countEmployees(scope, filters),
     prisma.branch.findMany({
       where: scope.kind === "branches" ? { id: { in: scope.branchIds } } : undefined,
@@ -56,28 +62,37 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
     }),
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  function pageHref(targetPage: number) {
+  function buildUrl(targetPage: number, targetPageSize: number) {
     const search = new URLSearchParams();
     if (filters.branchId) search.set("branchId", filters.branchId);
     if (filters.department) search.set("department", filters.department);
     if (filters.status) search.set("status", filters.status);
     if (filters.search) search.set("search", filters.search);
     if (filters.device) search.set("device", filters.device);
+    if (targetPageSize !== DEFAULT_PAGE_SIZE) search.set("pageSize", String(targetPageSize));
     if (targetPage !== 1) search.set("page", String(targetPage));
     const qs = search.toString();
     return qs ? `/admin/employees?${qs}` : "/admin/employees";
   }
 
+  const pageHref = (targetPage: number) => buildUrl(targetPage, pageSize);
+  const pageSizeHref = (targetSize: number) => buildUrl(1, targetSize);
+
   const actionSlot = <EmployeeTopActions canCreate={can(actor, "employees:create")} />;
 
   return (
-    <div className="space-y-4">
+    <PageShell>
+      <PageHeader
+        title="Employees"
+        description={`Manage staff directory, branch assignments, and mobile device bindings. ${total} matching record${total === 1 ? "" : "s"}.`}
+        actions={actionSlot}
+      />
+
       <Suspense fallback={<div className="h-[46px]" />}>
         <EmployeeFilters
           branches={branches.map((b) => ({ id: b.id, label: b.name }))}
-          actionSlot={actionSlot}
         />
       </Suspense>
 
@@ -106,16 +121,19 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
           )}
         </Empty>
       ) : (
-        <EmployeesTable employees={employees} />
+        <div className="space-y-3">
+          <EmployeesTable employees={employees} />
+          <DataTablePagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            pageSize={pageSize}
+            buildHref={pageHref}
+            buildPageSizeHref={pageSizeHref}
+            alwaysShow={total > 0}
+          />
+        </div>
       )}
-
-      <DataTablePagination
-        page={page}
-        totalPages={totalPages}
-        total={total}
-        pageSize={PAGE_SIZE}
-        buildHref={pageHref}
-      />
-    </div>
+    </PageShell>
   );
 }

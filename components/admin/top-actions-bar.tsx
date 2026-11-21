@@ -160,7 +160,7 @@ export function TopActionsBar({
             <MoreVertical className="size-4" />
             <span className="sr-only">More actions</span>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-44">
+          <DropdownMenuContent align="end" className="w-max min-w-48 max-w-64">
             {actions.map((act, idx) => {
               const Icon = act.icon;
               if (act.href) {
@@ -169,7 +169,7 @@ export function TopActionsBar({
                     key={act.id ?? idx}
                     variant={act.variant}
                     disabled={act.disabled}
-                    render={<Link href={act.href} className="flex w-full items-center gap-2" />}
+                    render={<Link href={act.href} className="flex w-full items-center gap-2 whitespace-nowrap" />}
                   >
                     {Icon && <Icon className="size-4 shrink-0" />}
                     <span>{act.label}</span>
@@ -188,7 +188,7 @@ export function TopActionsBar({
                       act.onClick?.();
                     }
                   }}
-                  className="gap-2"
+                  className="gap-2 whitespace-nowrap"
                 >
                   {Icon && <Icon className="size-4 shrink-0" />}
                   <span>{act.label}</span>

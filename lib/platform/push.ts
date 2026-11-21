@@ -177,42 +177,52 @@ async function sendFCMPushNotification(
         )
       : undefined;
 
-    const response = await messaging.sendEachForMulticast({
-      tokens,
-      notification: {
-        title: payload.title,
-        body: payload.body,
-      },
-      data: stringData,
-      android: {
-        priority: payload.priority === "default" || payload.priority === "normal" ? "normal" : "high",
+    // Firebase sendEachForMulticast accepts at most 500 tokens per call
+    const FCM_BATCH_SIZE = 500;
+    const allReceipts: PushReceipt[] = [];
+
+    for (let offset = 0; offset < tokens.length; offset += FCM_BATCH_SIZE) {
+      const batch = tokens.slice(offset, offset + FCM_BATCH_SIZE);
+      const response = await messaging.sendEachForMulticast({
+        tokens: batch,
         notification: {
-          channelId: "default",
-          sound: payload.sound === null ? undefined : "default",
+          title: payload.title,
+          body: payload.body,
         },
-      },
-      apns: {
-        payload: {
-          aps: {
+        data: stringData,
+        android: {
+          priority: payload.priority === "default" || payload.priority === "normal" ? "normal" : "high",
+          notification: {
+            channelId: "default",
             sound: payload.sound === null ? undefined : "default",
-            badge: payload.badge,
           },
         },
-      },
-    });
+        apns: {
+          payload: {
+            aps: {
+              sound: payload.sound === null ? undefined : "default",
+              badge: payload.badge,
+            },
+          },
+        },
+      });
 
-    return tokens.map((token, i) => {
-      const resp = response.responses[i];
-      if (resp?.success) {
-        return { ok: true, token, id: resp.messageId };
+      for (let i = 0; i < batch.length; i++) {
+        const resp = response.responses[i];
+        if (resp?.success) {
+          allReceipts.push({ ok: true, token: batch[i]!, id: resp.messageId });
+        } else {
+          allReceipts.push({
+            ok: false,
+            token: batch[i]!,
+            error: resp?.error?.message || resp?.error?.code || "FCM_DISPATCH_FAILED",
+            permanent: isDeadFcmCode(resp?.error?.code),
+          });
+        }
       }
-      return {
-        ok: false,
-        token,
-        error: resp?.error?.message || resp?.error?.code || "FCM_DISPATCH_FAILED",
-        permanent: isDeadFcmCode(resp?.error?.code),
-      };
-    });
+    }
+
+    return allReceipts;
   } catch (err) {
     log.error("Failed to connect to Firebase Cloud Messaging service", { error: err });
     return tokens.map((token) => ({

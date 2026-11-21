@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft, CalendarSync, ChevronDown, Copy, Settings2, Sparkles, Users } from "lucide-react";
+import { ArrowRightLeft, CalendarSync, ChevronDown, Copy, Settings2, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -66,7 +66,7 @@ export function ScheduleActionsMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button variant="outline" size="sm" className="gap-1.5">
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs">
               <Settings2 className="size-3.5" />
               <span>Manage rota</span>
               <ChevronDown className="size-3.5 text-muted-foreground" />
@@ -99,7 +99,7 @@ export function ScheduleActionsMenu({
             </DropdownMenuItem>
             {!autoRota && (
               <DropdownMenuItem onClick={() => setOpen("generate")}>
-                <Sparkles className="size-4" />
+                <Zap className="size-4" />
                 Generate week
               </DropdownMenuItem>
             )}

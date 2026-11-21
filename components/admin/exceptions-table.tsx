@@ -192,7 +192,7 @@ export function ExceptionsTable({
             actions={[
               canWrite && {
                 id: "resolve",
-                label: "Review exception",
+                label: "Review",
                 icon: AlertTriangle,
                 dialog: (props) => (
                   <ResolveExceptionDialog
@@ -222,5 +222,5 @@ export function ExceptionsTable({
     }),
   ]);
 
-  return <DataTable columns={columns} data={exceptions} />;
+  return <DataTable columns={columns} data={exceptions} ariaLabel="Attendance exceptions" pageSize={20} />;
 }

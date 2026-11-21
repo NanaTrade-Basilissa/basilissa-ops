@@ -292,6 +292,91 @@ export async function updateBranchGeofence(
   return { success: true };
 }
 
+const schedulingModeSchema = z.object({
+  branchId: z.string().min(1),
+  schedulingMode: z.enum(["ROTATING_ROTA", "FIXED_SCHEDULE"]),
+  fixedShiftStartMinute: z.number().int().min(0).max(1439).nullable(),
+  fixedShiftEndMinute: z.number().int().min(0).max(1439).nullable(),
+  fixedWorkDays: z.array(z.number().int().min(1).max(7)).min(1, "Select at least one working day."),
+  fixedOffOnPublicHolidays: z.boolean(),
+});
+
+export async function updateBranchSchedulingModeAction(input: {
+  branchId: string;
+  schedulingMode: "ROTATING_ROTA" | "FIXED_SCHEDULE";
+  fixedShiftStartMinute: number | null;
+  fixedShiftEndMinute: number | null;
+  fixedWorkDays: number[];
+  fixedOffOnPublicHolidays: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  const parsed = schedulingModeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid scheduling settings." };
+  }
+
+  const {
+    branchId,
+    schedulingMode,
+    fixedShiftStartMinute,
+    fixedShiftEndMinute,
+    fixedWorkDays,
+    fixedOffOnPublicHolidays,
+  } = parsed.data;
+
+  const actor = await requireBranchPermission("branch:write", branchId);
+
+  if (
+    schedulingMode === "FIXED_SCHEDULE" &&
+    (fixedShiftStartMinute === null || fixedShiftEndMinute === null)
+  ) {
+    return { ok: false, error: "Start and end times are required for Fixed Schedule mode." };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.branch.findUniqueOrThrow({ where: { id: branchId } });
+    const after = await tx.branch.update({
+      where: { id: branchId },
+      data: {
+        schedulingMode,
+        fixedShiftStartMinute: schedulingMode === "FIXED_SCHEDULE" ? fixedShiftStartMinute : before.fixedShiftStartMinute,
+        fixedShiftEndMinute: schedulingMode === "FIXED_SCHEDULE" ? fixedShiftEndMinute : before.fixedShiftEndMinute,
+        fixedWorkDays: schedulingMode === "FIXED_SCHEDULE" ? [...new Set(fixedWorkDays)].sort((a, b) => a - b) : before.fixedWorkDays,
+        fixedOffOnPublicHolidays,
+      },
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "branch.scheduling.updated",
+        entityType: "Branch",
+        entityId: branchId,
+        before: {
+          schedulingMode: before.schedulingMode,
+          fixedShiftStartMinute: before.fixedShiftStartMinute,
+          fixedShiftEndMinute: before.fixedShiftEndMinute,
+          fixedWorkDays: before.fixedWorkDays,
+          fixedOffOnPublicHolidays: before.fixedOffOnPublicHolidays,
+        },
+        after: {
+          schedulingMode: after.schedulingMode,
+          fixedShiftStartMinute: after.fixedShiftStartMinute,
+          fixedShiftEndMinute: after.fixedShiftEndMinute,
+          fixedWorkDays: after.fixedWorkDays,
+          fixedOffOnPublicHolidays: after.fixedOffOnPublicHolidays,
+        },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/admin/branches");
+  revalidatePath(`/admin/branches/${branchId}`);
+  revalidatePath(`/admin/branches/${branchId}/settings`);
+  revalidatePath("/admin/shifts");
+  return { ok: true };
+}
+
 const recipientItemSchema = z.object({
   email: z.string().trim().email("Invalid email address"),
   name: z.string().trim().max(120).optional(),

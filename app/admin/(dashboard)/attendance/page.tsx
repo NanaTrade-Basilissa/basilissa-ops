@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, Clock, TriangleAlert, Users } from "lucide-react";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import {
   employeeLookup,
   listAttendanceDays,
-  summariseDay,
-  getLiveFloorStatus,
   listPendingExceptions,
 } from "@/lib/modules/attendance/server";
 import { listEmployees } from "@/lib/modules/employees/server";
@@ -17,13 +14,11 @@ import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { StatCard } from "@/components/admin/stat-card";
 import { AttendanceTabs, type AttendanceView } from "@/components/admin/attendance-tabs";
 import { AttendanceTopActions } from "@/components/admin/attendance-top-actions";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 import type { EmployeeOption } from "@/components/admin/manual-punch-dialog";
-import { AttendanceFilters } from "@/components/admin/attendance-filters";
 import { AttendanceTable } from "@/components/admin/attendance-table";
-import { LiveFloorBoard } from "@/components/admin/live-floor-board";
 import { ExceptionsFilters } from "@/components/admin/exceptions-filters";
 import { ExceptionsTable } from "@/components/admin/exceptions-table";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyDescription } from "@/components/ui/empty";
 
 export const metadata: Metadata = { title: "Attendance" };
@@ -71,10 +66,12 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
     redirect(`/admin/payroll${params.size ? `?${params}` : ""}`);
   }
 
-  const view = (first(raw.view) as AttendanceView) || "daily";
+  const rawView = first(raw.view);
+  const view: AttendanceView = rawView === "exceptions" ? "exceptions" : "daily";
+  const isLive = first(raw.live) === "1" || rawView === "live";
   const now = new Date();
   const todayKey = dateKeyInZone(now, DISPLAY_TIMEZONE);
-  const date = first(raw.date) ?? todayKey;
+  const date = isLive ? todayKey : (first(raw.date) ?? todayKey);
   const branchId = first(raw.branchId);
   const exceptionsOnly = first(raw.exceptions) === "1";
   const search = first(raw.search);
@@ -128,18 +125,11 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
   const canWrite = can(actor, "attendance:write");
 
   return (
-    <div className="space-y-6 min-w-0 max-w-full">
-      {/* Tabs & Top Actions Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 border-b border-border">
-        <div className="min-w-0 flex-1">
-          <AttendanceTabs
-            activeView={view}
-            branchId={branchId}
-            date={date}
-            exceptionsCount={exceptionsCount}
-          />
-        </div>
-        <div className="shrink-0 pb-2">
+    <PageShell>
+      <PageHeader
+        title="Attendance"
+        description="Track daily clock-ins, live branch floor presence, and exceptions needing manager review."
+        actions={
           <AttendanceTopActions
             canManualEntry={canManualEntry}
             canWrite={canWrite}
@@ -148,27 +138,28 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
             defaultBranchId={defaultBranchId}
             date={date}
           />
-        </div>
-      </div>
+        }
+        tabs={
+          <AttendanceTabs
+            activeView={view}
+            branchId={branchId}
+            date={date}
+            exceptionsCount={exceptionsCount}
+          />
+        }
+      />
 
-      {/* View 1: Daily Roster */}
+      {/* Daily Attendance Roster (with Live Mode auto-refresh toggle) */}
       {view === "daily" && (
         <DailyRosterView
           scope={scope}
           date={date}
+          todayKey={todayKey}
+          isLive={isLive}
           branchId={branchId}
           exceptionsOnly={exceptionsOnly}
           branches={branches}
           canWrite={canWrite}
-        />
-      )}
-
-      {/* View 2: Live Floor Board */}
-      {view === "live" && (
-        <LiveFloorView
-          scope={scope}
-          branches={branches}
-          branchId={defaultBranchId}
         />
       )}
 
@@ -183,14 +174,15 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
           canWrite={canWrite}
         />
       )}
-
-    </div>
+    </PageShell>
   );
 }
 
 async function DailyRosterView({
   scope,
   date,
+  todayKey,
+  isLive,
   branchId,
   exceptionsOnly,
   branches,
@@ -198,111 +190,52 @@ async function DailyRosterView({
 }: {
   scope: Parameters<typeof listAttendanceDays>[0];
   date: string;
+  todayKey: string;
+  isLive: boolean;
   branchId?: string;
   exceptionsOnly: boolean;
   branches: { id: string; name: string }[];
   canWrite?: boolean;
 }) {
-  const [days, summary] = await Promise.all([
-    listAttendanceDays(scope, { date, branchId, exceptionsOnly }),
-    summariseDay(scope, { date, branchId }),
-  ]);
+  const days = await listAttendanceDays(scope, { date, branchId, exceptionsOnly });
 
   const employees = await employeeLookup(days.map((day) => day.employeeId));
   const branchName = new Map(branches.map((b) => [b.id, b.name]));
 
   return (
     <div className="space-y-6">
-      {summary.needingReview > 0 && !exceptionsOnly && (
-        <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200">
-          <TriangleAlert className="size-4 text-amber-600 dark:text-amber-400" />
-          <AlertTitle className="font-semibold">Review needed</AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-            <span>
-              {summary.needingReview}{" "}
-              {summary.needingReview === 1 ? "record requires" : "records require"} review.
-            </span>
-            <Link
-              href={`/admin/attendance?view=daily&date=${date}${branchId ? `&branchId=${branchId}` : ""}&exceptions=1`}
-              className="font-medium underline underline-offset-4 hover:text-foreground"
-            >
-              Filter to days needing attention &rarr;
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <AttendanceFilters
-        branches={branches}
+      <AttendanceTable
         date={date}
+        todayKey={todayKey}
+        branches={branches}
         branchId={branchId}
         exceptionsOnly={exceptionsOnly}
+        isLive={isLive}
+        days={days.map((day) => {
+          const employee = employees.get(day.employeeId);
+          return {
+            id: day.id,
+            employeeId: day.employeeId,
+            branchId: day.branchId,
+            date,
+            employeeName: employee ? `${employee.firstName} ${employee.lastName}` : null,
+            employeeCode: employee?.employeeCode ?? null,
+            branchName: branchName.get(day.branchId) ?? "-",
+            actualInLabel: time(day.actualIn),
+            actualOutLabel: time(day.actualOut),
+            workedLabel: hours(day.netWorkedMinutes),
+            overtimeLabel: hours(day.overtimeMinutes),
+            calculatedOvertimeMinutes: day.overtimeMinutes,
+            payableOvertimeMinutes: day.payableOvertimeMinutes,
+            lateMinutes: day.lateMinutes,
+            status: day.status,
+            flags: day.flags,
+            canWrite,
+          };
+        })}
       />
-
-      {days.length === 0 ? (
-        <Empty className="border">
-          <EmptyDescription>
-            {exceptionsOnly ? "Nothing needs attention on this date." : "No attendance recorded for this date."}
-          </EmptyDescription>
-        </Empty>
-      ) : (
-        <AttendanceTable
-          date={date}
-          days={days.map((day) => {
-            const employee = employees.get(day.employeeId);
-            return {
-              id: day.id,
-              employeeId: day.employeeId,
-              branchId: day.branchId,
-              date,
-              employeeName: employee ? `${employee.firstName} ${employee.lastName}` : null,
-              employeeCode: employee?.employeeCode ?? null,
-              branchName: branchName.get(day.branchId) ?? "-",
-              actualInLabel: time(day.actualIn),
-              actualOutLabel: time(day.actualOut),
-              workedLabel: hours(day.netWorkedMinutes),
-              overtimeLabel: hours(day.overtimeMinutes),
-              calculatedOvertimeMinutes: day.overtimeMinutes,
-              payableOvertimeMinutes: day.payableOvertimeMinutes,
-              lateMinutes: day.lateMinutes,
-              status: day.status,
-              flags: day.flags,
-              canWrite,
-            };
-          })}
-        />
-      )}
     </div>
   );
-}
-
-async function LiveFloorView({
-  scope,
-  branches,
-  branchId,
-}: {
-  scope: Parameters<typeof getLiveFloorStatus>[0];
-  branches: { id: string; name: string }[];
-  branchId?: string;
-}) {
-  if (!branchId) {
-    return (
-      <Empty className="border">
-        <EmptyDescription>No branches available for live floor monitoring.</EmptyDescription>
-      </Empty>
-    );
-  }
-
-  const liveData = await getLiveFloorStatus(scope, branchId);
-  if (!liveData) {
-    return (
-      <Empty className="border">
-        <EmptyDescription>Branch not accessible or not found.</EmptyDescription>
-      </Empty>
-    );
-  }
-
-  return <LiveFloorBoard data={liveData} branches={branches} />;
 }
 
 async function ExceptionsQueueView({

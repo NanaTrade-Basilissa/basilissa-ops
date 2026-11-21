@@ -268,23 +268,26 @@ export function BranchesTable({
         actions={actionSlot}
       />
 
-      <DataTable
-        columns={columns}
-        data={paginatedBranches}
-        getRowHref={(row) => `/admin/branches/${row.id}`}
-      />
+      <div className="space-y-3">
+        <DataTable
+          columns={columns}
+          data={paginatedBranches}
+          getRowHref={(row) => `/admin/branches/${row.id}`}
+        />
 
-      <DataTablePagination
-        page={page}
-        totalPages={totalPages}
-        total={filteredBranches.length}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={(newSize) => {
-          setPageSize(newSize);
-          setPage(1);
-        }}
-      />
+        <DataTablePagination
+          page={page}
+          totalPages={totalPages}
+          total={filteredBranches.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setPage(1);
+          }}
+          alwaysShow={filteredBranches.length > 0}
+        />
+      </div>
     </div>
   );
 }

@@ -110,6 +110,10 @@ shadcn/ui component or block already fits:
   in `app/globals.css` and every shadcn component already reads them — a
   rebrand or a new shadcn install never requires touching component code, only
   those CSS variables.
+- **Never use the `Sparkles` icon** (or any AI-style star/sparkle icon)
+  anywhere in the UI — it reads like an AI gimmick rather than an enterprise
+  operations tool. Use clear, literal operational icons instead (e.g.
+  `CheckCircle2`, `Zap`, `FileCheck`, `SlidersHorizontal`).
 
 ## Verifying database-bound work
 

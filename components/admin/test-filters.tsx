@@ -46,21 +46,23 @@ export function TestFilters({
     <FilterBar
       hasActiveFilters={hasFilters}
       search={
-        <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64 md:w-72 shrink-0">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+        <form onSubmit={handleSearchSubmit} className="relative w-full shrink-0 sm:w-64 md:w-72">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={searchPlaceholder}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="pl-8 h-9"
+            className="h-9 pl-8 text-xs"
           />
         </form>
       }
       filters={
         <>
           <NativeSelect
+            aria-label="Filter by status"
             value={currentStatus}
             onChange={(e) => setParam("status", e.target.value)}
+            className="h-9 text-xs"
             containerClassName="w-full sm:w-fit sm:min-w-[140px] sm:shrink-0"
           >
             <option value="">All statuses</option>
@@ -79,9 +81,10 @@ export function TestFilters({
                 setSearchInput("");
                 router.push(pathname);
               }}
+              className="h-9 gap-1.5 text-xs"
               title="Reset filters"
             >
-              <RotateCcw className="size-3.5 mr-1" />
+              <RotateCcw className="size-3.5" />
               Reset
             </Button>
           )}

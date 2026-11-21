@@ -48,6 +48,7 @@
     "firebase-admin": "^14.5.0",
     "jose": "^5.9.6",
     "lucide-react": "^1.31.0",
+    "motion": "^14.14.0",
     "next": "16.3.1",
     "next-themes": "^0.4.6",
     "prisma": "^6.2.1",

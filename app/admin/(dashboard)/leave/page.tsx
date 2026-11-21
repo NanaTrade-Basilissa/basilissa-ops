@@ -4,6 +4,8 @@ import { prisma } from "@/lib/platform/prisma";
 import { resolveStorageUrl } from "@/lib/platform/r2";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { StatCard } from "@/components/admin/stat-card";
+import { PageHeader, PageShell, PageTabs } from "@/components/admin/page-shell";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { LeaveRequestsTable, type SerializedLeaveRequest } from "@/components/admin/leave-requests-table";
 import { AnnualLeaveAdminPanel } from "@/components/admin/annual-leave-admin-panel";
 import { getOrCreateCurrentLeaveCycle } from "@/lib/modules/attendance/server";
@@ -22,6 +24,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export default async function LeavePage({ searchParams }: { searchParams: SearchParams }) {
   const { actor, scope } = await requireAnyBranchPermission("leave:read");
   const raw = await searchParams;
+  const activeTab = first(raw.tab) === "cycle" ? "cycle" : "requests";
   const branchId = first(raw.branchId);
   const search = first(raw.search);
   const canReview = can(actor, "leave:approve");
@@ -180,24 +183,55 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
     };
   });
 
-  return (
-    <div className="space-y-6 min-w-0 max-w-full">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Pending Requests" value={String(count("PENDING"))} icon={Clock} />
-        <StatCard label="Approved Leave" value={String(count("APPROVED"))} icon={CalendarCheck} />
-        <StatCard label="Declined" value={String(count("REJECTED"))} icon={AlertTriangle} />
-      </div>
+  const pendingCount = count("PENDING");
 
-      <AnnualLeaveAdminPanel
-        currentCycle={currentCycleData}
-        branches={branchQuotaData}
-        canManage={canManage}
+  return (
+    <PageShell>
+      <PageHeader
+        title="Leave Management"
+        description="Review staff leave requests, manage annual leave cycles, and configure branch concurrency quotas."
+        tabs={
+          <PageTabs
+            ariaLabel="Leave Management views"
+            items={[
+              {
+                href: "/admin/leave",
+                label: "Leave Requests",
+                active: activeTab === "requests",
+                badge:
+                  pendingCount > 0 ? (
+                    <StatusBadge tone="warning" className="h-5 px-1.5 text-[11px] tabular-nums">
+                      {pendingCount}
+                    </StatusBadge>
+                  ) : undefined,
+              },
+              {
+                href: "/admin/leave?tab=cycle",
+                label: "Annual Cycle & Quotas",
+                active: activeTab === "cycle",
+              },
+            ]}
+          />
+        }
       />
 
-      <div className="space-y-2 pt-2">
-        <h3 className="text-sm font-semibold tracking-tight text-foreground">All Staff Leave Records</h3>
-        <LeaveRequestsTable requests={serialized} canReview={canReview} />
-      </div>
-    </div>
+      {activeTab === "requests" ? (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <StatCard label="Pending Requests" value={String(pendingCount)} icon={Clock} tone="brand" />
+            <StatCard label="Approved Leave" value={String(count("APPROVED"))} icon={CalendarCheck} tone="good" />
+            <StatCard label="Declined" value={String(count("REJECTED"))} icon={AlertTriangle} tone="critical" />
+          </div>
+
+          <LeaveRequestsTable requests={serialized} canReview={canReview} />
+        </>
+      ) : (
+        <AnnualLeaveAdminPanel
+          currentCycle={currentCycleData}
+          branches={branchQuotaData}
+          canManage={canManage}
+        />
+      )}
+    </PageShell>
   );
 }

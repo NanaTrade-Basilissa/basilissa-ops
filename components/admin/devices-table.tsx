@@ -1,55 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { DeviceDetailSheet, type DeviceDetail } from "@/components/admin/device-detail-sheet";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/admin/status-badge";
 
 export type DeviceRow = DeviceDetail;
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, DeviceRow>();
-
-const columns = columnHelper.columns([
-  columnHelper.accessor("serialNumber", {
-    header: "Serial number",
-    cell: (info) => <span className="font-mono text-xs">{info.getValue()}</span>,
-  }),
-  columnHelper.display({
-    id: "label",
-    header: "Label",
-    cell: ({ row }) =>
-      row.original.label ?? <span className="text-sm text-muted-foreground italic">none</span>,
-  }),
-  columnHelper.accessor("branchName", { header: "Branch" }),
-  columnHelper.accessor("isActive", {
-    header: "Status",
-    cell: (info) => (
-      <Badge variant={info.getValue() ? "default" : "outline"}>
-        {info.getValue() ? "active" : "inactive"}
-      </Badge>
-    ),
-  }),
-  columnHelper.display({
-    id: "registeredAt",
-    header: "Registered",
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {new Date(row.original.registeredAt).toLocaleDateString()}
-      </span>
-    ),
-  }),
-  columnHelper.display({
-    id: "lastSeenAt",
-    header: "Last seen",
-    cell: ({ row }) =>
-      row.original.lastSeenAt ? (
-        <span className="text-sm text-muted-foreground">{timeAgo(row.original.lastSeenAt)}</span>
-      ) : (
-        <span className="text-sm text-muted-foreground italic">never</span>
-      ),
-  }),
-]);
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -70,11 +29,60 @@ export function DevicesTable({
 }) {
   const [selected, setSelected] = useState<DeviceRow | null>(null);
 
+  const columns = useMemo(
+    () =>
+      columnHelper.columns([
+        columnHelper.accessor("serialNumber", {
+          header: "Serial number",
+          cell: (info) => <span className="font-mono text-xs">{info.getValue()}</span>,
+        }),
+        columnHelper.display({
+          id: "label",
+          header: "Label",
+          cell: ({ row }) =>
+            row.original.label ?? <span className="text-xs italic text-muted-foreground">None</span>,
+        }),
+        columnHelper.accessor("branchName", { header: "Branch" }),
+        columnHelper.accessor("isActive", {
+          header: "Status",
+          cell: (info) => (
+            <StatusBadge tone={info.getValue() ? "good" : "neutral"} dot>
+              {info.getValue() ? "Active" : "Inactive"}
+            </StatusBadge>
+          ),
+        }),
+        columnHelper.display({
+          id: "registeredAt",
+          header: "Registered",
+          cell: ({ row }) => (
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {new Date(row.original.registeredAt).toLocaleDateString()}
+            </span>
+          ),
+        }),
+        columnHelper.display({
+          id: "lastSeenAt",
+          header: "Last seen",
+          cell: ({ row }) =>
+            row.original.lastSeenAt ? (
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {timeAgo(row.original.lastSeenAt)}
+              </span>
+            ) : (
+              <span className="text-xs italic text-muted-foreground">Never</span>
+            ),
+        }),
+      ]),
+    [],
+  );
+
   return (
     <>
       <DataTable
         columns={columns}
         data={devices}
+        ariaLabel="Biometric devices"
+        pageSize={20}
         onRowClick={(row) => setSelected(row)}
         emptyMessage="No devices match the selected filters."
       />

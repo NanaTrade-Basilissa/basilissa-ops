@@ -1,20 +1,26 @@
 import "server-only";
-import { EmploymentStatus, MasterSource, OdooSyncStatus } from "@prisma/client";
+import { EmploymentStatus, MasterSource, OdooSyncStatus, ProviderType } from "@prisma/client";
 import { prisma } from "@/lib/platform/prisma";
 import { scoped } from "@/lib/platform/logger";
 import { autoCloseStaleDays, runDailySettlementSweep } from "@/lib/modules/attendance/jobs";
 import {
   createOdooAttendance,
+  createOdooEmployee,
   fetchAllOdooDepartments,
   fetchAllOdooEmployees,
   findConflictingOdooAttendances,
   getOdooEnvConfig,
   OdooApiError,
   updateOdooAttendance,
+  updateOdooEmployee,
+  type OdooEmployeeWritePayload,
 } from "./client";
 import {
+  findOdooEmployeeMatch,
   matchOdooEmployeeToLocal,
+  normalizeEmailKey,
   normalizeOdooEmployee,
+  normalizePhoneKey,
   resolveEffectiveOdooAttendanceWindow,
   type LocalEmployeeCandidate,
 } from "./policy";
@@ -131,7 +137,7 @@ export async function syncEmployeesFromOdoo(): Promise<OdooEmployeeSyncSummary> 
     log.warn("Failed to refresh Odoo job title/department cache", { error: String(err) });
   });
 
-  const [existingEmployees, existingBranches] = await Promise.all([
+  const [existingEmployees, existingBranches, boundIdentities] = await Promise.all([
     prisma.employee.findMany({
       select: {
         id: true,
@@ -149,7 +155,13 @@ export async function syncEmployeesFromOdoo(): Promise<OdooEmployeeSyncSummary> 
     prisma.branch.findMany({
       select: { id: true, slug: true, name: true },
     }),
+    prisma.employeeDeviceIdentity.findMany({
+      where: { providerType: ProviderType.MOBILE_APP, revokedAt: null },
+      select: { employeeId: true },
+    }),
   ]);
+
+  const boundEmployeeIds = new Set(boundIdentities.map((b) => b.employeeId));
 
   const candidates: LocalEmployeeCandidate[] = existingEmployees.map((emp) => ({
     id: emp.id,
@@ -209,6 +221,15 @@ export async function syncEmployeesFromOdoo(): Promise<OdooEmployeeSyncSummary> 
 
       if (outcome.kind === "already_linked") {
         const current = existingEmployees.find((e) => e.id === outcome.localEmployeeId);
+        // Device-bound phone authority: if the staff member has an active bound
+        // mobile device, their Ops phone is verified and must NOT be overwritten
+        // by an outdated Odoo phone; instead push the verified phone back to Odoo.
+        const hasBoundPhone =
+          Boolean(current?.phone) && boundEmployeeIds.has(outcome.localEmployeeId);
+        const effectivePhone = hasBoundPhone
+          ? current!.phone
+          : (normalized.phone ?? current?.phone ?? null);
+
         await prisma.employee.update({
           where: { id: outcome.localEmployeeId },
           data: {
@@ -218,7 +239,7 @@ export async function syncEmployeesFromOdoo(): Promise<OdooEmployeeSyncSummary> 
             jobTitle: normalized.jobTitle ?? current?.jobTitle ?? null,
             department: current?.department ?? normalized.department,
             email: normalized.email ?? current?.email ?? null,
-            phone: normalized.phone ?? current?.phone ?? null,
+            phone: effectivePhone,
             ...(normalized.isActive
               ? {}
               : {
@@ -227,9 +248,34 @@ export async function syncEmployeesFromOdoo(): Promise<OdooEmployeeSyncSummary> 
                 }),
           },
         });
+
+        if (
+          hasBoundPhone &&
+          current?.phone &&
+          normalizePhoneKey(current.phone) !== normalizePhoneKey(normalized.phone)
+        ) {
+          const trimmedPhone = current.phone.trim();
+          await updateOdooEmployee(Number(normalized.odooEmployeeId), {
+            mobile_phone: trimmedPhone,
+            work_phone: trimmedPhone,
+          }).catch((err) => {
+            log.warn("Failed to push verified bound phone back to Odoo", {
+              employeeId: outcome.localEmployeeId,
+              odooEmployeeId: normalized.odooEmployeeId,
+              error: String(err),
+            });
+          });
+        }
+
         updatedExisting++;
       } else if (outcome.kind === "link_existing") {
         const current = existingEmployees.find((e) => e.id === outcome.localEmployeeId);
+        const hasBoundPhone =
+          Boolean(current?.phone) && boundEmployeeIds.has(outcome.localEmployeeId);
+        const effectivePhone = hasBoundPhone
+          ? current!.phone
+          : (normalized.phone ?? current?.phone ?? null);
+
         await prisma.employee.update({
           where: { id: outcome.localEmployeeId },
           data: {
@@ -238,7 +284,7 @@ export async function syncEmployeesFromOdoo(): Promise<OdooEmployeeSyncSummary> 
             jobTitle: normalized.jobTitle ?? current?.jobTitle ?? null,
             department: current?.department ?? normalized.department,
             email: normalized.email ?? current?.email ?? null,
-            phone: normalized.phone ?? current?.phone ?? null,
+            phone: effectivePhone,
             ...(normalized.isActive
               ? {}
               : {
@@ -247,6 +293,25 @@ export async function syncEmployeesFromOdoo(): Promise<OdooEmployeeSyncSummary> 
                 }),
           },
         });
+
+        if (
+          hasBoundPhone &&
+          current?.phone &&
+          normalizePhoneKey(current.phone) !== normalizePhoneKey(normalized.phone)
+        ) {
+          const trimmedPhone = current.phone.trim();
+          await updateOdooEmployee(Number(normalized.odooEmployeeId), {
+            mobile_phone: trimmedPhone,
+            work_phone: trimmedPhone,
+          }).catch((err) => {
+            log.warn("Failed to push verified bound phone back to Odoo on link", {
+              employeeId: outcome.localEmployeeId,
+              odooEmployeeId: normalized.odooEmployeeId,
+              error: String(err),
+            });
+          });
+        }
+
         const candidate = candidates.find((c) => c.id === outcome.localEmployeeId);
         if (candidate) {
           candidate.odooEmployeeId = normalized.odooEmployeeId;
@@ -720,13 +785,186 @@ export async function syncAttendanceToOdoo(
   };
 }
 
+export type PushEmployeeToOdooResult =
+  | { ok: true; action: "created" | "linked_and_updated" | "updated"; odooEmployeeId: string }
+  | { ok: false; skipped?: boolean; reason: string };
+
+/**
+ * Pushes a single Ops employee to Odoo (create or update) with strict
+ * duplicate protection:
+ * - If already linked (`odooEmployeeId` set), updates directly by Odoo ID.
+ * - If unlinked, requires at least a normalized phone or email and runs
+ *   search-before-create against Odoo (trimmed 9-digit phone & lowercased email).
+ *   If found, links the existing Odoo ID and updates it; otherwise creates in
+ *   Odoo and stores the returned `odooEmployeeId`.
+ * - Supports optional `imageBase64` (`image_1920`) for future mobile self-service.
+ * - Never throws on Odoo outages so HR operations in Ops stay unblocked.
+ */
+export async function pushEmployeeToOdoo(
+  employeeId: string,
+  options?: { imageBase64?: string },
+): Promise<PushEmployeeToOdooResult> {
+  const config = getOdooEnvConfig();
+  if (!config.baseUrl || config.authMode === "unconfigured") {
+    return { ok: false, skipped: true, reason: "Odoo API is not configured." };
+  }
+
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: {
+      id: true,
+      odooEmployeeId: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      jobTitle: true,
+      status: true,
+    },
+  });
+
+  if (!employee) {
+    return { ok: false, skipped: true, reason: "Employee not found." };
+  }
+
+  const trimmedName = `${employee.firstName.trim()} ${employee.lastName.trim()}`.trim();
+  const trimmedPhone = employee.phone?.trim() || null;
+  const trimmedEmail = normalizeEmailKey(employee.email);
+  const trimmedJobTitle = employee.jobTitle?.trim() || null;
+
+  const writePayload: OdooEmployeeWritePayload = {
+    name: trimmedName,
+    work_email: trimmedEmail ?? false,
+    mobile_phone: trimmedPhone ?? false,
+    work_phone: trimmedPhone ?? false,
+    job_title: trimmedJobTitle ?? false,
+    active: employee.status !== EmploymentStatus.TERMINATED,
+    ...(options?.imageBase64 ? { image_1920: options.imageBase64 } : {}),
+  };
+
+  try {
+    // Case 1: Already linked — update strictly by odooEmployeeId
+    if (employee.odooEmployeeId) {
+      const numericId = Number(employee.odooEmployeeId);
+      if (Number.isInteger(numericId) && numericId > 0) {
+        await updateOdooEmployee(numericId, writePayload);
+        return { ok: true, action: "updated", odooEmployeeId: employee.odooEmployeeId };
+      }
+    }
+
+    // Case 2: Unlinked — require normalized phone or email before auto-push
+    const phoneKey = normalizePhoneKey(trimmedPhone);
+    if (!phoneKey && !trimmedEmail) {
+      return {
+        ok: false,
+        skipped: true,
+        reason: "Skipping auto-push to Odoo: employee has neither phone nor email.",
+      };
+    }
+
+    // Search-before-create in Odoo using strict trimmed/normalized phone & email
+    const { records } = await fetchAllOdooEmployees();
+    const existingMatch = findOdooEmployeeMatch(
+      { phone: trimmedPhone, email: trimmedEmail },
+      records,
+    );
+
+    if (existingMatch) {
+      const matchedOdooId = String(existingMatch.record.id);
+      // Guard against linking an Odoo ID already claimed by another local employee
+      const claimedByOther = await prisma.employee.findFirst({
+        where: { odooEmployeeId: matchedOdooId, NOT: { id: employee.id } },
+        select: { id: true },
+      });
+      if (claimedByOther) {
+        log.warn("Odoo match already claimed by another local employee", {
+          employeeId: employee.id,
+          matchedOdooId,
+          claimedBy: claimedByOther.id,
+        });
+        return {
+          ok: false,
+          skipped: true,
+          reason: `Odoo employee #${matchedOdooId} is already linked to another record.`,
+        };
+      }
+
+      await prisma.employee.update({
+        where: { id: employee.id },
+        data: { odooEmployeeId: matchedOdooId },
+      });
+      await updateOdooEmployee(existingMatch.record.id, writePayload);
+      return { ok: true, action: "linked_and_updated", odooEmployeeId: matchedOdooId };
+    }
+
+    // Not found in Odoo — create new record and store returned Odoo ID immediately
+    const createdOdooId = await createOdooEmployee({
+      ...writePayload,
+      name: trimmedName,
+    });
+    const odooIdStr = String(createdOdooId);
+    await prisma.employee.update({
+      where: { id: employee.id },
+      data: { odooEmployeeId: odooIdStr },
+    });
+    return { ok: true, action: "created", odooEmployeeId: odooIdStr };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn("Non-blocking Odoo employee push failed (will retry in background)", {
+      employeeId: employee.id,
+      odooEmployeeId: employee.odooEmployeeId,
+      error: msg,
+    });
+    return { ok: false, reason: msg };
+  }
+}
+
+/**
+ * Background catch-up: pushes any active Ops employees created while Odoo was
+ * offline (odooEmployeeId is null, has phone or email) via search-before-create.
+ */
+export async function pushUnlinkedEmployeesToOdoo(limit = 50) {
+  const config = getOdooEnvConfig();
+  if (!config.baseUrl || config.authMode === "unconfigured") {
+    return { attempted: 0, created: 0, linked: 0, skipped: 0, failed: 0 };
+  }
+
+  const unlinked = await prisma.employee.findMany({
+    where: {
+      odooEmployeeId: null,
+      status: EmploymentStatus.ACTIVE,
+      OR: [{ phone: { not: null } }, { email: { not: null } }],
+    },
+    select: { id: true },
+    take: limit,
+    orderBy: { createdAt: "asc" },
+  });
+
+  let created = 0;
+  let linked = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const emp of unlinked) {
+    const res = await pushEmployeeToOdoo(emp.id);
+    if (res.ok) {
+      if (res.action === "created") created++;
+      else linked++;
+    } else if (res.skipped) {
+      skipped++;
+    } else {
+      failed++;
+    }
+  }
+
+  return { attempted: unlinked.length, created, linked, skipped, failed };
+}
+
 /**
  * End-of-day (12:00 AM midnight) cron workflow:
  * 1. Auto-close stale unclosed shifts and settle finished attendance days.
- * 2. Push completed attendance days (with approved overtime closing times) to Odoo.
- *
- * NOTE: Employee syncing is intentionally manual / discrepancy-driven and is NOT
- * run automatically at midnight to prevent any unwanted employee mutations.
+ * 2. Catch up any unlinked active Ops employees to Odoo (search-before-create).
+ * 3. Push completed attendance days (with approved overtime closing times) to Odoo.
  */
 export async function runNightlyOdooSyncSweep(now: Date = new Date()) {
   const autoClose = await autoCloseStaleDays(now).catch((err) => ({
@@ -735,12 +973,16 @@ export async function runNightlyOdooSyncSweep(now: Date = new Date()) {
   const settlement = await runDailySettlementSweep(now).catch((err) => ({
     error: String(err),
   }));
+  const unlinkedPush = await pushUnlinkedEmployeesToOdoo().catch((err) => ({
+    error: String(err),
+  }));
   const attendanceSync = await syncAttendanceToOdoo({ lookbackDays: 7 });
 
   return {
     timestamp: now.toISOString(),
     autoClose,
     settlement,
+    unlinkedPush,
     attendanceSync,
   };
 }

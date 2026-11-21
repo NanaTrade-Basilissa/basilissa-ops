@@ -3,15 +3,16 @@
  * the API makes is exhaustively testable. Client-safe.
  */
 
-export const APP_PLATFORMS = ["IOS", "ANDROID"] as const;
+export const APP_PLATFORMS = ["ANDROID", "IOS", "WEB"] as const;
 export type AppPlatformKey = (typeof APP_PLATFORMS)[number];
 
 export const UPDATE_MODES = ["FLEXIBLE", "REQUIRED"] as const;
 export type UpdateModeKey = (typeof UPDATE_MODES)[number];
 
 export const PLATFORM_LABELS: Record<AppPlatformKey, string> = {
-  IOS: "iOS",
   ANDROID: "Android",
+  IOS: "iOS",
+  WEB: "Web",
 };
 
 export const UPDATE_MODE_LABELS: Record<UpdateModeKey, string> = {

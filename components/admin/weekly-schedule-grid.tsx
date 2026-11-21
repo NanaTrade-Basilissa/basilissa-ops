@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { UserCheck } from "lucide-react";
+import { RotateCcw, Search, UserCheck } from "lucide-react";
 import { ScheduleExceptionType } from "@prisma/client";
 import { ScheduleOverrideDialog } from "@/components/admin/schedule-override-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { minutesToTime } from "@/lib/modules/employees/validation";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { dateKeyInZone } from "@/lib/platform/date";
@@ -57,6 +59,7 @@ export type WeeklyScheduleData = {
   branchId: string;
   branchName: string;
   autoRota: boolean;
+  schedulingMode?: "ROTATING_ROTA" | "FIXED_SCHEDULE";
   weekStartKey: string;
   days: DayColumn[];
   shifts: {
@@ -72,10 +75,15 @@ export type WeeklyScheduleData = {
 export function WeeklyScheduleGrid({
   data,
   canManage,
+  toolbarFilters,
+  toolbarActions,
 }: {
   data: WeeklyScheduleData;
   canManage: boolean;
+  toolbarFilters?: ReactNode;
+  toolbarActions?: ReactNode;
 }) {
+  const [search, setSearch] = useState("");
   const [selectedCell, setSelectedCell] = useState<{
     employeeId: string;
     employeeName: string;
@@ -91,6 +99,15 @@ export function WeeklyScheduleGrid({
   } | null>(null);
 
   const todayKey = dateKeyInZone(new Date(), DISPLAY_TIMEZONE);
+
+  const filteredEmployees = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return data.employees;
+    return data.employees.filter((emp) => {
+      const hay = `${emp.name} ${emp.employeeCode ?? ""} ${emp.jobTitle ?? ""} ${emp.patternName ?? ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [data.employees, search]);
 
   function handleCellClick(emp: EmployeeScheduleRow, day: DayColumn) {
     if (!canManage) return;
@@ -113,13 +130,49 @@ export function WeeklyScheduleGrid({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {/* Unified toolbar: Search + Branch + Week Navigator + Actions */}
+      <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative w-full shrink-0 sm:w-56 md:w-64">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="rota-search"
+              placeholder="Search employee, code, role..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-8 text-xs"
+            />
+          </div>
+
+          {search.trim() && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSearch("")}
+              className="h-9 gap-1.5 text-xs"
+              title="Clear search"
+            >
+              <RotateCcw className="size-3.5" />
+              Reset
+            </Button>
+          )}
+
+          {toolbarFilters}
+        </div>
+
+        {toolbarActions && (
+          <div className="flex items-center justify-end gap-2">{toolbarActions}</div>
+        )}
+      </div>
+
       <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
         <table className="w-full min-w-[920px] text-sm text-left border-collapse">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               <th scope="col" className="p-3.5 pl-4 w-56">
-                Employee ({data.employees.length})
+                Employee ({search.trim() ? `${filteredEmployees.length}/${data.employees.length}` : data.employees.length})
               </th>
               {data.days.map((day) => {
                 const isToday = day.dateKey === todayKey;
@@ -156,14 +209,16 @@ export function WeeklyScheduleGrid({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {data.employees.length === 0 ? (
+            {filteredEmployees.length === 0 ? (
               <tr>
                 <td colSpan={8} className="p-8 text-center text-muted-foreground">
-                  No active employees assigned to this branch.
+                  {search.trim()
+                    ? `No employees matching "${search.trim()}" at this branch.`
+                    : "No active employees assigned to this branch."}
                 </td>
               </tr>
             ) : (
-              data.employees.map((emp) => (
+              filteredEmployees.map((emp) => (
                 <tr key={emp.employeeId} className="hover:bg-muted/20 transition-colors">
                   <td className="p-3 pl-4 align-middle">
                     <Link

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { tableFeatures, useTable, FlexRender, type ColumnDef, type RowData } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, EmptyContent } from "@/components/ui/empty";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,6 +28,8 @@ export function DataTable<TData extends RowData>({
   emptyAction,
   onRowClick,
   getRowHref,
+  ariaLabel = "Data table",
+  pageSize: initialPageSize,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[];
   data: TData[];
@@ -34,15 +37,30 @@ export function DataTable<TData extends RowData>({
   emptyAction?: React.ReactNode;
   onRowClick?: (row: TData) => void;
   getRowHref?: (row: TData) => string;
+  ariaLabel?: string;
+  /** When set, enables standardized built-in client-side pagination with a row-size switcher. */
+  pageSize?: number;
 }) {
   const router = useRouter();
-  const table = useTable({ features: dataTableFeatures, columns, data });
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(initialPageSize ?? 20);
+  const clientPaginated = initialPageSize !== undefined;
+  const totalPages = clientPaginated ? Math.max(1, Math.ceil(data.length / pageSize)) : 1;
+  const safePage = Math.min(page, totalPages);
+
+  const visibleData = React.useMemo(() => {
+    if (!clientPaginated) return data;
+    const start = (safePage - 1) * pageSize;
+    return data.slice(start, start + pageSize);
+  }, [clientPaginated, data, safePage, pageSize]);
+
+  const table = useTable({ features: dataTableFeatures, columns, data: visibleData });
   const isClickable = Boolean(onRowClick || getRowHref);
 
   const handleRowClick = (e: React.MouseEvent, rowData: TData) => {
     // If click originated inside an interactive element, do not trigger row navigation
     const target = e.target as HTMLElement | null;
-    if (target?.closest("button, a, input, select, textarea, [role='menuitem'], [data-prevent-row-click]")) {
+    if (target?.closest("button, a, input, select, textarea, [role='menuitem'], [role='switch'], [data-prevent-row-click]")) {
       return;
     }
 
@@ -54,10 +72,16 @@ export function DataTable<TData extends RowData>({
   };
 
   return (
-    // Same container treatment as `Card` (rounded-xl, bg-card, a 1px ring
-    // rather than a hard border) so a table standing on its own looks like
-    // the same design system as one sitting inside a Card.
-    <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+    <div className="space-y-3">
+    {/* Same container treatment as `Card` (rounded-xl, bg-card, a 1px ring
+     * rather than a hard border) so a table standing on its own looks like
+     * the same design system as one sitting inside a Card. */}
+    <div
+      role="region"
+      aria-label={ariaLabel}
+      tabIndex={0}
+      className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -105,6 +129,21 @@ export function DataTable<TData extends RowData>({
           )}
         </TableBody>
       </Table>
+    </div>
+    {clientPaginated && data.length > 0 && (
+      <DataTablePagination
+        page={safePage}
+        totalPages={totalPages}
+        total={data.length}
+        pageSize={pageSize}
+        onPageChange={(next) => setPage(next)}
+        onPageSizeChange={(nextSize) => {
+          setPageSize(nextSize);
+          setPage(1);
+        }}
+        alwaysShow
+      />
+    )}
     </div>
   );
 }

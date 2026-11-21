@@ -5,6 +5,7 @@ import { can, requirePermission } from "@/lib/modules/identity/server";
 import { listPublicHolidays } from "@/lib/modules/attendance/server";
 import { HolidaysTable } from "@/components/admin/holidays-table";
 import { HolidayTopActions } from "@/components/admin/holiday-top-actions";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -32,8 +33,17 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Sea
   const estimated = holidays.filter((h) => !h.confirmed).length;
 
   return (
-    <div className="space-y-6 min-w-0 max-w-full">
-      <div className="flex flex-col gap-3 border-b border-border pb-3 sm:flex-row sm:items-center sm:justify-between">
+    <PageShell>
+      <PageHeader
+        title="Public Holidays"
+        description="Manage national and company-observed holidays that affect office-hour shift schedules."
+        actions={canEdit ? <HolidayTopActions year={year} /> : undefined}
+      />
+
+      <div className="flex items-center justify-between gap-3 rounded-xl bg-card px-3 py-2 ring-1 ring-foreground/10">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Calendar Year
+        </span>
         <div className="flex items-center gap-1">
           <Link
             href={`/admin/holidays?year=${year - 1}`}
@@ -42,7 +52,7 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Sea
           >
             <ChevronLeft className="size-4" />
           </Link>
-          <span className="min-w-14 text-center text-lg font-semibold tabular-nums">{year}</span>
+          <span className="min-w-14 text-center text-sm font-semibold tabular-nums">{year}</span>
           <Link
             href={`/admin/holidays?year=${year + 1}`}
             className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
@@ -51,7 +61,6 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Sea
             <ChevronRight className="size-4" />
           </Link>
         </div>
-        {canEdit && <HolidayTopActions year={year} />}
       </div>
 
       <Alert>
@@ -81,6 +90,6 @@ export default async function HolidaysPage({ searchParams }: { searchParams: Sea
       <p className="text-xs text-muted-foreground">
         The Ghana calendar does not include Republic Day (1 July). Add it by hand if it is observed.
       </p>
-    </div>
+    </PageShell>
   );
 }

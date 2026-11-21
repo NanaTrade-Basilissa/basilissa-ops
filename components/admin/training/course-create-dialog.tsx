@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Loader2, Sparkles, BookOpen, GraduationCap } from "lucide-react";
+import { Plus, Loader2, BookOpen, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,

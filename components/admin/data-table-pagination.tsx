@@ -53,8 +53,8 @@ export function DataTablePagination({
   const end = pageSize ? Math.min(total, Math.max(0, page * pageSize)) : total;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex items-center gap-4 text-xs tabular-nums text-muted-foreground">
         {pageSize ? (
           <span>
             Showing <strong className="text-foreground">{start}</strong> to{" "}

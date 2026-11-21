@@ -6,6 +6,7 @@ import { requireAnyBranchPermission, can } from "@/lib/modules/identity/server";
 import { Button } from "@/components/ui/button";
 import { DeviceDialog } from "@/components/admin/device-dialog";
 import { DevicesTable } from "@/components/admin/devices-table";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 import {
   Empty,
   EmptyContent,
@@ -51,30 +52,28 @@ export default async function DevicesPage() {
   }));
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Devices</h1>
-          <p className="text-sm text-muted-foreground">
-            Fingerprint terminals and the branch each one belongs to.
-          </p>
-        </div>
-        {canCreate && branches.length > 0 && (
-          <DeviceDialog
-            action={createDevice}
-            branches={branches}
-            submitLabel="Register device"
-            title="Register a device"
-            description="A terminal's branch is set once here — attendance from it resolves against this branch, never against wherever the punching employee happens to be assigned."
-            trigger={
-              <Button size="sm" className="h-9 gap-1.5 text-xs">
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Register device</span>
-              </Button>
-            }
-          />
-        )}
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Devices"
+        description="Fingerprint terminals and the branch each terminal reports attendance for."
+        actions={
+          canCreate && branches.length > 0 ? (
+            <DeviceDialog
+              action={createDevice}
+              branches={branches}
+              submitLabel="Register device"
+              title="Register a device"
+              description="A terminal's branch is set once here — attendance from it resolves against this branch, never against wherever the punching employee happens to be assigned."
+              trigger={
+                <Button size="sm" className="h-9 gap-1.5">
+                  <Plus className="size-4" />
+                  <span>Register device</span>
+                </Button>
+              }
+            />
+          ) : undefined
+        }
+      />
 
       {devices.length === 0 ? (
         <Empty className="border py-12">
@@ -98,6 +97,6 @@ export default async function DevicesPage() {
       ) : (
         <DevicesTable devices={rows} branches={branches} />
       )}
-    </div>
+    </PageShell>
   );
 }

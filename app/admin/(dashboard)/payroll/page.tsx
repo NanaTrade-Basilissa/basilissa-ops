@@ -4,8 +4,8 @@ import { dateKeyInZone } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { getTimesheetSummary } from "@/lib/modules/attendance/server";
-import { TimesheetFilters } from "@/components/admin/timesheet-filters";
 import { TimesheetsTable } from "@/components/admin/timesheets-table";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 
 export const metadata: Metadata = { title: "Payroll" };
 export const dynamic = "force-dynamic";
@@ -49,15 +49,17 @@ export default async function PayrollPage({ searchParams }: { searchParams: Sear
   ]);
 
   return (
-    <div className="space-y-6 min-w-0 max-w-full">
-      <TimesheetFilters
+    <PageShell>
+      <PageHeader
+        title="Payroll & Timesheets"
+        description="Review worked hours, approved overtime, and attendance totals per employee for payroll processing."
+      />
+      <TimesheetsTable
+        data={timesheetData}
         branches={branches}
-        startDate={startDate}
-        endDate={endDate}
         branchId={branchId}
         search={search}
       />
-      <TimesheetsTable data={timesheetData} />
-    </div>
+    </PageShell>
   );
 }

@@ -49,12 +49,21 @@ function employeeListWhere(scope: BranchScope, filters: EmployeeListFilters): Pr
   }
   if (filters.search?.trim()) {
     const q = filters.search.trim();
+    const digitsOnly = q.replace(/[\s()-]/g, "");
+    const phoneOrClauses: Prisma.EmployeeWhereInput[] = [
+      { phone: { contains: q, mode: "insensitive" } },
+    ];
+    // Handle local Ghana numbers (e.g. 024...) matching E.164 stored numbers (+23324...)
+    if (/^0\d{6,9}$/.test(digitsOnly)) {
+      phoneOrClauses.push({ phone: { contains: digitsOnly.slice(1), mode: "insensitive" } });
+    }
     clauses.push({
       OR: [
         { firstName: { contains: q, mode: "insensitive" } },
         { lastName: { contains: q, mode: "insensitive" } },
         { employeeCode: { contains: q, mode: "insensitive" } },
         { email: { contains: q, mode: "insensitive" } },
+        ...phoneOrClauses,
       ],
     });
   }
@@ -191,17 +200,20 @@ export async function listShiftAssignments(employeeId: string) {
 }
 
 export async function listShifts(scope?: BranchScope) {
-  let where: Prisma.ShiftWhereInput | undefined;
+  let where: Prisma.ShiftWhereInput = { deletedAt: null };
   if (scope) {
     switch (scope.kind) {
       case "branches":
-        where = { OR: [{ branchId: { in: scope.branchIds } }, { branchId: null }] };
+        where = {
+          deletedAt: null,
+          OR: [{ branchId: { in: scope.branchIds } }, { branchId: null }],
+        };
         break;
       case "none":
         where = { id: "__none__" };
         break;
       case "all":
-        where = undefined;
+        where = { deletedAt: null };
         break;
     }
   }
@@ -218,7 +230,7 @@ export async function listShifts(scope?: BranchScope) {
       unpaidBreakMinutes: true,
       offOnPublicHolidays: true,
       isActive: true,
-      _count: { select: { assignments: true } },
+      _count: { select: { assignments: { where: { validTo: null } } } },
     },
   });
 }

@@ -55,6 +55,15 @@ export type ExceptionLike = {
   overtimeMinutes?: number | null;
 };
 
+export type BranchFixedScheduleLike = {
+  /** Minutes from local midnight, 0-1439. */
+  startMinute: number;
+  endMinute: number;
+  /** ISO weekdays: 1 = Monday … 7 = Sunday. */
+  workDays: number[];
+  offOnPublicHolidays: boolean;
+};
+
 export type ScheduleInputs = {
   timeZone: string;
   shifts: readonly ShiftTemplate[];
@@ -68,6 +77,12 @@ export type ScheduleInputs = {
   holidays: ReadonlySet<string>;
   /** Required for the same reason: a forgotten pattern silently becomes 8-5. */
   patterns: readonly PatternLike[];
+  /**
+   * Present ONLY when the branch is explicitly configured in FIXED_SCHEDULE
+   * mode (e.g. Head Office 08:00–17:00 Mon–Fri). Null/undefined for all
+   * ROTATING_ROTA branches so unscheduled staff cannot clock in.
+   */
+  branchFixedSchedule?: BranchFixedScheduleLike | null;
 };
 
 export type ResolvedSchedule = {
@@ -80,7 +95,7 @@ export type ResolvedSchedule = {
   unpaidBreakMinutes: number;
   /** True when the shift runs past local midnight. */
   crossesMidnight: boolean;
-  source: "exception" | "pattern" | "assignment";
+  source: "exception" | "pattern" | "assignment" | "branch_fixed";
   /** Set when the day is a cover shift at another branch. */
   coverBranchId: string | null;
   /** True when the employee is scheduled to work remotely (WFH) on this day. */
@@ -263,14 +278,35 @@ export function resolveScheduleForDate(
     // Most recently effective wins, so overlapping assignments are deterministic.
     .sort((a, b) => b.validFrom.getTime() - a.validFrom.getTime())[0];
 
-  if (!assignment) return null;
+  if (assignment) {
+    const shift = findShift(shifts, assignment.shiftId);
+    if (!shift) return null;
+    if (shift.offOnPublicHolidays && inputs.holidays.has(workDateKey)) return null;
+    const built = build(shift, workDateKey, timeZone, "assignment");
+    const isRemote = Boolean(assignment.remoteDaysOfWeek?.includes(weekday));
+    return isRemote ? { ...built, isRemote: true } : built;
+  }
 
-  const shift = findShift(shifts, assignment.shiftId);
-  if (!shift) return null;
-  if (shift.offOnPublicHolidays && inputs.holidays.has(workDateKey)) return null;
-  const built = build(shift, workDateKey, timeZone, "assignment");
-  const isRemote = Boolean(assignment.remoteDaysOfWeek?.includes(weekday));
-  return isRemote ? { ...built, isRemote: true } : built;
+  // Fallback ONLY for branches explicitly configured in FIXED_SCHEDULE mode
+  const fixed = inputs.branchFixedSchedule;
+  if (fixed && fixed.workDays.includes(weekday)) {
+    if (fixed.offOnPublicHolidays && inputs.holidays.has(workDateKey)) return null;
+    return build(
+      {
+        id: "branch-fixed",
+        name: "Fixed Schedule",
+        startMinute: fixed.startMinute,
+        endMinute: fixed.endMinute,
+        unpaidBreakMinutes: 0,
+        offOnPublicHolidays: fixed.offOnPublicHolidays,
+      },
+      workDateKey,
+      timeZone,
+      "branch_fixed",
+    );
+  }
+
+  return null;
 }
 
 /**

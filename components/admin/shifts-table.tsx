@@ -1,13 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search, RotateCcw } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Pencil, RotateCcw, Search, Trash2 } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
+import { toast } from "sonner";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
-import { updateShift } from "@/lib/modules/employees/actions";
+import { StatusBadge } from "@/components/admin/status-badge";
+import { TableRowActions, type TableRowActionItem } from "@/components/admin/table-row-actions";
+import { softDeleteShiftAction, updateShift } from "@/lib/modules/employees/actions";
 import { ShiftDialog } from "@/components/admin/shift-dialog";
-import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -32,49 +45,6 @@ export type ShiftRow = {
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, ShiftRow>();
 
-const columns = columnHelper.columns([
-  columnHelper.display({
-    id: "name",
-    header: "Name",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <span className="font-medium text-foreground underline-offset-4 hover:underline">
-          {row.original.name}
-        </span>
-        {!row.original.isActive && (
-          <Badge variant="outline" className="text-xs">
-            inactive
-          </Badge>
-        )}
-      </div>
-    ),
-  }),
-  columnHelper.display({
-    id: "hours",
-    header: "Hours",
-    cell: ({ row }) => (
-      <span className="text-sm font-medium">
-        {row.original.hoursLabel}
-        {row.original.overnight && (
-          <span className="ml-1 text-xs text-muted-foreground font-normal">(overnight)</span>
-        )}
-      </span>
-    ),
-  }),
-  columnHelper.accessor("breakLabel", {
-    header: "Break",
-    cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue()}</span>,
-  }),
-  columnHelper.accessor("branchLabel", {
-    header: "Branch",
-    cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue()}</span>,
-  }),
-  columnHelper.accessor("assignmentCount", {
-    header: "In use",
-    cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue()}</span>,
-  }),
-]);
-
 export function ShiftsTable({
   shifts,
   branches,
@@ -86,12 +56,105 @@ export function ShiftsTable({
   allowGlobal?: boolean;
   actionSlot?: React.ReactNode;
 }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(20);
   const [editingShift, setEditingShift] = useState<ShiftRow | null>(null);
+  const [deletingShift, setDeletingShift] = useState<ShiftRow | null>(null);
+
+  function handleConfirmDelete() {
+    if (!deletingShift) return;
+    const target = deletingShift;
+    startTransition(async () => {
+      const res = await softDeleteShiftAction(target.id);
+      if (res.ok) {
+        toast.success(`Shift template "${target.name}" deleted.`);
+        setDeletingShift(null);
+        router.refresh();
+      } else {
+        toast.error(res.error || "Failed to delete shift template.");
+      }
+    });
+  }
+
+  const columns = useMemo(
+    () =>
+      columnHelper.columns([
+        columnHelper.display({
+          id: "name",
+          header: "Name",
+          cell: ({ row }) => (
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-foreground underline-offset-4 hover:underline">
+                {row.original.name}
+              </span>
+              {!row.original.isActive && <StatusBadge tone="neutral">Inactive</StatusBadge>}
+            </div>
+          ),
+        }),
+        columnHelper.display({
+          id: "hours",
+          header: "Hours",
+          cell: ({ row }) => (
+            <span className="text-sm font-medium tabular-nums">
+              {row.original.hoursLabel}
+              {row.original.overnight && (
+                <span className="ml-1 text-xs font-normal text-muted-foreground">(overnight)</span>
+              )}
+            </span>
+          ),
+        }),
+        columnHelper.accessor("breakLabel", {
+          header: "Break",
+          cell: (info) => <span className="text-sm tabular-nums text-muted-foreground">{info.getValue()}</span>,
+        }),
+        columnHelper.accessor("branchLabel", {
+          header: "Branch",
+          cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue()}</span>,
+        }),
+        columnHelper.accessor("assignmentCount", {
+          header: "In use",
+          cell: (info) => <span className="text-sm tabular-nums text-muted-foreground">{info.getValue()}</span>,
+        }),
+        columnHelper.display({
+          id: "actions",
+          header: "",
+          cell: ({ row }) => {
+            const shift = row.original;
+            if (!shift.canEdit) return null;
+            const actions: TableRowActionItem[] = [
+              {
+                id: "edit",
+                label: "Edit shift",
+                icon: Pencil,
+                onSelect: () => setEditingShift(shift),
+              },
+              ...(shift.assignmentCount === 0
+                ? [
+                    {
+                      id: "delete",
+                      label: "Delete template",
+                      icon: Trash2,
+                      variant: "destructive",
+                      onSelect: () => setDeletingShift(shift),
+                    } satisfies TableRowActionItem,
+                  ]
+                : []),
+            ];
+            return (
+              <div className="flex justify-end">
+                <TableRowActions actions={actions} />
+              </div>
+            );
+          },
+        }),
+      ]),
+    [],
+  );
 
   const filteredShifts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -117,7 +180,7 @@ export function ShiftsTable({
   const hasFilters = search.trim() !== "" || branchFilter !== "ALL" || statusFilter !== "ALL";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <FilterBar
         hasActiveFilters={hasFilters}
         search={
@@ -215,7 +278,34 @@ export function ShiftsTable({
           setPageSize(newSize);
           setPage(1);
         }}
+        alwaysShow={filteredShifts.length > 0}
       />
+
+      <AlertDialog
+        open={Boolean(deletingShift)}
+        onOpenChange={(open) => {
+          if (!open) setDeletingShift(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete shift template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{deletingShift?.name}&rdquo; will be removed from active templates. Existing historical records are preserved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {editingShift && (
         <ShiftDialog

@@ -3,8 +3,8 @@
 import { createColumnHelper } from "@tanstack/react-table";
 import type { AptitudeTestStatus } from "@prisma/client";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { STATUS_LABEL } from "@/lib/modules/aptitude/constants";
-import { Badge } from "@/components/ui/badge";
 import { formatAccraDateTime } from "@/lib/platform/date";
 
 export type AptitudeTestRow = {
@@ -29,9 +29,11 @@ const columns = columnHelper.columns([
   }),
   columnHelper.accessor("status", {
     header: "Status",
-    cell: (info) => (
-      <Badge variant={info.getValue() === "PUBLISHED" ? "default" : "outline"}>{STATUS_LABEL[info.getValue()]}</Badge>
-    ),
+    cell: (info) => {
+      const s = info.getValue();
+      const tone = s === "PUBLISHED" ? "good" : s === "DRAFT" ? "warning" : "neutral";
+      return <StatusBadge tone={tone}>{STATUS_LABEL[s]}</StatusBadge>;
+    },
   }),
   columnHelper.accessor((row) => row._count.sections, {
     id: "sections",

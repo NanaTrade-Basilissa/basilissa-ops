@@ -5,15 +5,10 @@ import Link from "next/link";
 import { MessageSquareText } from "lucide-react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { InspectorSheet } from "@/components/admin/inspector-sheet";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { Badge, ratingBadgeVariant } from "@/components/ui/badge";
 import { formatAccraDateTime } from "@/lib/platform/date";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 
 export type FeedbackRow = {
   id: string;
@@ -56,14 +51,10 @@ const columns = columnHelper.columns([
             {row.original.branch.name}
           </Link>
           {hasComment && (
-            <Badge
-              variant="outline"
-              className="gap-1 border-blue-200 bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0"
-              title="Includes written comment"
-            >
-              <MessageSquareText className="size-2.5" />
+            <StatusBadge tone="info" title="Includes written comment">
+              <MessageSquareText className="size-3" />
               <span>Note</span>
-            </Badge>
+            </StatusBadge>
           )}
         </div>
       );
@@ -87,74 +78,76 @@ export function FeedbackTable({ submissions }: { submissions: FeedbackRow[] }) {
       <DataTable
         columns={columns}
         data={submissions}
+        ariaLabel="Customer feedback submissions"
         emptyMessage="No submissions match the selected filters."
         onRowClick={(row) => setSelectedSubmission(row)}
       />
 
-      <Sheet open={!!selectedSubmission} onOpenChange={(open) => !open && setSelectedSubmission(null)}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
-          {selectedSubmission && (
-            <>
-              <SheetHeader>
-                <div className="flex items-center justify-between gap-2 pr-6">
-                  <SheetTitle>Feedback Details</SheetTitle>
-                  <Badge variant={ratingBadgeVariant(Math.round(selectedSubmission.overallScore))}>
-                    {selectedSubmission.overallScore.toFixed(1)} / 5
-                  </Badge>
-                </div>
-                <SheetDescription>
-                  {selectedSubmission.branch.name} · {formatAccraDateTime(selectedSubmission.submittedAt)}
-                </SheetDescription>
-              </SheetHeader>
+      <InspectorSheet
+        open={!!selectedSubmission}
+        onOpenChange={(open) => !open && setSelectedSubmission(null)}
+        title="Feedback Details"
+        description={
+          selectedSubmission
+            ? `${selectedSubmission.branch.name} · ${formatAccraDateTime(selectedSubmission.submittedAt)}`
+            : undefined
+        }
+        badge={
+          selectedSubmission ? (
+            <Badge variant={ratingBadgeVariant(Math.round(selectedSubmission.overallScore))}>
+              {selectedSubmission.overallScore.toFixed(1)} / 5
+            </Badge>
+          ) : undefined
+        }
+        size="sm"
+      >
+        {selectedSubmission && (
+          <div className="space-y-4 text-sm">
+            <div className="rounded-lg border border-border/70 bg-muted/40 px-3 py-2 font-mono text-xs">
+              <span className="text-muted-foreground">ID:</span> {selectedSubmission.id}
+            </div>
 
-              <div className="space-y-4 px-4 py-2 text-sm">
-                <div className="rounded-md border p-2.5 bg-muted/40 font-mono text-xs">
-                  <span className="text-muted-foreground">ID:</span> {selectedSubmission.id}
-                </div>
-
-                <div className="space-y-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Survey Responses
-                  </h4>
-                  {selectedSubmission.answers && selectedSubmission.answers.length > 0 ? (
-                    <div className="divide-y divide-border rounded-lg border bg-card">
-                      {selectedSubmission.answers.map((a) => {
-                        const isText = a.question.type === "TEXT" || a.score === null;
-                        return (
-                          <div key={a.id} className="p-3 space-y-1.5">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="space-y-0.5">
-                                <span className="text-xs font-mono text-muted-foreground">Q{a.question.order}</span>
-                                <p className="text-xs font-medium text-foreground">{a.question.text}</p>
-                              </div>
-                              {!isText && a.score !== null && (
-                                <Badge variant={ratingBadgeVariant(a.score)} className="shrink-0 font-mono">
-                                  {a.score} / 5
-                                </Badge>
-                              )}
-                            </div>
-                            {isText && (
-                              <div className="rounded-md border border-border/70 bg-muted/40 p-2.5 text-xs text-foreground whitespace-pre-wrap">
-                                {a.textResponse && a.textResponse.trim().length > 0 ? (
-                                  a.textResponse
-                                ) : (
-                                  <span className="italic text-muted-foreground">No response provided</span>
-                                )}
-                              </div>
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Survey Responses
+              </h4>
+              {selectedSubmission.answers && selectedSubmission.answers.length > 0 ? (
+                <div className="divide-y divide-border rounded-lg border bg-card">
+                  {selectedSubmission.answers.map((a) => {
+                    const isText = a.question.type === "TEXT" || a.score === null;
+                    return (
+                      <div key={a.id} className="space-y-1.5 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <span className="font-mono text-xs text-muted-foreground">Q{a.question.order}</span>
+                            <p className="text-xs font-medium text-foreground">{a.question.text}</p>
+                          </div>
+                          {!isText && a.score !== null && (
+                            <Badge variant={ratingBadgeVariant(a.score)} className="shrink-0 font-mono">
+                              {a.score} / 5
+                            </Badge>
+                          )}
+                        </div>
+                        {isText && (
+                          <div className="whitespace-pre-wrap rounded-md border border-border/70 bg-muted/40 p-2.5 text-xs text-foreground">
+                            {a.textResponse && a.textResponse.trim().length > 0 ? (
+                              a.textResponse
+                            ) : (
+                              <span className="italic text-muted-foreground">No response provided</span>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground italic">No detailed question responses available.</p>
-                  )}
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
+              ) : (
+                <p className="text-xs italic text-muted-foreground">No detailed question responses available.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </InspectorSheet>
     </>
   );
 }

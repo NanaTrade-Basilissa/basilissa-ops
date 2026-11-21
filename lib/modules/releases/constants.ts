@@ -3,7 +3,7 @@ export * from "./version";
 
 export type AppReleaseItem = {
   id: string;
-  platform: "IOS" | "ANDROID";
+  platform: "IOS" | "ANDROID" | "WEB";
   version: string;
   updateMode: "FLEXIBLE" | "REQUIRED";
   releaseNotes: string | null;

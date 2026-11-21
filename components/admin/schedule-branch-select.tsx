@@ -15,20 +15,21 @@ export function ScheduleBranchSelect({
   const router = useRouter();
 
   return (
-    <div className="space-y-1.5 min-w-48">
-      <NativeSelect
-        id="branchSelect"
-        value={selectedBranchId}
-        onChange={(e) => {
-          router.replace(`/admin/shifts?tab=schedule&branchId=${e.target.value}&week=${week}`);
-        }}
-      >
-        {branches.map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.name}
-          </option>
-        ))}
-      </NativeSelect>
-    </div>
+    <NativeSelect
+      id="branchSelect"
+      aria-label="Select branch"
+      value={selectedBranchId}
+      onChange={(e) => {
+        router.replace(`/admin/shifts?tab=schedule&branchId=${e.target.value}&week=${week}`);
+      }}
+      className="h-9 text-xs"
+      containerClassName="w-full sm:w-fit sm:min-w-[170px] sm:shrink-0"
+    >
+      {branches.map((b) => (
+        <option key={b.id} value={b.id}>
+          {b.name}
+        </option>
+      ))}
+    </NativeSelect>
   );
 }

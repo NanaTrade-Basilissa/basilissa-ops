@@ -119,7 +119,7 @@ export function TableRowActions({
           <MoreVertical className="size-4" />
           <span className="sr-only">Actions</span>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align={align} className="min-w-36">
+        <DropdownMenuContent align={align} className="w-max min-w-48 max-w-64">
           {actions.map((action, idx) => {
             const Icon = action.icon;
 
@@ -129,7 +129,7 @@ export function TableRowActions({
                   key={action.id ?? idx}
                   variant={action.variant}
                   disabled={action.disabled}
-                  render={<Link href={action.href} className="flex w-full items-center gap-2" />}
+                  render={<Link href={action.href} className="flex w-full items-center gap-2 whitespace-nowrap" />}
                 >
                   {Icon && <Icon className="size-3.5 shrink-0" />}
                   <span>{action.label}</span>
@@ -149,7 +149,7 @@ export function TableRowActions({
                     (action.onClick ?? action.onSelect)!();
                   }
                 }}
-                className="gap-2"
+                className="gap-2 whitespace-nowrap"
               >
                 {Icon && <Icon className="size-3.5 shrink-0" />}
                 <span>{action.label}</span>

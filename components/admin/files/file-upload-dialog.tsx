@@ -11,7 +11,7 @@ import {
   X,
   Lock,
   Globe,
-  Sparkles,
+  Zap,
   AlertCircle,
 } from "lucide-react";
 import {
@@ -565,7 +565,7 @@ export function FileUploadDialog({
           <div className="flex items-center justify-between rounded-xl border p-4 bg-card">
             <div className="space-y-0.5">
               <div className="flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-amber-500" />
+                <Zap className="h-4 w-4 text-primary" />
                 <span className="text-xs font-semibold">
                   {isPresentation
                     ? "Pre-render Slides for TV Auto-Slide & Instant Display"

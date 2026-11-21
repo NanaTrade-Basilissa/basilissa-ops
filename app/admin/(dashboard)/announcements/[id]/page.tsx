@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, CheckCheck, ChevronLeft, Mail, MessageSquare, RotateCw, Smartphone, Users } from "lucide-react";
+import { AlertTriangle, CheckCheck, Mail, MessageSquare, RotateCw, Smartphone, Users } from "lucide-react";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { clearUrgentBannerAction, retryFailedDeliveriesAction } from "@/lib/modules/announcements/actions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getAnnouncementDetail } from "@/lib/modules/announcements/server";
 import { AUDIENCE_LABELS } from "@/lib/modules/announcements/constants";
 import { AnnouncementRecipientsTable } from "@/components/admin/announcement-recipients-table";
 import { formatSent } from "@/components/admin/announcement-format";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 import { StatCard } from "@/components/admin/stat-card";
+import { StatusBadge } from "@/components/admin/status-badge";
 
 export const metadata: Metadata = { title: "Announcement" };
 export const dynamic = "force-dynamic";
@@ -33,27 +33,20 @@ export default async function AnnouncementDetailPage({ params }: { params: Param
   const readPercent = counts.recipients === 0 ? 0 : Math.round((counts.read / counts.recipients) * 100);
 
   return (
-    <div className="space-y-6 min-w-0 max-w-full">
-      <div className="space-y-1 border-b border-border pb-3">
-        <Link
-          href="/admin/announcements"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-4" />
-          Announcements
-        </Link>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-lg font-semibold">{detail.title}</h1>
-          {detail.isUrgent && (
-            <Badge variant={detail.bannerActive ? "destructive" : "outline"}>
-              {detail.bannerActive ? "Urgent, banner up" : "Urgent"}
-            </Badge>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Sent {formatSent(detail.createdAt)} by {detail.createdByName} · {AUDIENCE_LABELS[detail.audienceKind].label}
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        backHref="/admin/announcements"
+        backLabel="Announcements"
+        title={detail.title}
+        badge={
+          detail.isUrgent ? (
+            <StatusBadge tone={detail.bannerActive ? "critical" : "warning"} dot>
+              {detail.bannerActive ? "Urgent · Banner live" : "Urgent"}
+            </StatusBadge>
+          ) : undefined
+        }
+        description={`Sent ${formatSent(detail.createdAt)} by ${detail.createdByName} · ${AUDIENCE_LABELS[detail.audienceKind].label}`}
+      />
 
       {detail.bannerActive && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
@@ -103,6 +96,6 @@ export default async function AnnouncementDetailPage({ params }: { params: Param
       </div>
 
       <AnnouncementRecipientsTable rows={detail.recipients} showPush={detail.sendPush} showSms={detail.sendSms} showEmail={detail.sendEmail} showAck={detail.requiresAck} />
-    </div>
+    </PageShell>
   );
 }

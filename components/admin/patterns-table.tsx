@@ -194,6 +194,8 @@ export function PatternsTable({
       <DataTable
         columns={columns}
         data={patterns}
+        ariaLabel="Rota patterns"
+        pageSize={20}
         emptyMessage="No rota patterns yet. Create one, then assign people to it from the Weekly Rota."
       />
 
