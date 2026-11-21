@@ -297,6 +297,7 @@ const schedulingModeSchema = z.object({
   schedulingMode: z.enum(["ROTATING_ROTA", "FIXED_SCHEDULE"]),
   fixedShiftStartMinute: z.number().int().min(0).max(1439).nullable(),
   fixedShiftEndMinute: z.number().int().min(0).max(1439).nullable(),
+  fixedUnpaidBreakMinutes: z.number().int().min(0).max(480).default(0),
   fixedWorkDays: z.array(z.number().int().min(1).max(7)).min(1, "Select at least one working day."),
   fixedOffOnPublicHolidays: z.boolean(),
 });
@@ -306,6 +307,7 @@ export async function updateBranchSchedulingModeAction(input: {
   schedulingMode: "ROTATING_ROTA" | "FIXED_SCHEDULE";
   fixedShiftStartMinute: number | null;
   fixedShiftEndMinute: number | null;
+  fixedUnpaidBreakMinutes?: number;
   fixedWorkDays: number[];
   fixedOffOnPublicHolidays: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
@@ -319,6 +321,7 @@ export async function updateBranchSchedulingModeAction(input: {
     schedulingMode,
     fixedShiftStartMinute,
     fixedShiftEndMinute,
+    fixedUnpaidBreakMinutes,
     fixedWorkDays,
     fixedOffOnPublicHolidays,
   } = parsed.data;
@@ -340,6 +343,7 @@ export async function updateBranchSchedulingModeAction(input: {
         schedulingMode,
         fixedShiftStartMinute: schedulingMode === "FIXED_SCHEDULE" ? fixedShiftStartMinute : before.fixedShiftStartMinute,
         fixedShiftEndMinute: schedulingMode === "FIXED_SCHEDULE" ? fixedShiftEndMinute : before.fixedShiftEndMinute,
+        fixedUnpaidBreakMinutes: schedulingMode === "FIXED_SCHEDULE" ? fixedUnpaidBreakMinutes : before.fixedUnpaidBreakMinutes,
         fixedWorkDays: schedulingMode === "FIXED_SCHEDULE" ? [...new Set(fixedWorkDays)].sort((a, b) => a - b) : before.fixedWorkDays,
         fixedOffOnPublicHolidays,
       },
@@ -355,6 +359,7 @@ export async function updateBranchSchedulingModeAction(input: {
           schedulingMode: before.schedulingMode,
           fixedShiftStartMinute: before.fixedShiftStartMinute,
           fixedShiftEndMinute: before.fixedShiftEndMinute,
+          fixedUnpaidBreakMinutes: before.fixedUnpaidBreakMinutes,
           fixedWorkDays: before.fixedWorkDays,
           fixedOffOnPublicHolidays: before.fixedOffOnPublicHolidays,
         },
@@ -362,6 +367,7 @@ export async function updateBranchSchedulingModeAction(input: {
           schedulingMode: after.schedulingMode,
           fixedShiftStartMinute: after.fixedShiftStartMinute,
           fixedShiftEndMinute: after.fixedShiftEndMinute,
+          fixedUnpaidBreakMinutes: after.fixedUnpaidBreakMinutes,
           fixedWorkDays: after.fixedWorkDays,
           fixedOffOnPublicHolidays: after.fixedOffOnPublicHolidays,
         },

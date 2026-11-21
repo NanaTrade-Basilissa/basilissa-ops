@@ -297,6 +297,7 @@ model Branch {
   schedulingMode           BranchSchedulingMode @default(ROTATING_ROTA)
   fixedShiftStartMinute    Int?
   fixedShiftEndMinute      Int?
+  fixedUnpaidBreakMinutes  Int                  @default(0)
   fixedWorkDays            Int[]                @default([1, 2, 3, 4, 5])
   fixedOffOnPublicHolidays Boolean              @default(true)
 

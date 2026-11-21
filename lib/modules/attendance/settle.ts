@@ -36,6 +36,7 @@ export async function loadScheduleInputs(
         schedulingMode: true,
         fixedShiftStartMinute: true,
         fixedShiftEndMinute: true,
+        fixedUnpaidBreakMinutes: true,
         fixedWorkDays: true,
         fixedOffOnPublicHolidays: true,
       },
@@ -63,6 +64,7 @@ export async function loadScheduleInputs(
       ? {
           startMinute: branch.fixedShiftStartMinute,
           endMinute: branch.fixedShiftEndMinute,
+          unpaidBreakMinutes: branch.fixedUnpaidBreakMinutes,
           workDays: branch.fixedWorkDays,
           offOnPublicHolidays: branch.fixedOffOnPublicHolidays,
         }

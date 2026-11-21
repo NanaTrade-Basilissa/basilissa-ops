@@ -35,6 +35,7 @@ export function BranchSchedulingCard({
     schedulingMode: "ROTATING_ROTA" | "FIXED_SCHEDULE";
     fixedShiftStartMinute: number | null;
     fixedShiftEndMinute: number | null;
+    fixedUnpaidBreakMinutes: number;
     fixedWorkDays: number[];
     fixedOffOnPublicHolidays: boolean;
   };
@@ -49,6 +50,9 @@ export function BranchSchedulingCard({
   );
   const [endTime, setEndTime] = useState(
     branch.fixedShiftEndMinute !== null ? minutesToTime(branch.fixedShiftEndMinute) : "17:00",
+  );
+  const [unpaidBreakMinutes, setUnpaidBreakMinutes] = useState<string>(
+    String(branch.fixedUnpaidBreakMinutes ?? 0),
   );
   const [workDays, setWorkDays] = useState<number[]>(
     branch.fixedWorkDays.length > 0 ? branch.fixedWorkDays : [1, 2, 3, 4, 5],
@@ -71,9 +75,18 @@ export function BranchSchedulingCard({
 
     const startMinute = mode === "FIXED_SCHEDULE" ? timeToMinutes(startTime) : null;
     const endMinute = mode === "FIXED_SCHEDULE" ? timeToMinutes(endTime) : null;
+    const parsedBreak = unpaidBreakMinutes.trim() === "" ? 0 : Number.parseInt(unpaidBreakMinutes, 10);
 
     if (mode === "FIXED_SCHEDULE" && (startMinute === null || endMinute === null)) {
       toast.error("Please enter valid start and end times.");
+      return;
+    }
+
+    if (
+      mode === "FIXED_SCHEDULE" &&
+      (!Number.isFinite(parsedBreak) || parsedBreak < 0 || parsedBreak > 480)
+    ) {
+      toast.error("Unpaid break must be between 0 and 480 minutes.");
       return;
     }
 
@@ -83,6 +96,7 @@ export function BranchSchedulingCard({
         schedulingMode: mode,
         fixedShiftStartMinute: startMinute,
         fixedShiftEndMinute: endMinute,
+        fixedUnpaidBreakMinutes: mode === "FIXED_SCHEDULE" ? parsedBreak : branch.fixedUnpaidBreakMinutes,
         fixedWorkDays: workDays,
         fixedOffOnPublicHolidays: offOnHolidays,
       });
@@ -143,7 +157,7 @@ export function BranchSchedulingCard({
           </p>
         ) : (
           <div className="space-y-4 rounded-xl border border-border/70 bg-muted/25 p-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="fixed-start" className="text-xs text-muted-foreground">
                   Start Time
@@ -154,6 +168,24 @@ export function BranchSchedulingCard({
                   value={startTime}
                   disabled={!canWrite || isPending}
                   onChange={(e) => setStartTime(e.target.value)}
+                  className="h-9 text-xs tabular-nums"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="fixed-unpaid-break" className="text-xs text-muted-foreground">
+                  Unpaid Break (min)
+                </Label>
+                <Input
+                  id="fixed-unpaid-break"
+                  type="number"
+                  min={0}
+                  max={480}
+                  step={5}
+                  value={unpaidBreakMinutes}
+                  disabled={!canWrite || isPending}
+                  onChange={(e) => setUnpaidBreakMinutes(e.target.value)}
+                  placeholder="0"
                   className="h-9 text-xs tabular-nums"
                 />
               </div>

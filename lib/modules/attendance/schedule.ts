@@ -59,6 +59,8 @@ export type BranchFixedScheduleLike = {
   /** Minutes from local midnight, 0-1439. */
   startMinute: number;
   endMinute: number;
+  /** Unpaid break minutes deducted from shift duration (0 = no unpaid break). */
+  unpaidBreakMinutes?: number;
   /** ISO weekdays: 1 = Monday … 7 = Sunday. */
   workDays: number[];
   offOnPublicHolidays: boolean;
@@ -297,7 +299,7 @@ export function resolveScheduleForDate(
         name: "Fixed Schedule",
         startMinute: fixed.startMinute,
         endMinute: fixed.endMinute,
-        unpaidBreakMinutes: 0,
+        unpaidBreakMinutes: fixed.unpaidBreakMinutes ?? 0,
         offOnPublicHolidays: fixed.offOnPublicHolidays,
       },
       workDateKey,
