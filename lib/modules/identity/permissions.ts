@@ -223,11 +223,11 @@ export const PERMISSION_REGISTRY = {
     },
   },
   leave: {
-    label: "Leave Management",
-    description: "Annual leave planning windows, busy weeks, branch quotas, and sick/leave approvals",
+    label: "Time Off & Leave",
+    description: "Time-off approvals, annual leave windows, busy weeks, and branch staffing limits",
     actions: {
-      read: { label: "View", description: "View leave requests, balances, and annual leave schedules" },
-      approve: { label: "Approve", description: "Approve or decline staff leave requests" },
+      read: { label: "View", description: "View time-off requests, balances, and annual leave schedules" },
+      approve: { label: "Approve Time Off", description: "Approve or decline staff time-off and leave requests" },
       manage: { label: "Manage", description: "Configure annual leave windows, busy months/weeks, branch quotas, and auto-scheduler" },
     },
   },

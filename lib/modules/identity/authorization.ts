@@ -203,6 +203,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "announcement:write",
     "meals:read",
     "meals:write",
+    "leave:read",
+    "leave:approve",
   ],
 
   // Same powers as a branch manager, across every branch they hold an
@@ -225,6 +227,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "announcement:write",
     "meals:read",
     "meals:write",
+    "leave:read",
+    "leave:approve",
   ],
 
   // Owns people, not systems. No branch or question configuration.
@@ -250,6 +254,11 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "announcement:write",
     "training:read",
     "training:write",
+    "leave:read",
+    "leave:approve",
+    "leave:manage",
+    "payroll:read",
+    "payroll:export",
   ],
 
   // Owns system configuration and user management (except Super Admin).
@@ -392,8 +401,8 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "training:read": ["training:read"],
   "training:write": ["training:create", "training:update", "training:delete", "training:publish", "training:assign"],
   "leave:read": ["leave:read", "attendance:read"],
-  "leave:approve": ["leave:approve", "attendance:approve"],
-  "leave:manage": ["leave:manage", "attendance:update"],
+  "leave:approve": ["leave:approve"],
+  "leave:manage": ["leave:manage"],
   "payroll:read": ["payroll:read", "attendance:read"],
   "payroll:export": ["payroll:export", "attendance:export"],
   "audit:read": ["audit:read", "users:read"],

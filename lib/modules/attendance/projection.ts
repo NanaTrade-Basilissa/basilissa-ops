@@ -288,11 +288,9 @@ export function projectDay(input: ProjectionInput): ProjectedDay {
     if (flags.has("AUTO_CLOSED")) overtimeMinutes = 0;
   }
 
-  // Overtime nobody has authorised yet. Raised after the AUTO_CLOSED zeroing
-  // above, so an auto-closed day is not asked to approve time it never earns.
-  if (overtimeMinutes > 0 && (input.approvedOvertimeMinutes ?? 0) <= 0) {
-    flags.add("OVERTIME_PENDING_APPROVAL");
-  }
+  // Unscheduled late clock-outs are recorded silently in `overtimeMinutes` for
+  // future analytics, but NEVER flagged for review: only pre-scheduled overtime
+  // (`ScheduleExceptionType.OVERTIME`) counts as payable overtime.
 
   // A day nobody can finish calculating must never look settled. Anything
   // flagged needs a person; anything still running is simply not done yet.
@@ -305,7 +303,6 @@ export function projectDay(input: ProjectionInput): ProjectedDay {
     "UNSCHEDULED",
     "AUTO_CLOSED",
     "LOW_IDENTITY_ASSURANCE",
-    "OVERTIME_PENDING_APPROVAL",
   ];
 
   let status: DayStatus;

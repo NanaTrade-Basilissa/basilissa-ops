@@ -750,7 +750,7 @@ export async function reviewLeaveRequestAction(
     return { ok: false, error: "Leave request not found." };
   }
 
-  const actor = await requirePermission("attendance:write", {
+  const actor = await requirePermission("leave:approve", {
     branchId: leave.branchId ?? undefined,
   });
 
@@ -1141,7 +1141,7 @@ export async function saveLeaveCycleAction(data: {
   blackoutWeeks: string[];
   status: "UPCOMING" | "OPEN" | "AUTO_SCHEDULING" | "FINALIZED";
 }): Promise<ActionResult> {
-  const actor = await requirePermission("attendance:write");
+  const actor = await requirePermission("leave:manage");
   if (!actor) return { ok: false, error: "Unauthorized" };
 
   try {
@@ -1213,7 +1213,7 @@ export async function saveLeaveCycleAction(data: {
 }
 
 export async function runAutoSchedulerAction(cycleId: string): Promise<ActionResult & { summary?: unknown }> {
-  const actor = await requirePermission("attendance:write");
+  const actor = await requirePermission("leave:manage");
   if (!actor) return { ok: false, error: "Unauthorized" };
 
   try {
@@ -1243,7 +1243,7 @@ export async function runAutoSchedulerAction(cycleId: string): Promise<ActionRes
 export async function reverseAutoSchedulerAction(
   cycleId: string
 ): Promise<ActionResult & { deletedRequestsCount?: number; deletedExceptionsCount?: number }> {
-  const actor = await requirePermission("attendance:write");
+  const actor = await requirePermission("leave:manage");
   if (!actor) return { ok: false, error: "Unauthorized" };
 
   try {
@@ -1279,7 +1279,7 @@ export async function saveBranchQuotaAction(data: {
   jobCategory: string;
   maxConcurrent: number;
 }): Promise<ActionResult> {
-  const actor = await requirePermission("attendance:write", { branchId: data.branchId });
+  const actor = await requirePermission("leave:manage", { branchId: data.branchId });
   if (!actor) return { ok: false, error: "Unauthorized" };
 
   try {

@@ -20,11 +20,12 @@ function first(value: string | string[] | undefined): string | undefined {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default async function LeavePage({ searchParams }: { searchParams: SearchParams }) {
-  const { actor, scope } = await requireAnyBranchPermission("attendance:read");
+  const { actor, scope } = await requireAnyBranchPermission("leave:read");
   const raw = await searchParams;
   const branchId = first(raw.branchId);
   const search = first(raw.search);
-  const canWrite = can(actor, "attendance:write");
+  const canReview = can(actor, "leave:approve");
+  const canManage = can(actor, "leave:manage");
 
   // A branchId outside the actor's scope must not widen access, so it only
   // ever narrows within the branches they hold.
@@ -190,12 +191,12 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
       <AnnualLeaveAdminPanel
         currentCycle={currentCycleData}
         branches={branchQuotaData}
-        canManage={canWrite}
+        canManage={canManage}
       />
 
       <div className="space-y-2 pt-2">
         <h3 className="text-sm font-semibold tracking-tight text-foreground">All Staff Leave Records</h3>
-        <LeaveRequestsTable requests={serialized} canReview={canWrite} />
+        <LeaveRequestsTable requests={serialized} canReview={canReview} />
       </div>
     </div>
   );

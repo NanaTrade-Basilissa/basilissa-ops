@@ -173,26 +173,13 @@ export function AttendancePolicyForm({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Overtime</CardTitle>
-            <CardDescription>
-              Gates overtime rather than subtracting from it. Under counts as none, over
-              counts as all.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Field
-              name="overtimeThresholdMinutes"
-              label="Overtime threshold"
-              hint="0 counts every minute past the shift."
-              defaultValue={values.overtimeThresholdMinutes}
-              min={0}
-              max={240}
-              error={errors.overtimeThresholdMinutes}
-            />
-          </CardContent>
-        </Card>
+        {/* Overtime is pre-scheduled only; preserve stored policy values silently for future use */}
+        <input type="hidden" name="overtimeThresholdMinutes" value={values.overtimeThresholdMinutes} />
+        <input
+          type="hidden"
+          name="branchManagerCanAuthorizeOvertime"
+          value={values.branchManagerCanAuthorizeOvertime ? "on" : ""}
+        />
 
         <Card>
           <CardHeader>
@@ -299,31 +286,6 @@ export function AttendancePolicyForm({
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Overtime authorization</CardTitle>
-            <CardDescription>
-              Only Area Managers and Administrators can approve overtime by default.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="divide-y divide-border">
-              <SettingsRow
-                htmlFor="branchManagerCanAuthorizeOvertime"
-                label="Allow Branch Managers to authorize payable overtime"
-                description="Lets branch managers approve overtime for their own branch."
-                control={
-                  <Switch
-                    id="branchManagerCanAuthorizeOvertime"
-                    name="branchManagerCanAuthorizeOvertime"
-                    defaultChecked={values.branchManagerCanAuthorizeOvertime}
-                  />
-                }
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="changeReason">Why are you changing this?</Label>
@@ -340,7 +302,7 @@ export function AttendancePolicyForm({
                 rows={3}
                 maxLength={500}
                 defaultValue=""
-                placeholder="e.g. Overtime threshold raised to 30 minutes following the March review of closing times."
+                placeholder="e.g. Updated late grace period to 15 minutes."
                 aria-describedby="changeReason-hint"
                 aria-invalid={errors.changeReason ? true : undefined}
               />

@@ -133,23 +133,16 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
     columnHelper.accessor("payableOvertimeMinutes", {
       header: () => (
         <ColumnHeader
-          label="Payable Overtime"
-          help="Overtime a manager has approved for payment. Overtime that is still waiting for approval is not paid and shows as Pending."
+          label="Scheduled Overtime"
+          help="Pre-scheduled or manager-approved overtime for payment. Unscheduled late clock-outs do not count as overtime."
         />
       ),
       cell: ({ row }) => {
-        const { overtimeMinutes, payableOvertimeMinutes } = row.original;
+        const { payableOvertimeMinutes } = row.original;
         if (payableOvertimeMinutes > 0) {
           return (
             <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-medium">
               {formatDuration(payableOvertimeMinutes)}
-            </Badge>
-          );
-        }
-        if (overtimeMinutes > 0) {
-          return (
-            <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
-              Pending
             </Badge>
           );
         }
