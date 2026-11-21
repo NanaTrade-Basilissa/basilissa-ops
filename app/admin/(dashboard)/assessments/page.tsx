@@ -7,6 +7,7 @@ import { listAssessmentsPaginated } from "@/lib/modules/assessments/server";
 import { createAssessmentAction } from "@/lib/modules/assessments/actions";
 import { AssessmentCreateDialog } from "@/components/admin/assessment-create-dialog";
 import { AssessmentsTable } from "@/components/admin/assessments-table";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 import { TestFilters } from "@/components/admin/test-filters";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { Button } from "@/components/ui/button";
@@ -21,12 +22,16 @@ function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+const ALLOWED_PAGE_SIZES = new Set([10, 20, 50]);
+
 export default async function AssessmentsPage({ searchParams }: { searchParams: SearchParams }) {
   const actor = await requirePermission("assessment:read");
   const canWrite = can(actor, "assessment:write");
 
   const rawParams = await searchParams;
   const page = Number(first(rawParams.page)) || 1;
+  const rawPageSize = Number(first(rawParams.pageSize)) || 20;
+  const requestedPageSize = ALLOWED_PAGE_SIZES.has(rawPageSize) ? rawPageSize : 20;
   const search = first(rawParams.search) || undefined;
   const status = (first(rawParams.status) as AssessmentStatus) || undefined;
 
@@ -34,13 +39,14 @@ export default async function AssessmentsPage({ searchParams }: { searchParams: 
     search,
     status,
     page,
-    pageSize: 10,
+    pageSize: requestedPageSize,
   });
 
-  function pageHref(targetPage: number) {
+  function buildUrl(targetPage: number, targetSize: number) {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (status) params.set("status", status);
+    if (targetSize !== 20) params.set("pageSize", String(targetSize));
     if (targetPage !== 1) params.set("page", String(targetPage));
     const qs = params.toString();
     return qs ? `/admin/assessments?${qs}` : "/admin/assessments";
@@ -49,59 +55,59 @@ export default async function AssessmentsPage({ searchParams }: { searchParams: 
   const hasFilters = Boolean(search || status);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Assessments</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Staff tests and evaluation results.
-          </p>
-        </div>
-        <div>
-          {canWrite && (
+    <PageShell>
+      <PageHeader
+        title="Assessments"
+        description="Staff tests and evaluation results."
+        actions={
+          canWrite ? (
             <AssessmentCreateDialog
               action={createAssessmentAction}
               trigger={
-                <Button size="sm">
+                <Button size="sm" className="h-9 gap-1.5 text-xs">
                   <Plus className="size-4" />
                   <span className="hidden sm:inline">New assessment</span>
                 </Button>
               }
             />
-          )}
-        </div>
+          ) : undefined
+        }
+      />
+
+      <div className="space-y-3">
+        <Suspense fallback={<div className="h-9" />}>
+          <TestFilters searchPlaceholder="Search assessment title..." />
+        </Suspense>
+
+        {assessments.length === 0 ? (
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <ClipboardCheck />
+              </EmptyMedia>
+              <EmptyTitle>{hasFilters ? "No assessments found" : "Nothing here yet"}</EmptyTitle>
+              <EmptyDescription className="text-xs">
+                {hasFilters
+                  ? "Try adjusting your search or filter criteria."
+                  : "Create an assessment to get started."}
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <>
+            <AssessmentsTable assessments={assessments} />
+            <DataTablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={pageSize}
+              buildHref={(p) => buildUrl(p, pageSize)}
+              buildPageSizeHref={(size) => buildUrl(1, size)}
+              alwaysShow
+            />
+          </>
+        )}
       </div>
-
-      <Suspense fallback={<div className="h-9" />}>
-        <TestFilters searchPlaceholder="Search assessment title..." />
-      </Suspense>
-
-      {assessments.length === 0 ? (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <ClipboardCheck />
-            </EmptyMedia>
-            <EmptyTitle>{hasFilters ? "No assessments found" : "Nothing here yet"}</EmptyTitle>
-            <EmptyDescription className="text-xs">
-              {hasFilters
-                ? "Try adjusting your search or filter criteria."
-                : "Create an assessment to get started."}
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <div className="space-y-4">
-          <AssessmentsTable assessments={assessments} />
-          <DataTablePagination
-            page={page}
-            totalPages={totalPages}
-            total={total}
-            pageSize={pageSize}
-            buildHref={pageHref}
-          />
-        </div>
-      )}
-    </div>
+    </PageShell>
   );
 }

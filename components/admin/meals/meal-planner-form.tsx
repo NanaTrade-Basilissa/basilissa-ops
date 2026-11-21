@@ -9,7 +9,7 @@ import {
   Users,
   CheckCircle2,
   Clock,
-  Sparkles,
+  CalendarDays,
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,10 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { saveWeeklyMenuAction, type MealPlanFormState } from "@/lib/modules/meals/actions";
+import { StatCard } from "@/components/admin/stat-card";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { shiftDateKey } from "@/lib/platform/date";
+import { cn } from "@/lib/utils";
 
 export interface DayData {
   date: string;
@@ -209,48 +212,40 @@ export function MealPlannerForm({
         <input type="hidden" name="cutoffAt" value={cutoffValue} />
 
         {/* Overview Metric Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card className="shadow-2xs border-border">
-            <CardContent className="pt-4 pb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Total Portions Ordered</p>
-                <p className="text-2xl font-bold mt-1 text-foreground">{totalConfirmed}</p>
-              </div>
-              <div className="p-2.5 bg-primary/10 text-primary rounded-xl">
-                <Users className="h-5 w-5" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-2xs border-border">
-            <CardContent className="pt-4 pb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Portions Claimed</p>
-                <p className="text-2xl font-bold mt-1 text-foreground">{totalClaimed}</p>
-              </div>
-              <div className="p-2.5 bg-emerald-500/10 text-emerald-600 rounded-xl">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-2xs border-border">
-            <CardContent className="pt-4 pb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Days Serving Food</p>
-                <p className="text-2xl font-bold mt-1 text-foreground">
-                  {enabledDays.length} / 7
-                </p>
-              </div>
-              <div className="p-2.5 bg-amber-500/10 text-amber-600 rounded-xl">
-                <UtensilsCrossed className="h-5 w-5" />
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+          <StatCard
+            label="Total Portions Ordered"
+            value={totalConfirmed}
+            icon={Users}
+            tone="brand"
+            subtext={`Confirmed for ${branchName}`}
+          />
+          <StatCard
+            label="Portions Claimed"
+            value={totalClaimed}
+            icon={CheckCircle2}
+            tone="good"
+            subtext={
+              totalConfirmed > 0
+                ? `${Math.round((totalClaimed / totalConfirmed) * 100)}% of ordered claimed`
+                : "No claims recorded yet"
+            }
+          />
+          <StatCard
+            label="Days Serving Food"
+            value={`${enabledDays.length} / 7`}
+            icon={UtensilsCrossed}
+            tone="info"
+            subtext={
+              disabledDays.length > 0
+                ? `${disabledDays.length} day${disabledDays.length > 1 ? "s" : ""} disabled`
+                : "Serving all week"
+            }
+          />
         </div>
 
         {/* Days Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {days.map((day, idx) => {
             const dateObj = new Date(`${day.date}T12:00:00Z`);
             const weekdayName =
@@ -263,11 +258,10 @@ export function MealPlannerForm({
             return (
               <Card
                 key={day.date}
-                className={`flex flex-col justify-between transition-all border ${
-                  !day.isEnabled
-                    ? "border-dashed border-muted-foreground/30 bg-muted/15 opacity-80"
-                    : "border-border shadow-2xs"
-                }`}
+                className={cn(
+                  "flex flex-col justify-between transition-opacity",
+                  !day.isEnabled && "bg-muted/30 opacity-80",
+                )}
               >
                 <input type="hidden" name={`days[${idx}].date`} value={day.date} />
                 <input
@@ -277,61 +271,52 @@ export function MealPlannerForm({
                 />
 
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-semibold text-base text-foreground">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="font-heading text-base font-semibold tracking-tight text-foreground">
                         {weekdayName}
                       </span>
                       {day.holidayName && (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-md border border-purple-300 dark:border-purple-800 bg-background px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300 shadow-2xs"
-                          title="Public Holiday"
-                        >
-                          <Sparkles className="h-2.5 w-2.5 text-purple-600" />
+                        <StatusBadge tone="info" title="Public Holiday">
+                          <CalendarDays className="size-3" />
                           {day.holidayName}
-                        </span>
+                        </StatusBadge>
                       )}
                     </div>
-                    <span className="text-xs text-muted-foreground font-mono">
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
                       {formattedDate}
                     </span>
                   </div>
 
                   {/* Badges & Enabled Status */}
-                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
                     {!day.isEnabled ? (
-                      <span className="inline-flex items-center rounded-md border border-input bg-background px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground shadow-2xs">
-                        No Food Served
-                      </span>
+                      <StatusBadge tone="neutral">No Food Served</StatusBadge>
                     ) : day.isPublished ? (
-                      <span className="inline-flex items-center rounded-md border border-emerald-300 dark:border-emerald-800 bg-background px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 shadow-2xs">
+                      <StatusBadge tone="good" dot>
                         Published
-                      </span>
+                      </StatusBadge>
                     ) : day.dishName.trim() ? (
-                      <span className="inline-flex items-center rounded-md border border-amber-300 dark:border-amber-800 bg-background px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 shadow-2xs">
+                      <StatusBadge tone="warning" dot>
                         Draft
-                      </span>
+                      </StatusBadge>
                     ) : (
-                      <span className="inline-flex items-center rounded-md border border-input bg-background px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground shadow-2xs">
-                        No Dish Set
-                      </span>
+                      <StatusBadge tone="neutral">No Dish Set</StatusBadge>
                     )}
 
                     {day.isCutoffPassed && day.isEnabled && (
-                      <span className="inline-flex items-center rounded-md border border-input bg-background px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 shadow-2xs">
-                        Cutoff Passed
-                      </span>
+                      <StatusBadge tone="neutral">Cutoff Passed</StatusBadge>
                     )}
                   </div>
                 </CardHeader>
 
-                <CardContent className="space-y-3 flex-1 flex flex-col justify-between">
+                <CardContent className="flex flex-1 flex-col justify-between space-y-4">
                   <div className="space-y-3">
                     {/* Food Served Toggle */}
-                    <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-muted/40 border">
+                    <div className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-1.5">
                       <Label
                         htmlFor={`toggle-enabled-${idx}`}
-                        className="text-xs font-medium text-foreground cursor-pointer"
+                        className="cursor-pointer text-xs font-medium text-foreground"
                       >
                         {day.isEnabled ? "Food Served Today" : "No Meal (Disabled)"}
                       </Label>
@@ -343,12 +328,13 @@ export function MealPlannerForm({
                       />
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       <Label
                         htmlFor={`dish-${idx}`}
-                        className={`text-xs font-medium ${
-                          day.isEnabled ? "text-foreground" : "text-muted-foreground"
-                        }`}
+                        className={cn(
+                          "text-xs font-medium",
+                          day.isEnabled ? "text-foreground" : "text-muted-foreground",
+                        )}
                       >
                         Dish Name
                       </Label>
@@ -363,13 +349,14 @@ export function MealPlannerForm({
                         value={day.dishName}
                         disabled={!canWrite}
                         onChange={(e) => updateDayField(idx, "dishName", e.target.value)}
-                        className={`text-sm font-medium ${
-                          !day.isEnabled ? "text-muted-foreground bg-muted/30" : ""
-                        }`}
+                        className={cn(
+                          "h-9 text-sm font-medium",
+                          !day.isEnabled && "bg-muted/30 text-muted-foreground",
+                        )}
                       />
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       <Label
                         htmlFor={`desc-${idx}`}
                         className="text-xs font-medium text-muted-foreground"
@@ -383,7 +370,7 @@ export function MealPlannerForm({
                         value={day.description}
                         disabled={!canWrite}
                         onChange={(e) => updateDayField(idx, "description", e.target.value)}
-                        className="text-xs"
+                        className="h-9 text-xs"
                       />
                     </div>
 
@@ -395,14 +382,14 @@ export function MealPlannerForm({
                   </div>
 
                   {/* Headcount summary for the day */}
-                  <div className="pt-3 border-t text-xs flex items-center justify-between text-muted-foreground">
-                    <span className="flex items-center gap-1 font-medium text-foreground">
-                      <Users className="h-3.5 w-3.5 text-primary" />
+                  <div className="flex items-center justify-between border-t border-border/70 pt-3 text-xs tabular-nums text-muted-foreground">
+                    <span className="flex items-center gap-1.5 font-medium text-foreground">
+                      <Users className="size-3.5 text-primary" />
                       {day.confirmedCount} eating
                     </span>
                     <span>{day.claimedCount} claimed</span>
                     {day.optedOutCount > 0 && (
-                      <span className="text-zinc-400">{day.optedOutCount} opt-out</span>
+                      <span className="text-muted-foreground/80">{day.optedOutCount} opt-out</span>
                     )}
                   </div>
                 </CardContent>

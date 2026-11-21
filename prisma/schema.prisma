@@ -252,6 +252,13 @@ model Session {
 
 /// A physical Basilissa branch. Customers reach its feedback form via
 /// /feedback?branch={slug}, usually from a printed/table QR code.
+enum BranchSchedulingMode {
+  /// Branch uses weekly rotas / shift templates. Unscheduled staff cannot clock in.
+  ROTATING_ROTA
+  /// Branch runs a fixed daily schedule (e.g. Head Office 08:00–17:00 Mon–Fri).
+  FIXED_SCHEDULE
+}
+
 model Branch {
   id          String   @id @default(cuid())
   name        String
@@ -283,6 +290,15 @@ model Branch {
   /// Rota patterns drive this branch's schedule live. When false, patterns are
   /// only templates: a manager generates each week into one-day overrides.
   autoRota Boolean @default(false)
+
+  /// Per-branch scheduling mode. ROTATING_ROTA keeps strict weekly rota / shift
+  /// template enforcement; FIXED_SCHEDULE applies a branch-level fixed schedule
+  /// (e.g. Head Office 08:00–17:00 Mon–Fri) unless individually overridden.
+  schedulingMode           BranchSchedulingMode @default(ROTATING_ROTA)
+  fixedShiftStartMinute    Int?
+  fixedShiftEndMinute      Int?
+  fixedWorkDays            Int[]                @default([1, 2, 3, 4, 5])
+  fixedOffOnPublicHolidays Boolean              @default(true)
 
   /// Per-branch rather than global, so the platform is not quietly
   /// single-country. Every branch is Africa/Accra today (U14).
@@ -545,9 +561,10 @@ model Shift {
   /// a one-day override naming this shift still applies on a holiday.
   offOnPublicHolidays Boolean @default(false)
 
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   assignments EmployeeShiftAssignment[]
   patternDays ShiftPatternDay[]
@@ -2509,6 +2526,7 @@ model HostedFile {
 enum AppPlatform {
   IOS
   ANDROID
+  WEB
 }
 
 enum AppUpdateMode {

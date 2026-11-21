@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { Loader2, MapPin, Navigation, Save, ShieldAlert, Sparkles } from "lucide-react";
+import { Loader2, MapPin, Navigation, Save, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { BranchFormState } from "@/lib/modules/branches/actions";
 import { Button } from "@/components/ui/button";
@@ -148,7 +148,7 @@ export function BranchGeofenceDialog({
                 {detecting ? (
                   <Loader2 className="size-3 animate-spin" />
                 ) : (
-                  <Sparkles className="size-3 text-primary" />
+                  <Navigation className="size-3 text-primary" />
                 )}
                 Detect My Current Location
               </Button>

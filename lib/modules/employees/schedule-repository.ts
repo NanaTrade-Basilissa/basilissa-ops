@@ -9,7 +9,8 @@ import {
   type ScheduleInputs,
 } from "@/lib/modules/attendance/schedule";
 import { loadLivePatterns } from "@/lib/modules/attendance/server";
-import { ScheduleExceptionType } from "@prisma/client";
+import { BranchSchedulingMode, ScheduleExceptionType } from "@prisma/client";
+import { minutesToTime } from "@/lib/modules/employees/validation";
 
 export type DayColumn = {
   dateKey: string;
@@ -65,6 +66,12 @@ export type WeeklyScheduleData = {
   branchName: string;
   /** Patterns drive the schedule live; when false, weeks are generated. */
   autoRota: boolean;
+  schedulingMode?: BranchSchedulingMode;
+  fixedScheduleSummary?: {
+    timeRange: string;
+    daysLabel: string;
+    offOnPublicHolidays: boolean;
+  } | null;
   weekStartKey: string;
   days: DayColumn[];
   shifts: {
@@ -95,9 +102,31 @@ export async function getWeeklyBranchSchedule(
 
   const branch = await prisma.branch.findUnique({
     where: { id: branchId },
-    select: { id: true, name: true, timezone: true, autoRota: true },
+    select: {
+      id: true,
+      name: true,
+      timezone: true,
+      autoRota: true,
+      schedulingMode: true,
+      fixedShiftStartMinute: true,
+      fixedShiftEndMinute: true,
+      fixedWorkDays: true,
+      fixedOffOnPublicHolidays: true,
+    },
   });
   if (!branch) return null;
+
+  const branchFixedSchedule =
+    branch.schedulingMode === "FIXED_SCHEDULE" &&
+    branch.fixedShiftStartMinute !== null &&
+    branch.fixedShiftEndMinute !== null
+      ? {
+          startMinute: branch.fixedShiftStartMinute,
+          endMinute: branch.fixedShiftEndMinute,
+          workDays: branch.fixedWorkDays,
+          offOnPublicHolidays: branch.fixedOffOnPublicHolidays,
+        }
+      : null;
 
   const timeZone = branch.timezone || "Africa/Accra";
 
@@ -267,6 +296,7 @@ export async function getWeeklyBranchSchedule(
       })),
       holidays,
       patterns: livePatterns.get(emp.id) ?? [],
+      branchFixedSchedule: isVisitor ? null : branchFixedSchedule,
     };
 
     const daySchedules: Record<string, EmployeeDaySchedule> = {};
@@ -294,12 +324,20 @@ export async function getWeeklyBranchSchedule(
       const resolved = resolveScheduleForDate(d.dateKey, scheduleInputs);
 
       if (resolved) {
+        const matchedShift = shifts.find((s) => s.id === resolved.shiftId);
+        const startMinute =
+          matchedShift?.startMinute ??
+          (resolved.source === "branch_fixed" ? branchFixedSchedule?.startMinute ?? null : null);
+        const endMinute =
+          matchedShift?.endMinute ??
+          (resolved.source === "branch_fixed" ? branchFixedSchedule?.endMinute ?? null : null);
+
         daySchedules[d.dateKey] = {
           dateKey: d.dateKey,
           shiftId: resolved.shiftId,
           shiftName: resolved.shiftName,
-          startMinute: shifts.find((s) => s.id === resolved.shiftId)?.startMinute ?? null,
-          endMinute: shifts.find((s) => s.id === resolved.shiftId)?.endMinute ?? null,
+          startMinute,
+          endMinute,
           isException: resolved.source === "exception",
           exceptionId: ex?.id,
           exceptionType: ex?.type,
@@ -346,10 +384,27 @@ export async function getWeeklyBranchSchedule(
     ...[...visitors.values()].map((v) => rowFor(v, true, v.branchAssignments[0]?.branch.name ?? null)),
   ];
 
+  const DAY_SHORT = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const formatFixedDays = (daysList: number[]) => {
+    const sorted = [...daysList].sort((a, b) => a - b);
+    if (sorted.join(",") === "1,2,3,4,5") return "Mon–Fri";
+    if (sorted.join(",") === "1,2,3,4,5,6") return "Mon–Sat";
+    if (sorted.join(",") === "1,2,3,4,5,6,7") return "Every day";
+    return sorted.map((d) => DAY_SHORT[d] ?? String(d)).join(", ");
+  };
+
   return {
     branchId: branch.id,
     branchName: branch.name,
     autoRota: branch.autoRota,
+    schedulingMode: branch.schedulingMode,
+    fixedScheduleSummary: branchFixedSchedule
+      ? {
+          timeRange: `${minutesToTime(branchFixedSchedule.startMinute)}–${minutesToTime(branchFixedSchedule.endMinute)}`,
+          daysLabel: formatFixedDays(branchFixedSchedule.workDays),
+          offOnPublicHolidays: branchFixedSchedule.offOnPublicHolidays,
+        }
+      : null,
     weekStartKey,
     days,
     shifts,

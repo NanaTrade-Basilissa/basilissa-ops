@@ -17,7 +17,17 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/admin/status-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -44,6 +54,7 @@ export function CourseCard({
 }) {
   const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   async function handlePublish() {
     if (course.materialsCount === 0) {
@@ -80,16 +91,13 @@ export function CourseCard({
     }
   }
 
-  async function handleDelete() {
-    if (!confirm(`Are you sure you want to delete "${course.title}"? All materials and progress will be permanently removed.`)) {
-      return;
-    }
-
+  async function handleConfirmDelete() {
     setDeleting(true);
     try {
       const res = await deleteCourseAction(course.id);
       if (res.success) {
         toast.success("Course deleted successfully.");
+        setConfirmDeleteOpen(false);
         onDeleted?.();
       } else {
         toast.error(res.error || "Failed to delete course");
@@ -101,31 +109,23 @@ export function CourseCard({
     }
   }
 
-  const statusBadgeMap = {
-    PUBLISHED: { label: "Active", variant: "default" as const, className: "bg-emerald-600 hover:bg-emerald-700 text-white" },
-    DRAFT: { label: "Draft", variant: "secondary" as const, className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300" },
-    ARCHIVED: { label: "Archived", variant: "outline" as const, className: "text-muted-foreground" },
+  const statusToneMap = {
+    PUBLISHED: { label: "Active", tone: "good" as const },
+    DRAFT: { label: "Draft", tone: "warning" as const },
+    ARCHIVED: { label: "Archived", tone: "neutral" as const },
   };
 
-  const statusInfo = statusBadgeMap[course.status] ?? statusBadgeMap.DRAFT;
+  const statusInfo = statusToneMap[course.status] ?? statusToneMap.DRAFT;
 
   return (
     <div className="group relative flex flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs transition-all hover:border-primary/40 hover:shadow-md">
       {/* Top row */}
       <div>
         <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="text-xs font-normal bg-muted/40">
-              {course.category}
-            </Badge>
-            <Badge variant={statusInfo.variant} className={cn("text-[11px] px-2 py-0.5", statusInfo.className)}>
-              {statusInfo.label}
-            </Badge>
-            {course.isMandatory && (
-              <Badge variant="destructive" className="text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0">
-                Required
-              </Badge>
-            )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <StatusBadge tone="neutral">{course.category}</StatusBadge>
+            <StatusBadge tone={statusInfo.tone}>{statusInfo.label}</StatusBadge>
+            {course.isMandatory && <StatusBadge tone="critical">Required</StatusBadge>}
           </div>
 
           <DropdownMenu>
@@ -137,31 +137,35 @@ export function CourseCard({
                 </Button>
               }
             />
-            <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuContent align="end" className="w-max min-w-48">
               <DropdownMenuItem
                 onClick={() => {
                   window.location.href = `/admin/training/${course.id}`;
                 }}
-                className="cursor-pointer"
+                className="cursor-pointer whitespace-nowrap"
               >
                 <ExternalLink className="mr-2 size-4" />
-                View & Edit
+                View &amp; Edit
               </DropdownMenuItem>
               {course.status !== "PUBLISHED" && (
-                <DropdownMenuItem onClick={handlePublish} disabled={publishing} className="cursor-pointer text-emerald-600 focus:text-emerald-600">
+                <DropdownMenuItem
+                  onClick={handlePublish}
+                  disabled={publishing}
+                  className="cursor-pointer whitespace-nowrap text-emerald-600 focus:text-emerald-600"
+                >
                   <Send className="mr-2 size-4" />
                   Publish to Staff
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={handleArchive} className="cursor-pointer">
+              <DropdownMenuItem onClick={handleArchive} className="cursor-pointer whitespace-nowrap">
                 <Archive className="mr-2 size-4" />
                 {course.status === "ARCHIVED" ? "Unarchive" : "Archive"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={handleDelete}
+                onClick={() => setConfirmDeleteOpen(true)}
                 disabled={deleting}
-                className="cursor-pointer text-destructive focus:text-destructive"
+                className="cursor-pointer whitespace-nowrap text-destructive focus:text-destructive"
               >
                 <Trash2 className="mr-2 size-4" />
                 Delete
@@ -227,11 +231,32 @@ export function CourseCard({
             href={`/admin/training/${course.id}`}
             className={cn(buttonVariants({ size: "sm", variant: "outline" }), "h-8 gap-1 text-xs")}
           >
-            Manage Hub
-            <ExternalLink className="size-3 ml-0.5" />
+            Manage Course
+            <ExternalLink className="ml-0.5 size-3" />
           </Link>
         </div>
       </div>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete course?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &ldquo;{course.title}&rdquo;? All materials and staff progress will be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

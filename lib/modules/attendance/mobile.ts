@@ -138,6 +138,11 @@ export async function recordMobilePunch(
       maxAcceptableAccuracyMeters: true,
       geofenceEnabled: true,
       timezone: true,
+      schedulingMode: true,
+      fixedShiftStartMinute: true,
+      fixedShiftEndMinute: true,
+      fixedWorkDays: true,
+      fixedOffOnPublicHolidays: true,
     },
   });
 
@@ -193,6 +198,18 @@ export async function recordMobilePunch(
     loadLivePatternsFor(employeeId),
   ]);
 
+  const branchFixedSchedule =
+    branch.schedulingMode === "FIXED_SCHEDULE" &&
+    branch.fixedShiftStartMinute !== null &&
+    branch.fixedShiftEndMinute !== null
+      ? {
+          startMinute: branch.fixedShiftStartMinute,
+          endMinute: branch.fixedShiftEndMinute,
+          workDays: branch.fixedWorkDays,
+          offOnPublicHolidays: branch.fixedOffOnPublicHolidays,
+        }
+      : null;
+
   const resolvedSchedule = resolveScheduleForDate(todayKey, {
     timeZone: branchTz,
     shifts,
@@ -206,6 +223,7 @@ export async function recordMobilePunch(
     })),
     holidays,
     patterns,
+    branchFixedSchedule,
   });
 
   const isScheduledRemoteToday = Boolean(resolvedSchedule?.isRemote);

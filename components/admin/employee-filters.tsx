@@ -66,7 +66,7 @@ export function EmployeeFilters({
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             id="filter-search"
-            placeholder="Search name, code, email..."
+            placeholder="Search name, code, email, phone..."
             className="pl-8 h-9 text-xs"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

@@ -525,3 +525,46 @@ export async function updateOdooAttendance(
 
   return res.id;
 }
+
+export type OdooEmployeeWritePayload = {
+  name?: string;
+  work_email?: string | false;
+  mobile_phone?: string | false;
+  work_phone?: string | false;
+  job_title?: string | false;
+  /** Base64-encoded profile image (future mobile self-service support). */
+  image_1920?: string;
+  active?: boolean;
+};
+
+/**
+ * Creates an employee in Odoo (`POST /api/v1/hr.employee`).
+ * Callers MUST run search-before-create via `findOdooEmployeeMatch` first so
+ * retries after network timeouts never create duplicate Odoo employees.
+ */
+export async function createOdooEmployee(
+  input: OdooEmployeeWritePayload & { name: string },
+): Promise<number> {
+  const res = await odooRequest<OdooCreateOrUpdateResponse>("/hr.employee", {
+    method: "POST",
+    body: input,
+  });
+
+  return res.id;
+}
+
+/**
+ * Updates an existing employee in Odoo (`PATCH /api/v1/hr.employee/{id}`).
+ * Supports profile name, phone, email, job title, active status, and `image_1920`.
+ */
+export async function updateOdooEmployee(
+  odooEmployeeId: number,
+  input: OdooEmployeeWritePayload,
+): Promise<number> {
+  const res = await odooRequest<OdooCreateOrUpdateResponse>(`/hr.employee/${odooEmployeeId}`, {
+    method: "PATCH",
+    body: input,
+  });
+
+  return res.id;
+}

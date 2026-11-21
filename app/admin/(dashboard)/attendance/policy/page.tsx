@@ -6,6 +6,7 @@ import { policyHistory, resolvePolicy } from "@/lib/modules/attendance/server";
 import { updateAttendancePolicy } from "@/lib/modules/attendance/actions";
 import { AttendancePolicyForm } from "@/components/admin/attendance-policy-form";
 import { PolicyBranchSelect } from "@/components/admin/policy-branch-select";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -51,15 +52,16 @@ export default async function AttendancePolicyPage({
     : false;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <div className="space-y-3">
-      
-        {/* Branch Switcher Dropdown */}
+    <PageShell>
+      <PageHeader
+        title="Attendance Policy"
+        description="Configure global defaults or branch-specific overrides for grace windows, breaks, rounding, and overtime."
+      />
+      <div className="max-w-3xl space-y-6">
         <PolicyBranchSelect
           branches={branches}
           selectedBranchId={selectedBranchId}
         />
-      </div>
 
       {selectedBranch && !hasBranchSpecificOverride && (
         <Alert>
@@ -142,6 +144,7 @@ export default async function AttendancePolicyPage({
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </PageShell>
   );
 }

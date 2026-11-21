@@ -7,6 +7,7 @@ import {
   Check,
   Laptop,
   Pencil,
+  RotateCcw,
   RotateCw,
   Search,
   Users,
@@ -16,7 +17,11 @@ import {
   bulkAssignFixedScheduleAction,
   clearFixedScheduleAction,
 } from "@/lib/modules/employees/actions";
-import { Badge } from "@/components/ui/badge";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
+import { FilterBar } from "@/components/admin/filter-bar";
+import { StatCard } from "@/components/admin/stat-card";
+import { StatusBadge } from "@/components/admin/status-badge";
+import { TableRowActions, type TableRowActionItem } from "@/components/admin/table-row-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -99,10 +104,12 @@ export function FixedSchedulesPanel({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // Filters
+  // Filters (default to Fixed Schedule Only so the tab opens straight onto fixed staff)
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState("all");
-  const [modeFilter, setModeFilter] = useState<"all" | "fixed" | "rotating">("all");
+  const [modeFilter, setModeFilter] = useState<"all" | "fixed" | "rotating">("fixed");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   // Selection for bulk assignment
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -237,227 +244,262 @@ export function FixedSchedulesPanel({
     });
   }
 
+  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedEmployees = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredEmployees.slice(start, start + pageSize);
+  }, [filteredEmployees, safePage, pageSize]);
+
+  const hasActiveFilters = Boolean(search.trim() || branchFilter !== "all" || modeFilter !== "fixed");
+
   const allFilteredSelected =
-    filteredEmployees.length > 0 && filteredEmployees.every((e) => selectedIds.includes(e.id));
+    paginatedEmployees.length > 0 && paginatedEmployees.every((e) => selectedIds.includes(e.id));
 
   return (
-    <div className="space-y-4">
-      {/* Summary Strip */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card p-3.5 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground">Fixed Schedule Staff</p>
-            <p className="text-xl font-bold text-foreground">{fixedCount}</p>
-          </div>
-          <CalendarCheck className="size-5 text-emerald-600" />
-        </div>
-        <div className="rounded-xl border border-border bg-card p-3.5 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground">Hybrid / Remote Days Configured</p>
-            <p className="text-xl font-bold text-foreground">{remoteCount}</p>
-          </div>
-          <Laptop className="size-5 text-blue-600" />
-        </div>
-        <div className="rounded-xl border border-border bg-card p-3.5 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground">Rotating Shift / Unassigned</p>
-            <p className="text-xl font-bold text-foreground">{rotatingCount}</p>
-          </div>
-          <RotateCw className="size-5 text-purple-600" />
-        </div>
+    <div className="space-y-6">
+      {/* Standardized KPI Strip */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Fixed Schedule Staff" value={String(fixedCount)} icon={CalendarCheck} tone="good" />
+        <StatCard label="Hybrid / Remote Days" value={String(remoteCount)} icon={Laptop} tone="info" />
+        <StatCard label="Rotating / Unassigned" value={String(rotatingCount)} icon={RotateCw} tone="default" />
       </div>
 
-      {/* Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3.5">
-        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[240px]">
-          <div className="relative w-full sm:w-64">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search name, code, job title..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-9 text-xs"
-            />
-          </div>
+      {/* Unified Table + FilterBar Section */}
+      <div className="space-y-3">
+        <FilterBar
+          hasActiveFilters={hasActiveFilters}
+          search={
+            <div className="relative w-full shrink-0 sm:w-64 md:w-72">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search name, code, job title..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="h-9 pl-8 text-xs"
+              />
+            </div>
+          }
+          filters={
+            <>
+              <NativeSelect
+                aria-label="Filter by branch"
+                value={branchFilter}
+                onChange={(e) => {
+                  setBranchFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="h-9 text-xs"
+                containerClassName="w-full sm:w-fit sm:min-w-[140px] sm:shrink-0"
+              >
+                <option value="all">All branches</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </NativeSelect>
 
-          <NativeSelect
-            value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-            className="h-9 text-xs"
-            containerClassName="w-full sm:w-fit sm:min-w-[150px]"
-          >
-            <option value="all">All Branches</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </NativeSelect>
+              <NativeSelect
+                aria-label="Filter by schedule mode"
+                value={modeFilter}
+                onChange={(e) => {
+                  setModeFilter(e.target.value as "all" | "fixed" | "rotating");
+                  setPage(1);
+                }}
+                className="h-9 text-xs"
+                containerClassName="w-full sm:w-fit sm:min-w-[165px] sm:shrink-0"
+              >
+                <option value="fixed">Fixed schedule only</option>
+                <option value="all">All schedule modes</option>
+                <option value="rotating">Rotating / unassigned</option>
+              </NativeSelect>
 
-          <NativeSelect
-            value={modeFilter}
-            onChange={(e) => setModeFilter(e.target.value as "all" | "fixed" | "rotating")}
-            className="h-9 text-xs"
-            containerClassName="w-full sm:w-fit sm:min-w-[160px]"
-          >
-            <option value="all">All Schedule Modes</option>
-            <option value="fixed">Fixed Schedule Only</option>
-            <option value="rotating">Rotating / Unassigned</option>
-          </NativeSelect>
-        </div>
-
-        {canManage && (
-          <Button
-            type="button"
-            size="sm"
-            onClick={openBulkAssign}
-            disabled={selectedIds.length === 0 || isPending}
-            className="h-9 gap-1.5 text-xs"
-          >
-            <Users className="size-3.5" />
-            <span>
-              Assign Fixed Schedule{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
-            </span>
-          </Button>
-        )}
-      </div>
-
-      {/* Staff Schedule Table */}
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              {canManage && (
-                <TableHead className="w-10">
-                  <input
-                    type="checkbox"
-                    checked={allFilteredSelected}
-                    onChange={toggleSelectAllFiltered}
-                    aria-label="Select all visible employees"
-                    className="size-4 rounded border-border cursor-pointer"
-                  />
-                </TableHead>
+              {hasActiveFilters && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearch("");
+                    setBranchFilter("all");
+                    setModeFilter("fixed");
+                    setPage(1);
+                  }}
+                  className="h-9 gap-1.5 text-xs"
+                  title="Reset filters"
+                >
+                  <RotateCcw className="size-3.5" />
+                  Reset
+                </Button>
               )}
-              <TableHead>Employee</TableHead>
-              <TableHead>Branch</TableHead>
-              <TableHead>Mode</TableHead>
-              <TableHead>Fixed Shift & Days</TableHead>
-              <TableHead>Remote / WFH Days</TableHead>
-              {canManage && <TableHead className="text-right">Actions</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredEmployees.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={canManage ? 7 : 5} className="text-center py-8 text-xs text-muted-foreground">
-                  No employees match your filters.
-                </TableCell>
+            </>
+          }
+          actions={
+            canManage ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={openBulkAssign}
+                disabled={selectedIds.length === 0 || isPending}
+                className="h-9 gap-1.5 text-xs"
+              >
+                <Users className="size-3.5" />
+                <span>
+                  Assign Fixed{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
+                </span>
+              </Button>
+            ) : undefined
+          }
+        />
+
+        {/* Staff Schedule Table */}
+        <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                {canManage && (
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={toggleSelectAllFiltered}
+                      aria-label="Select all visible employees"
+                      className="size-4 cursor-pointer rounded border-border"
+                    />
+                  </TableHead>
+                )}
+                <TableHead>Employee</TableHead>
+                <TableHead>Branch</TableHead>
+                <TableHead>Mode</TableHead>
+                <TableHead>Fixed Shift &amp; Days</TableHead>
+                <TableHead>Remote / WFH Days</TableHead>
+                {canManage && <TableHead className="w-16 text-right">Actions</TableHead>}
               </TableRow>
-            ) : (
-              filteredEmployees.map((emp) => {
-                const isSelected = selectedIds.includes(emp.id);
-                const fixed = emp.fixedAssignment;
-                return (
-                  <TableRow key={emp.id} className={cn(isSelected && "bg-primary/5")}>
-                    {canManage && (
+            </TableHeader>
+            <TableBody>
+              {paginatedEmployees.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={canManage ? 7 : 5} className="py-8 text-center text-xs text-muted-foreground">
+                    {modeFilter === "fixed" && !search.trim() && branchFilter === "all"
+                      ? "No employees have a fixed schedule yet. Switch the filter to Rotating / unassigned to assign staff."
+                      : "No employees match your filters."}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedEmployees.map((emp) => {
+                  const isSelected = selectedIds.includes(emp.id);
+                  const fixed = emp.fixedAssignment;
+                  const rowActions: TableRowActionItem[] = [
+                    {
+                      id: "edit",
+                      label: fixed ? "Edit schedule" : "Set fixed schedule",
+                      icon: Pencil,
+                      onSelect: () => openEditSingle(emp),
+                      disabled: isPending,
+                    },
+                    ...(fixed
+                      ? [
+                          {
+                            id: "switch-rota",
+                            label: "Switch to weekly rota",
+                            icon: RotateCw,
+                            onSelect: () => handleSwitchToRotating(emp),
+                            disabled: isPending,
+                          } satisfies TableRowActionItem,
+                        ]
+                      : []),
+                  ];
+
+                  return (
+                    <TableRow key={emp.id} className={cn(isSelected && "bg-primary/5")}>
+                      {canManage && (
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(emp.id)}
+                            aria-label={`Select ${emp.name}`}
+                            className="size-4 cursor-pointer rounded border-border"
+                          />
+                        </TableCell>
+                      )}
                       <TableCell>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelect(emp.id)}
-                          aria-label={`Select ${emp.name}`}
-                          className="size-4 rounded border-border cursor-pointer"
-                        />
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <div className="text-sm font-medium text-foreground">{emp.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          <span className="font-mono">{emp.employeeCode}</span>
-                          {emp.jobTitle ? ` · ${emp.jobTitle}` : ""}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{emp.branchName}</TableCell>
-                    <TableCell>
-                      {fixed ? (
-                        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px]">
-                          Fixed Schedule
-                        </Badge>
-                      ) : emp.hasPattern ? (
-                        <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 text-[11px]">
-                          Rotating Pattern
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[11px] text-muted-foreground">
-                          Weekly Rota
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {fixed ? (
                         <div className="space-y-0.5">
-                          <div className="text-xs font-medium text-foreground">
-                            {fixed.shiftName}{" "}
-                            <span className="text-muted-foreground font-normal">({fixed.timeRange})</span>
+                          <div className="text-sm font-medium text-foreground">{emp.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-mono">{emp.employeeCode}</span>
+                            {emp.jobTitle ? ` · ${emp.jobTitle}` : ""}
                           </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {formatDaysList(fixed.daysOfWeek)}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {fixed && fixed.remoteDaysOfWeek.length > 0 ? (
-                        <Badge variant="outline" className="gap-1 border-blue-200 bg-blue-50 text-blue-700 text-[11px]">
-                          <Laptop className="size-3" />
-                          <span>{formatDaysList(fixed.remoteDaysOfWeek)}</span>
-                        </Badge>
-                      ) : fixed ? (
-                        <span className="text-xs text-muted-foreground">On-site only</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    {canManage && (
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1.5">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEditSingle(emp)}
-                            disabled={isPending}
-                            className="h-7 px-2 text-xs gap-1"
-                          >
-                            <Pencil className="size-3" />
-                            <span>{fixed ? "Edit" : "Set Fixed"}</span>
-                          </Button>
-                          {fixed && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleSwitchToRotating(emp)}
-                              disabled={isPending}
-                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                              title="Remove fixed schedule so this employee uses the Rotating Weekly Rota"
-                            >
-                              Switch to Rota
-                            </Button>
-                          )}
                         </div>
                       </TableCell>
-                    )}
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+                      <TableCell className="text-xs text-muted-foreground">{emp.branchName}</TableCell>
+                      <TableCell>
+                        {fixed ? (
+                          <StatusBadge tone="good">Fixed Schedule</StatusBadge>
+                        ) : emp.hasPattern ? (
+                          <StatusBadge tone="info">Rotating Pattern</StatusBadge>
+                        ) : (
+                          <StatusBadge tone="neutral">Weekly Rota</StatusBadge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {fixed ? (
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-medium text-foreground">
+                              {fixed.shiftName}{" "}
+                              <span className="font-normal text-muted-foreground">({fixed.timeRange})</span>
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {formatDaysList(fixed.daysOfWeek)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">&mdash;</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {fixed && fixed.remoteDaysOfWeek.length > 0 ? (
+                          <StatusBadge tone="info" className="gap-1">
+                            <Laptop className="size-3" />
+                            <span>{formatDaysList(fixed.remoteDaysOfWeek)}</span>
+                          </StatusBadge>
+                        ) : fixed ? (
+                          <span className="text-xs text-muted-foreground">On-site only</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">&mdash;</span>
+                        )}
+                      </TableCell>
+                      {canManage && (
+                        <TableCell className="text-right">
+                          <div className="flex justify-end">
+                            <TableRowActions actions={rowActions} />
+                          </div>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <DataTablePagination
+          page={safePage}
+          totalPages={totalPages}
+          total={filteredEmployees.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setPage(1);
+          }}
+          alwaysShow={filteredEmployees.length > 0}
+        />
       </div>
 
       {/* Assign / Edit Fixed Schedule Dialog */}

@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, CalendarDays, Clock } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, CalendarDays } from "lucide-react";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { cn } from "@/lib/utils";
 
-export type AttendanceView = "daily" | "live" | "exceptions";
+export type AttendanceView = "daily" | "exceptions";
 
+/**
+ * Two-tab navigation for Attendance:
+ * 1. Daily Attendance (single roster view with an inline Live Mode auto-refresh switch)
+ * 2. Review Queue (dedicated multi-day exception inbox)
+ */
 export function AttendanceTabs({
   activeView = "daily",
   branchId,
@@ -23,89 +27,61 @@ export function AttendanceTabs({
   className?: string;
 }) {
   const searchParams = useSearchParams();
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const activeTabRef = useRef<HTMLAnchorElement>(null);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    const tab = activeTabRef.current;
-    if (!container || !tab) return;
-
-    const tabLeft = tab.offsetLeft;
-    const tabRight = tabLeft + tab.offsetWidth;
-    const containerScrollLeft = container.scrollLeft;
-    const containerWidth = container.clientWidth;
-
-    if (tabLeft < containerScrollLeft) {
-      container.scrollTo({ left: Math.max(0, tabLeft - 12), behavior: "smooth" });
-    } else if (tabRight > containerScrollLeft + containerWidth) {
-      container.scrollTo({
-        left: tabRight - containerWidth + 12,
-        behavior: "smooth",
-      });
-    }
-  }, [activeView]);
 
   function buildHref(view: AttendanceView) {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("view", view);
+    if (view === "daily") {
+      params.delete("view");
+      if (date) params.set("date", date);
+    } else {
+      params.set("view", "exceptions");
+      params.delete("live");
+    }
     if (branchId) params.set("branchId", branchId);
-    if (date && view === "daily") params.set("date", date);
-    return `?${params.toString()}`;
+    const qs = params.toString();
+    return qs ? `?${qs}` : "/admin/attendance";
   }
 
-  const tabs: {
-    id: AttendanceView;
-    label: string;
-    icon: typeof CalendarDays;
-    badge?: number;
-  }[] = [
-    { id: "daily", label: "Daily Roster", icon: CalendarDays },
-    { id: "live", label: "Live Floor Board", icon: Clock },
-    {
-      id: "exceptions",
-      label: "Review Queue",
-      icon: AlertTriangle,
-      badge: exceptionsCount,
-    },
-  ];
+  const isDailyActive = activeView === "daily";
+  const isExceptionsActive = activeView === "exceptions";
 
   return (
-    <div className={cn("w-full max-w-full min-w-0", className)}>
-      <div
-        ref={scrollContainerRef}
-        className="no-scrollbar flex w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]"
+    <nav
+      aria-label="Attendance views"
+      className={cn("no-scrollbar -mb-px flex items-center gap-1 overflow-x-auto", className)}
+    >
+      <Link
+        href={buildHref("daily")}
+        aria-current={isDailyActive ? "page" : undefined}
+        className={cn(
+          "relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-3 pb-2.5 pt-1 text-sm font-medium transition-colors",
+          isDailyActive
+            ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
+            : "text-muted-foreground hover:text-foreground",
+        )}
       >
-        <div className="inline-flex min-w-max items-center gap-1">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeView === tab.id;
-            return (
-              <Link
-                key={tab.id}
-                ref={isActive ? activeTabRef : null}
-                href={buildHref(tab.id)}
-                className={`relative inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 sm:gap-2 px-3 py-2.5 text-xs sm:text-sm font-medium transition-colors ${
-                  isActive
-                    ? "text-foreground font-semibold after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Icon className="size-3.5 sm:size-4 shrink-0" />
-                <span className="shrink-0">{tab.label}</span>
-                {tab.badge !== undefined && tab.badge > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="ml-0.5 h-4.5 sm:h-5 shrink-0 border-amber-300 bg-amber-100 px-1.5 text-[10px] sm:text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
-                  >
-                    {tab.badge}
-                  </Badge>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+        <CalendarDays className="size-4 shrink-0" />
+        <span>Daily Attendance</span>
+      </Link>
+
+      <Link
+        href={buildHref("exceptions")}
+        aria-current={isExceptionsActive ? "page" : undefined}
+        className={cn(
+          "relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-3 pb-2.5 pt-1 text-sm font-medium transition-colors",
+          isExceptionsActive
+            ? "text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <AlertTriangle className="size-4 shrink-0" />
+        <span>Review Queue</span>
+        {exceptionsCount > 0 && (
+          <StatusBadge tone="warning" className="h-5 px-1.5 text-[11px] tabular-nums">
+            {exceptionsCount}
+          </StatusBadge>
+        )}
+      </Link>
+    </nav>
   );
 }

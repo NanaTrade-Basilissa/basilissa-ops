@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { BranchTopActions } from "@/components/admin/branch-top-actions";
 import { BranchGeofenceCard } from "@/components/admin/branch-geofence-card";
+import { BranchSchedulingCard } from "@/components/admin/branch-scheduling-card";
 import { BranchFeedbackRecipientsCard } from "@/components/admin/branch-feedback-recipients-card";
 import { getEnv } from "@/lib/platform/env";
 import { requireBranchPermission, can } from "@/lib/modules/identity/server";
@@ -110,6 +111,9 @@ export default async function BranchSettingsPage({ params }: { params: Params })
           </div>
         </CardContent>
       </Card>
+
+      {/* Scheduling Mode Configuration (Weekly Rota vs Fixed Schedule) */}
+      <BranchSchedulingCard branch={branch} canWrite={canWrite} />
 
       {/* Geofence & Perimeter Configuration */}
       <BranchGeofenceCard branch={branch} canWrite={canWrite} />

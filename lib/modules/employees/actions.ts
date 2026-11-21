@@ -12,6 +12,7 @@ import {
   requirePermission,
 } from "@/lib/modules/identity/server";
 import { auditSnapshot, recordAudit } from "@/lib/platform/audit";
+import { pushEmployeeToOdoo } from "@/lib/modules/odoo/jobs";
 import { deviceNameFromLabel } from "@/lib/platform/push";
 import { fieldErrorsFrom, type FormState } from "@/lib/platform/forms";
 import {
@@ -66,6 +67,7 @@ export async function createEmployee(
     return { error: "Please fix the errors below.", fieldErrors: fieldErrorsFrom(parsed.error) };
   }
 
+  let createdId = "";
   try {
     await prisma.$transaction(async (tx) => {
       const employee = await tx.employee.create({
@@ -73,6 +75,7 @@ export async function createEmployee(
         // this record, and adoption later links it rather than recreating it.
         data: parsed.data,
       });
+      createdId = employee.id;
       await recordAudit(
         {
           actor: auditActorFrom(actor),
@@ -92,6 +95,11 @@ export async function createEmployee(
       };
     }
     throw error;
+  }
+
+  // Non-blocking search-before-create push to Odoo (retries in background if offline)
+  if (createdId) {
+    await pushEmployeeToOdoo(createdId).catch(() => {});
   }
 
   revalidatePath("/admin/employees");
@@ -145,6 +153,9 @@ export async function updateEmployee(
     }
     throw error;
   }
+
+  // Non-blocking push of updated fields (phone, name, email, role, status) to Odoo
+  await pushEmployeeToOdoo(employeeId).catch(() => {});
 
   revalidatePath(`/admin/employees/${employeeId}`);
   revalidatePath("/admin/employees");
@@ -236,6 +247,9 @@ export async function assignBranch(
       tx,
     );
   });
+
+  // Non-blocking push of updated fields (phone, name, email, role, status) to Odoo
+  await pushEmployeeToOdoo(employeeId).catch(() => {});
 
   revalidatePath(`/admin/employees/${employeeId}`);
   revalidatePath("/admin/employees");
@@ -533,6 +547,84 @@ export async function updateShift(
 
   revalidatePath("/admin/shifts");
   return { success: true };
+}
+
+/**
+ * Soft-deletes an unassigned shift template (sets deletedAt + isActive=false).
+ * Hard deletion is intentionally prohibited to preserve historical references.
+ */
+export async function softDeleteShiftAction(
+  shiftId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const actor = await requireAuth();
+
+  const existing = await prisma.shift.findUnique({
+    where: { id: shiftId },
+    select: {
+      id: true,
+      name: true,
+      branchId: true,
+      deletedAt: true,
+      _count: {
+        select: {
+          assignments: { where: { validTo: null } },
+          patternDays: true,
+        },
+      },
+    },
+  });
+
+  if (!existing || existing.deletedAt) {
+    return { ok: false, error: "Shift template not found." };
+  }
+
+  const isAuthorized = existing.branchId
+    ? can(actor, "schedule:write", { branchId: existing.branchId })
+    : can(actor, "schedule:write");
+
+  if (!isAuthorized) {
+    return { ok: false, error: "You do not have permission to delete this shift template." };
+  }
+
+  if (existing._count.assignments > 0) {
+    return {
+      ok: false,
+      error: `Cannot delete "${existing.name}" because it is assigned to ${existing._count.assignments} employee(s).`,
+    };
+  }
+
+  if (existing._count.patternDays > 0) {
+    return {
+      ok: false,
+      error: `Cannot delete "${existing.name}" because it is used by a rota pattern.`,
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.shift.findUniqueOrThrow({ where: { id: shiftId } });
+    const after = await tx.shift.update({
+      where: { id: shiftId },
+      data: {
+        isActive: false,
+        deletedAt: new Date(),
+      },
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "shift.deleted",
+        entityType: "Shift",
+        entityId: shiftId,
+        before: auditSnapshot(before, SHIFT_FIELDS),
+        after: auditSnapshot(after, SHIFT_FIELDS),
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/admin/shifts");
+  return { ok: true };
 }
 
 /** Puts an employee on a shift from a date. Effective-dated, like branches. */

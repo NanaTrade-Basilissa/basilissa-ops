@@ -21,3 +21,8 @@ This application is **live in production** with real staff and real operational 
    - Wrap multi-step changes in an atomic transaction (`BEGIN; ... COMMIT;` or `prisma.$transaction`).
    - Never run destructive resets (`prisma migrate reset`, `db push --force-reset`, `TRUNCATE`, or broad `DELETE` without a narrow `WHERE` clause) on production.
 
+# UI & Iconography Rules
+
+- **NEVER use the `Sparkles` icon** (or any AI-style multi-point star/sparkle icon) anywhere in the UI. Use clear, domain-specific icons instead (e.g., `CheckCircle2`, `Zap`, `SlidersHorizontal`, `Wand2` avoided too — stick to literal operational icons).
+
+

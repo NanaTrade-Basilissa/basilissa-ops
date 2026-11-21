@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AppPlatform" ADD VALUE IF NOT EXISTS 'WEB';

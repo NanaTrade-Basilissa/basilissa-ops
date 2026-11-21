@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 import { requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { loadComposeOptions } from "@/lib/modules/announcements/server";
 import { AnnouncementComposer } from "@/components/admin/announcement-composer";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 
 export const metadata: Metadata = { title: "New announcement" };
 export const dynamic = "force-dynamic";
@@ -18,18 +17,14 @@ export default async function NewAnnouncementPage() {
   const options = await loadComposeOptions(scope);
 
   return (
-    <div className="space-y-6 min-w-0 max-w-full">
-      <div className="space-y-1 border-b border-border pb-3">
-        <Link
-          href="/admin/announcements"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-4" />
-          Announcements
-        </Link>
-        <h1 className="text-lg font-semibold">New announcement</h1>
-      </div>
+    <PageShell>
+      <PageHeader
+        backHref="/admin/announcements"
+        backLabel="Announcements"
+        title="New announcement"
+        description="Compose and deliver a message or urgent banner to selected branches and staff."
+      />
       <AnnouncementComposer options={options} />
-    </div>
+    </PageShell>
   );
 }

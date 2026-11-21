@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { UtensilsCrossed, ChevronLeft, ChevronRight, MonitorPlay } from "lucide-react";
-import { requireAnyBranchPermission, can, hasAnyPermission } from "@/lib/modules/identity/server";
+import { ChevronLeft, ChevronRight, MonitorPlay } from "lucide-react";
+import { requireAnyBranchPermission, can } from "@/lib/modules/identity/server";
 import { prisma } from "@/lib/platform/prisma";
 import { getWeeklyMealPlans } from "@/lib/modules/meals/service";
 import { accraDateKey, getAccraWeekStart, shiftDateKey } from "@/lib/platform/date";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { MealPlannerForm } from "@/components/admin/meals/meal-planner-form";
 import { MealsBranchSelect } from "@/components/admin/meals/meals-branch-select";
 import { WallQrDialog } from "@/components/admin/meals/wall-qr-dialog";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Staff Meals Management" };
@@ -18,7 +19,6 @@ type SearchParams = Promise<{ branchId?: string; week?: string }>;
 
 export default async function MealsPage({ searchParams }: { searchParams: SearchParams }) {
   const { actor, scope } = await requireAnyBranchPermission("meals:read");
-  const canWriteAny = hasAnyPermission(actor, "meals:write");
 
   const raw = await searchParams;
 
@@ -63,47 +63,39 @@ export default async function MealsPage({ searchParams }: { searchParams: Search
   const weeklyData = await getWeeklyMealPlans(selectedBranch.id, weekStartKey);
 
   return (
-    <div className="space-y-6 w-full max-w-full min-w-0 overflow-x-hidden">
-      {/* Top Header / Actions Bar */}
-      <div className="flex flex-col gap-3 pb-3 border-b sm:flex-row sm:items-center sm:justify-between w-full min-w-0">
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <UtensilsCrossed className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
-            <span className="truncate">Staff Meals</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            Plan daily staff dishes, set weekly cutoff, and track portions.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-          <WallQrDialog
-            branchId={selectedBranch.id}
-            branchName={selectedBranch.name}
-            branchSlug={selectedBranch.slug}
-            triggerClassName="flex-1 sm:flex-initial sm:w-auto justify-center text-xs sm:text-sm px-3 shrink-0"
-          />
-
-          <Link
-            href={`/admin/meals/station?branchId=${selectedBranch.id}`}
-            className={cn(
-              buttonVariants({ variant: "default", size: "sm" }),
-              "gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium justify-center text-xs sm:text-sm flex-1 sm:flex-initial sm:w-auto px-3 shrink-0",
-            )}
-          >
-            <MonitorPlay className="h-4 w-4 shrink-0" />
-            <span className="whitespace-nowrap">Live Kitchen</span>
-          </Link>
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Staff Meals"
+        description="Plan daily staff dishes, configure weekly cutoffs, and track kitchen portions."
+        actions={
+          <>
+            <WallQrDialog
+              branchId={selectedBranch.id}
+              branchName={selectedBranch.name}
+              branchSlug={selectedBranch.slug}
+              triggerClassName="h-9 gap-1.5 text-xs sm:text-sm"
+            />
+            <Link
+              href={`/admin/meals/station?branchId=${selectedBranch.id}`}
+              className={cn(
+                buttonVariants({ variant: "default", size: "sm" }),
+                "h-9 gap-1.5",
+              )}
+            >
+              <MonitorPlay className="size-4 shrink-0" />
+              <span className="whitespace-nowrap">Live Kitchen</span>
+            </Link>
+          </>
+        }
+      />
 
       {/* Filter and Navigation Controls */}
-      <div className="flex flex-col gap-3 bg-muted/20 p-3 rounded-xl border sm:flex-row sm:items-center sm:justify-between w-full min-w-0">
-        <div className="flex items-center justify-between gap-3 w-full sm:w-auto min-w-0">
+      <div className="flex flex-col gap-3 rounded-xl bg-card p-3 ring-1 ring-foreground/10 lg:flex-row lg:items-center lg:justify-between w-full min-w-0">
+        <div className="flex items-center justify-between gap-3 w-full lg:w-auto min-w-0">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
             Branch:
           </span>
-          <div className="flex-1 sm:flex-initial min-w-0">
+          <div className="flex-1 lg:flex-initial min-w-0">
             <MealsBranchSelect
               branches={branches}
               selectedBranchId={selectedBranch.id}
@@ -112,7 +104,7 @@ export default async function MealsPage({ searchParams }: { searchParams: Search
           </div>
         </div>
 
-        <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto pt-2 border-t sm:pt-0 sm:border-t-0 min-w-0">
+        <div className="flex items-center justify-between lg:justify-end gap-1.5 sm:gap-2 w-full lg:w-auto pt-2 border-t lg:pt-0 lg:border-t-0 min-w-0">
           <Link
             href={`/admin/meals?branchId=${selectedBranch.id}&week=${prevWeekKey}`}
             className={cn(buttonVariants({ variant: "outline", size: "icon-sm" }), "shrink-0")}
@@ -153,6 +145,6 @@ export default async function MealsPage({ searchParams }: { searchParams: Search
         initialCutoffAt={weeklyData.weekCutoffAt}
         initialDays={weeklyData.days}
       />
-    </div>
+    </PageShell>
   );
 }

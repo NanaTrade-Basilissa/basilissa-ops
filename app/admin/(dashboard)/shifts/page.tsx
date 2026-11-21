@@ -17,6 +17,8 @@ import { ShiftsTable } from "@/components/admin/shifts-table";
 import { WeeklyScheduleGrid } from "@/components/admin/weekly-schedule-grid";
 import { ScheduleBranchSelect } from "@/components/admin/schedule-branch-select";
 import { FixedSchedulesPanel, type FixedScheduleEmployeeRow } from "@/components/admin/fixed-schedules-panel";
+import { PageHeader, PageShell, PageTabs } from "@/components/admin/page-shell";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { accraDateKey, getAccraWeekStart, shiftDateKey } from "@/lib/platform/date";
 import { cn } from "@/lib/utils";
 
@@ -187,154 +189,133 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
   }
 
   return (
-    <div className="space-y-6">
-      {/* Tab switcher */}
-      <div className="flex border-b border-border">
-        <Link
-          href={`/admin/shifts?tab=schedule${selectedBranchId ? `&branchId=${selectedBranchId}` : ""}&week=${weekStartKey}`}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
-            activeTab === "schedule"
-              ? "border-primary text-foreground font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Weekly Rota
-        </Link>
-        <Link
-          href="/admin/shifts?tab=fixed"
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
-            activeTab === "fixed"
-              ? "border-primary text-foreground font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Fixed Schedules
-        </Link>
-        <Link
-          href="/admin/shifts?tab=templates"
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
-            activeTab === "templates"
-              ? "border-primary text-foreground font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Shift Templates
-        </Link>
-        <Link
-          href="/admin/shifts?tab=patterns"
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
-            activeTab === "patterns"
-              ? "border-primary text-foreground font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Rota Patterns
-        </Link>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Shifts & Rota"
+        description="Build weekly branch rotas, assign fixed schedules, and manage reusable shift templates and rotation patterns."
+        tabs={
+          <PageTabs
+            ariaLabel="Shifts & Rota views"
+            items={[
+              {
+                href: `/admin/shifts?tab=schedule${selectedBranchId ? `&branchId=${selectedBranchId}` : ""}&week=${weekStartKey}`,
+                label: "Weekly Rota",
+                active: activeTab === "schedule",
+              },
+              {
+                href: "/admin/shifts?tab=templates",
+                label: "Shift Templates",
+                active: activeTab === "templates",
+              },
+              {
+                href: "/admin/shifts?tab=patterns",
+                label: "Rota Patterns",
+                active: activeTab === "patterns",
+              },
+              {
+                href: "/admin/shifts?tab=fixed",
+                label: "Fixed Schedules",
+                active: activeTab === "fixed",
+              },
+            ]}
+          />
+        }
+      />
 
       {activeTab === "schedule" ? (
-        <div className="space-y-4">
-          {/* Schedule controls bar */}
-          <div className="flex flex-wrap items-end justify-between gap-4 rounded-xl border border-border bg-card p-4 shadow-xs">
-            {branches.length > 1 ? (
-              <ScheduleBranchSelect
-                branches={branches}
-                selectedBranchId={selectedBranchId}
-                week={weekStartKey}
-              />
-            ) : branches.length === 1 ? (
-              <div className="space-y-1.5 min-w-44">
-                <span className="text-xs font-medium text-muted-foreground">Branch</span>
-                <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
-                  {branches[0].name}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Week navigation */}
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${prevWeekKey}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-                title="Previous week"
-              >
-                <ChevronLeft className="size-4" />
-              </Link>
-              <div className="text-center min-w-44 px-1">
-                <div className="text-sm font-bold text-foreground">
-                  {formattedWeek}
-                </div>
-                {weeklyData?.autoRota && (
-                  <span className="mr-2 inline-block rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-800 dark:bg-violet-950 dark:text-violet-200">
-                    Auto rota
-                  </span>
-                )}
-                {weekStartKey === currentWeekStart && (
-                  <span className="inline-block text-[11px] font-medium text-primary">
-                    Current week
-                  </span>
-                )}
-              </div>
-              <Link
-                href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${nextWeekKey}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-                title="Next week"
-              >
-                <ChevronRight className="size-4" />
-              </Link>
-              {weekStartKey !== currentWeekStart && (
-                <Link
-                  href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${currentWeekStart}`}
-                  className={buttonVariants({ variant: "ghost", size: "sm" })}
-                >
-                  This week
-                </Link>
-              )}
-            </div>
-
-            {/* Export: anyone who can see the rota can take it away. A plain link, so the browser downloads it. */}
-            {weeklyData && (
-              <a
-                href={`/api/admin/shifts/export/excel?branchId=${encodeURIComponent(selectedBranchId)}&week=${weekStartKey}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-                title={`Download ${formattedWeek} as an Excel file`}
-              >
-                <Download className="size-4" />
-                Export
-              </a>
-            )}
-
-            {/* Rota actions, behind one menu */}
-            {canManageBranch && weeklyData && (
-              <ScheduleActionsMenu
-                branchId={selectedBranchId}
-                branchName={weeklyData.branchName}
-                weekStartKey={weekStartKey}
-                days={weeklyData.days}
-                shifts={weeklyData.shifts}
-                branchEmployees={weeklyData.employees
-                  .filter((e) => !e.isVisitor)
-                  .map((e) => ({ id: e.employeeId, name: e.name, employeeCode: e.employeeCode }))}
-                coverCandidates={coverCandidates}
-                autoRota={weeklyData.autoRota}
-                weekLabel={formattedWeek}
-                patterns={patterns
-                  .filter((p) => p.isActive && (p.branchId === null || p.branchId === selectedBranchId))
-                  .map((p) => ({ id: p.id, name: p.name, cycle: p.cycle.map((d) => d.shiftId) }))}
-                patternShifts={shiftOptions}
-                patternCandidates={weeklyData.employees
-                  .filter((e) => !e.isVisitor)
-                  .map((e) => ({ id: e.employeeId, name: e.name, employeeCode: e.employeeCode, patternName: e.patternName }))}
-              />
-            )}
-          </div>
-
+        <div className="space-y-3">
           {weeklyData ? (
-            <WeeklyScheduleGrid data={weeklyData} canManage={canManageBranch} />
+            <WeeklyScheduleGrid
+              data={weeklyData}
+              canManage={canManageBranch}
+              toolbarFilters={
+                <>
+                  {branches.length > 1 ? (
+                    <ScheduleBranchSelect
+                      branches={branches}
+                      selectedBranchId={selectedBranchId}
+                      week={weekStartKey}
+                    />
+                  ) : branches.length === 1 ? (
+                    <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-xs font-medium text-foreground">
+                      {branches[0].name}
+                    </div>
+                  ) : null}
+
+                  <div className="flex items-center justify-between gap-1.5 sm:justify-start">
+                    <div className="inline-flex h-9 items-center rounded-md border border-input bg-background shadow-xs">
+                      <Link
+                        href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${prevWeekKey}`}
+                        className="inline-flex h-full items-center justify-center border-r border-border/60 px-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                        title="Previous week"
+                        aria-label="Previous week"
+                      >
+                        <ChevronLeft className="size-4" />
+                      </Link>
+                      <span className="px-3 text-xs font-medium tabular-nums text-foreground">
+                        {formattedWeek}
+                      </span>
+                      <Link
+                        href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${nextWeekKey}`}
+                        className="inline-flex h-full items-center justify-center border-l border-border/60 px-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                        title="Next week"
+                        aria-label="Next week"
+                      >
+                        <ChevronRight className="size-4" />
+                      </Link>
+                    </div>
+
+                    {weekStartKey !== currentWeekStart && (
+                      <Link
+                        href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${currentWeekStart}`}
+                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9 text-xs")}
+                      >
+                        Today
+                      </Link>
+                    )}
+
+                    {weeklyData.autoRota && (
+                      <StatusBadge tone="info">Auto rota</StatusBadge>
+                    )}
+                  </div>
+                </>
+              }
+              toolbarActions={
+                <>
+                  <a
+                    href={`/api/admin/shifts/export/excel?branchId=${encodeURIComponent(selectedBranchId)}&week=${weekStartKey}`}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9 gap-1.5 text-xs")}
+                    title={`Download ${formattedWeek} as an Excel file`}
+                  >
+                    <Download className="size-3.5" />
+                    <span>Export</span>
+                  </a>
+
+                  {canManageBranch && (
+                    <ScheduleActionsMenu
+                      branchId={selectedBranchId}
+                      branchName={weeklyData.branchName}
+                      weekStartKey={weekStartKey}
+                      days={weeklyData.days}
+                      shifts={weeklyData.shifts}
+                      branchEmployees={weeklyData.employees
+                        .filter((e) => !e.isVisitor)
+                        .map((e) => ({ id: e.employeeId, name: e.name, employeeCode: e.employeeCode }))}
+                      coverCandidates={coverCandidates}
+                      autoRota={weeklyData.autoRota}
+                      weekLabel={formattedWeek}
+                      patterns={patterns
+                        .filter((p) => p.isActive && (p.branchId === null || p.branchId === selectedBranchId))
+                        .map((p) => ({ id: p.id, name: p.name, cycle: p.cycle.map((d) => d.shiftId) }))}
+                      patternShifts={shiftOptions}
+                      patternCandidates={weeklyData.employees
+                        .filter((e) => !e.isVisitor)
+                        .map((e) => ({ id: e.employeeId, name: e.name, employeeCode: e.employeeCode, patternName: e.patternName }))}
+                    />
+                  )}
+                </>
+              }
+            />
           ) : (
             <Empty className="border py-12">
               <EmptyMedia variant="icon">
@@ -454,6 +435,6 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
           }))}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

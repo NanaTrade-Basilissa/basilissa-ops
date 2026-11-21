@@ -14,6 +14,7 @@ export const DEFAULT_ANDROID_STORE_URL =
   "https://play.google.com/store/apps/details?id=com.basilissa.employee";
 
 export function storeUrlFor(platform: AppPlatformKey): string | null {
+  if (platform === "WEB") return null;
   const env = getEnv();
   if (platform === "IOS") return env.APP_STORE_URL_IOS ?? DEFAULT_IOS_STORE_URL;
   return env.APP_STORE_URL_ANDROID ?? DEFAULT_ANDROID_STORE_URL;
@@ -46,6 +47,14 @@ export async function listReleases(): Promise<AppReleaseItem[]> {
   }));
 }
 
+export type ReleasePushSummary = {
+  totalTokens: number;
+  delivered: number;
+  simulated: number;
+  failed: number;
+  firstError?: string;
+};
+
 /**
  * Tells staff on the given platform that an update exists. Only ever called
  * when the admin ticked the box; a release never messages anyone on its own.
@@ -55,7 +64,10 @@ export async function broadcastReleasePush(
   platform: AppPlatformKey,
   version: string,
   mode: "FLEXIBLE" | "REQUIRED",
-): Promise<number> {
+): Promise<ReleasePushSummary> {
+  if (platform === "WEB") {
+    return { totalTokens: 0, delivered: 0, simulated: 0, failed: 0 };
+  }
   const identities = await prisma.employeeDeviceIdentity.findMany({
     where: { providerType: ProviderType.MOBILE_APP, revokedAt: null, employee: { status: "ACTIVE" } },
     select: { label: true },
@@ -67,7 +79,9 @@ export async function broadcastReleasePush(
     if (meta.platform && meta.platform.toLowerCase() !== platform.toLowerCase()) continue;
     tokens.add(meta.pushToken);
   }
-  if (tokens.size === 0) return 0;
+  if (tokens.size === 0) {
+    return { totalTokens: 0, delivered: 0, simulated: 0, failed: 0 };
+  }
   const receipts = await sendPushNotification([...tokens], {
     title: "Update available",
     body:
@@ -76,5 +90,16 @@ export async function broadcastReleasePush(
         : `Basilissa Staff ${version} is now available in the store.`,
     data: { type: "APP_UPDATE", version },
   });
-  return receipts.filter((r) => r.ok).length;
+
+  const delivered = receipts.filter((r) => r.ok && !r.simulated).length;
+  const simulated = receipts.filter((r) => r.ok && r.simulated).length;
+  const failedReceipts = receipts.filter((r) => !r.ok);
+
+  return {
+    totalTokens: tokens.size,
+    delivered,
+    simulated,
+    failed: failedReceipts.length,
+    firstError: failedReceipts[0]?.error,
+  };
 }

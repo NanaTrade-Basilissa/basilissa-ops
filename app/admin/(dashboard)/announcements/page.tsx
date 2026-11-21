@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { listAnnouncements } from "@/lib/modules/announcements/server";
 import { AnnouncementsTable } from "@/components/admin/announcements-table";
+import { DataTablePagination } from "@/components/admin/data-table-pagination";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +13,8 @@ export const metadata: Metadata = { title: "Announcements" };
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ page?: string | string[] }>;
+
+const PAGE_SIZE = 20;
 
 /**
  * What has been sent. Someone with a company-wide grant sees everything; a
@@ -30,45 +34,32 @@ export default async function AnnouncementsPage({ searchParams }: { searchParams
   );
 
   return (
-    <div className="space-y-6 min-w-0 max-w-full">
-      <div className="flex flex-col gap-3 border-b border-border pb-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">Announcements</h1>
-          <p className="text-sm text-muted-foreground">
-            Messages sent to staff. {total} sent so far.
-          </p>
-        </div>
-        {canSend && (
-          <Link href="/admin/announcements/new" className={cn(buttonVariants())}>
-            <Plus className="size-4" />
-            New announcement
-          </Link>
-        )}
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Announcements"
+        description={`Broadcast updates and urgent banners to staff across branches. ${total} sent so far.`}
+        actions={
+          canSend ? (
+            <Link
+              href="/admin/announcements/new"
+              className={cn(buttonVariants({ variant: "default", size: "sm" }), "h-9 gap-1.5")}
+            >
+              <Plus className="size-4" />
+              <span>New announcement</span>
+            </Link>
+          ) : undefined
+        }
+      />
 
       <AnnouncementsTable rows={rows} />
 
-      {pageCount > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Page {page} of {pageCount}
-          </span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link href={`/admin/announcements?page=${page - 1}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-                <ChevronLeft className="size-4" />
-                Newer
-              </Link>
-            )}
-            {page < pageCount && (
-              <Link href={`/admin/announcements?page=${page + 1}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-                Older
-                <ChevronRight className="size-4" />
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+      <DataTablePagination
+        page={page}
+        totalPages={Math.max(1, pageCount)}
+        total={total}
+        pageSize={PAGE_SIZE}
+        buildHref={(targetPage) => (targetPage <= 1 ? "/admin/announcements" : `/admin/announcements?page=${targetPage}`)}
+      />
+    </PageShell>
   );
 }

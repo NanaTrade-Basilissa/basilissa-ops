@@ -29,7 +29,17 @@ export async function loadScheduleInputs(
   tx: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<ScheduleInputs> {
   const [branch, assignments, exceptions, shifts, holidays, patterns] = await Promise.all([
-    tx.branch.findUnique({ where: { id: branchId }, select: { timezone: true } }),
+    tx.branch.findUnique({
+      where: { id: branchId },
+      select: {
+        timezone: true,
+        schedulingMode: true,
+        fixedShiftStartMinute: true,
+        fixedShiftEndMinute: true,
+        fixedWorkDays: true,
+        fixedOffOnPublicHolidays: true,
+      },
+    }),
     tx.employeeShiftAssignment.findMany({
       where: { employeeId },
       select: { shiftId: true, daysOfWeek: true, remoteDaysOfWeek: true, validFrom: true, validTo: true },
@@ -46,6 +56,18 @@ export async function loadScheduleInputs(
     loadLivePatternsFor(employeeId, tx),
   ]);
 
+  const branchFixedSchedule =
+    branch?.schedulingMode === "FIXED_SCHEDULE" &&
+    branch.fixedShiftStartMinute !== null &&
+    branch.fixedShiftEndMinute !== null
+      ? {
+          startMinute: branch.fixedShiftStartMinute,
+          endMinute: branch.fixedShiftEndMinute,
+          workDays: branch.fixedWorkDays,
+          offOnPublicHolidays: branch.fixedOffOnPublicHolidays,
+        }
+      : null;
+
   return {
     timeZone: branch?.timezone ?? "Africa/Accra",
     shifts,
@@ -61,6 +83,7 @@ export async function loadScheduleInputs(
     })),
     holidays,
     patterns,
+    branchFixedSchedule,
   };
 }
 

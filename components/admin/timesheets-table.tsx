@@ -3,23 +3,29 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  Download,
-  Users,
-  Clock,
   AlertTriangle,
-  TriangleAlert,
   CalendarClock,
+  ChevronDown,
+  Clock,
+  Download,
   FileSpreadsheet,
-  Calendar,
+  TriangleAlert,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatCard } from "@/components/admin/stat-card";
+import { StatusBadge } from "@/components/admin/status-badge";
+import { TimesheetFilters } from "@/components/admin/timesheet-filters";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
 import { EmployeeDetailSheet } from "@/components/admin/employee-detail-sheet";
-import { TableRowActions } from "@/components/admin/table-row-actions";
 import type { TimesheetSummaryData } from "@/lib/modules/attendance/queries";
 
 function formatDuration(minutes: number): string {
@@ -61,21 +67,31 @@ function ColumnHeader({ label, help }: { label: string; help: string }) {
 
 const columnHelper = createColumnHelper<typeof dataTableFeatures, TimesheetRow>();
 
-export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
+export function TimesheetsTable({
+  data,
+  branches,
+  branchId,
+  search,
+}: {
+  data: TimesheetSummaryData;
+  branches: { id: string; name: string }[];
+  branchId?: string;
+  search?: string;
+}) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
   const {
     startDate,
     endDate,
     totalEmployees,
-    totalWorkedMinutes,
     totalRegularMinutes,
-    totalOvertimeMinutes,
     totalPayableOvertimeMinutes,
     totalLateMinutes,
     totalExceptions,
     rows,
   } = data;
+
+  const totalPayableMinutes = totalRegularMinutes + totalPayableOvertimeMinutes;
 
   const columns = columnHelper.columns([
     columnHelper.accessor("name", {
@@ -101,34 +117,25 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       id: "days",
       header: () => (
         <ColumnHeader
-          label="Days Worked / Scheduled"
+          label="Days"
           help="Days the employee clocked in, out of the days they were scheduled to work in this period."
         />
       ),
       cell: ({ row }) => (
-        <span className="text-sm">
+        <span className="text-sm tabular-nums">
           <span className="font-medium text-foreground">{row.original.daysWorked}</span>
           <span className="text-muted-foreground"> / {row.original.daysScheduled}</span>
         </span>
       ),
     }),
-    columnHelper.accessor("netWorkedMinutes", {
-      header: () => (
-        <ColumnHeader
-          label="Net Hours Worked"
-          help="Total time between clock-in and clock-out, minus breaks. Includes any time worked beyond the shift."
-        />
-      ),
-      cell: (info) => <span className="font-medium text-foreground">{formatDuration(info.getValue())}</span>,
-    }),
     columnHelper.accessor("regularMinutes", {
       header: () => (
         <ColumnHeader
           label="Regular Hours"
-          help="Hours worked within the scheduled shift. Never more than the shift length, so overtime is not included."
+          help="Hours worked within scheduled shifts. Accounts for late arrivals and early departures; unscheduled late clock-outs do not add extra hours."
         />
       ),
-      cell: (info) => <span className="text-muted-foreground">{formatDuration(info.getValue())}</span>,
+      cell: (info) => <span className="text-sm tabular-nums text-foreground">{formatDuration(info.getValue())}</span>,
     }),
     columnHelper.accessor("payableOvertimeMinutes", {
       header: () => (
@@ -140,11 +147,7 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       cell: ({ row }) => {
         const { payableOvertimeMinutes } = row.original;
         if (payableOvertimeMinutes > 0) {
-          return (
-            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-medium">
-              {formatDuration(payableOvertimeMinutes)}
-            </Badge>
-          );
+          return <StatusBadge tone="good">{formatDuration(payableOvertimeMinutes)}</StatusBadge>;
         }
         return <span className="text-muted-foreground">-</span>;
       },
@@ -154,52 +157,51 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       header: () => (
         <ColumnHeader
           label="Late"
-          help="Number of days the employee clocked in after the grace period, with total late time in brackets."
+          help="Number of late clock-ins after the grace period, with total late time in brackets."
         />
       ),
       cell: ({ row }) =>
         row.original.lateCount > 0 ? (
-          <Badge
-            variant="outline"
-            className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300 font-medium"
+          <StatusBadge
+            tone="warning"
             title={`${row.original.lateCount} late occurrence${row.original.lateCount > 1 ? "s" : ""} totaling ${formatLateDuration(row.original.lateMinutes)}`}
           >
             {row.original.lateCount}x ({formatLateDuration(row.original.lateMinutes)})
-          </Badge>
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        ),
-    }),
-    columnHelper.accessor("exceptionsCount", {
-      header: () => (
-        <ColumnHeader
-          label="Days to Review"
-          help="Days that cannot be finalised until a manager reviews them, such as a missing clock-out or overtime awaiting approval."
-        />
-      ),
-      cell: (info) =>
-        info.getValue() > 0 ? (
-          <Badge variant="destructive">{info.getValue()} need review</Badge>
+          </StatusBadge>
         ) : (
           <span className="text-muted-foreground">-</span>
         ),
     }),
     columnHelper.display({
-      id: "actions",
-      header: () => <div className="text-right sr-only sm:not-sr-only">Actions</div>,
-      cell: ({ row }) => (
-        <div className="flex justify-end">
-          <TableRowActions
-            actions={[
-              {
-                label: "Daily view",
-                href: `/admin/attendance?branchId=${row.original.branchId}&date=${startDate}`,
-                icon: Calendar,
-              },
-            ]}
-          />
-        </div>
+      id: "totalPayable",
+      header: () => (
+        <ColumnHeader
+          label="Total Payable"
+          help="Combined payable hours for this period: Regular Hours + Scheduled Overtime."
+        />
       ),
+      cell: ({ row }) => {
+        const total = row.original.regularMinutes + row.original.payableOvertimeMinutes;
+        return (
+          <span className="text-sm font-semibold tabular-nums text-foreground">
+            {formatDuration(total)}
+          </span>
+        );
+      },
+    }),
+    columnHelper.accessor("exceptionsCount", {
+      header: () => (
+        <ColumnHeader
+          label="To Review"
+          help="Days that cannot be finalised until a manager reviews them, such as a missing clock-out or overtime awaiting approval."
+        />
+      ),
+      cell: (info) =>
+        info.getValue() > 0 ? (
+          <StatusBadge tone="critical">{info.getValue()} need review</StatusBadge>
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
     }),
   ]);
 
@@ -212,10 +214,9 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       "Period End",
       "Days Scheduled",
       "Days Worked",
-      "Scheduled Hours",
-      "Net Worked Hours",
       "Regular Hours",
-      "Payable Overtime Hours",
+      "Scheduled Overtime Hours",
+      "Total Payable Hours",
       "Late Days",
       "Total Late Time",
       "Days To Review",
@@ -232,10 +233,9 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
           `"${endDate}"`,
           r.daysScheduled,
           r.daysWorked,
-          formatHoursDecimal(r.scheduledMinutes),
-          formatHoursDecimal(r.netWorkedMinutes),
           formatHoursDecimal(r.regularMinutes),
           formatHoursDecimal(r.payableOvertimeMinutes),
+          formatHoursDecimal(r.regularMinutes + r.payableOvertimeMinutes),
           r.lateCount,
           `"${formatLateDuration(r.lateMinutes)}"`,
           r.exceptionsCount,
@@ -274,20 +274,21 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Total staff" value={String(totalEmployees)} icon={Users} />
         <StatCard
-          label="Net worked"
-          value={formatDuration(totalWorkedMinutes)}
-          icon={Clock}
-        />
-        <StatCard
-          label="Regular"
+          label="Regular hours"
           value={formatDuration(totalRegularMinutes)}
           icon={Clock}
         />
         <StatCard
-          label="Payable overtime"
+          label="Scheduled overtime"
           value={formatDuration(totalPayableOvertimeMinutes)}
           icon={CalendarClock}
           tone="good"
+        />
+        <StatCard
+          label="Total payable"
+          value={formatDuration(totalPayableMinutes)}
+          icon={Clock}
+          tone="brand"
         />
         <StatCard
           label="Total late"
@@ -295,51 +296,60 @@ export function TimesheetsTable({ data }: { data: TimesheetSummaryData }) {
           icon={AlertTriangle}
         />
         <StatCard
-          label="Days to review"
+          label="To review"
           value={String(totalExceptions)}
           icon={TriangleAlert}
         />
       </div>
 
-      {/* Header with Export CTA */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="text-sm text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{rows.length}</span> employees for{" "}
-          <span className="font-medium text-foreground">{startDate}</span> to{" "}
-          <span className="font-medium text-foreground">{endDate}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={exportPayrollCsv}
-            disabled={rows.length === 0}
-            className="gap-1.5 text-xs"
-          >
-            <Download className="size-3.5" />
-            CSV
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={exportPayrollExcel}
-            disabled={rows.length === 0}
-            className="gap-1.5 text-xs border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-          >
-            <FileSpreadsheet className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-            Export Excel (.xlsx)
-          </Button>
-        </div>
-      </div>
+      {/* Filter Bar directly above the table + unified Export menu */}
+      <div className="space-y-3">
+        <TimesheetFilters
+          branches={branches}
+          startDate={startDate}
+          endDate={endDate}
+          branchId={branchId}
+          search={search}
+          actions={
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={rows.length === 0}
+                    className="h-9 gap-1.5 text-xs"
+                  >
+                    <Download className="size-3.5" />
+                    <span>Export</span>
+                    <ChevronDown className="size-3.5 text-muted-foreground" />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end" className="w-max min-w-44">
+                <DropdownMenuItem onClick={exportPayrollExcel} className="whitespace-nowrap">
+                  <FileSpreadsheet className="size-4" />
+                  Export Excel (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportPayrollCsv} className="whitespace-nowrap">
+                  <Download className="size-4" />
+                  Export CSV (.csv)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
+        />
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        emptyMessage="No attendance recorded for this period."
-        onRowClick={(row) => setSelectedEmployeeId(row.employeeId)}
-      />
+        <DataTable
+          columns={columns}
+          data={rows}
+          ariaLabel="Payroll timesheets"
+          pageSize={20}
+          emptyMessage="No attendance recorded for this period."
+          onRowClick={(row) => setSelectedEmployeeId(row.employeeId)}
+        />
+      </div>
       <EmployeeDetailSheet
         employeeId={selectedEmployeeId}
         open={selectedEmployeeId !== null}

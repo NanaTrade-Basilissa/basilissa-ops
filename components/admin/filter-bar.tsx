@@ -47,38 +47,57 @@ export function FilterBar({
   const [open, setOpen] = useState(false);
 
   if (isMobile && filters) {
+    const filterSheet = (
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="relative h-9 shrink-0 gap-1.5 text-xs"
+            >
+              <SlidersHorizontal className="size-3.5" />
+              {filtersLabel}
+              {hasActiveFilters && (
+                <span
+                  aria-hidden
+                  className="absolute -top-1 -right-1 size-2 rounded-full bg-primary"
+                />
+              )}
+            </Button>
+          }
+        />
+        <SheetContent side="bottom" className="max-h-[85vh]">
+          <SheetHeader>
+            <SheetTitle>{filtersLabel}</SheetTitle>
+          </SheetHeader>
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-4 pb-4">
+            {filters}
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+
+    // When both filters and toolbar actions are present on mobile, keep search
+    // full-width on row 1 so typing is comfortable, and place Filters + actions
+    // cleanly on row 2.
+    if (actions && search) {
+      return (
+        <div className={cn("flex flex-col gap-2.5", className)}>
+          <div className="w-full">{search}</div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {filterSheet}
+            <div className="flex items-center gap-2">{actions}</div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className={cn("flex items-center gap-2", className)}>
         {search && <div className="min-w-0 flex-1">{search}</div>}
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger
-            render={
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="relative h-9 shrink-0 gap-1.5 text-xs"
-              >
-                <SlidersHorizontal className="size-3.5" />
-                {filtersLabel}
-                {hasActiveFilters && (
-                  <span
-                    aria-hidden
-                    className="absolute -top-1 -right-1 size-2 rounded-full bg-primary"
-                  />
-                )}
-              </Button>
-            }
-          />
-          <SheetContent side="bottom" className="max-h-[85vh]">
-            <SheetHeader>
-              <SheetTitle>{filtersLabel}</SheetTitle>
-            </SheetHeader>
-            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-4 pb-4">
-              {filters}
-            </div>
-          </SheetContent>
-        </Sheet>
+        {filterSheet}
         {actions && <div className="shrink-0">{actions}</div>}
       </div>
     );

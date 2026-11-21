@@ -152,9 +152,54 @@ function cleanOdooString(val: string | false | null | undefined): string | null 
 
 export function normalizePhoneKey(phone: string | null | undefined): string | null {
   if (!phone) return null;
-  const digits = phone.replace(/\D/g, "");
+  const digits = phone.trim().replace(/\D/g, "");
   if (digits.length < 9) return null;
   return digits.slice(-9);
+}
+
+export function normalizeEmailKey(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const cleaned = email.trim().replace(/\s+/g, "").toLowerCase();
+  return cleaned.length > 0 && cleaned.includes("@") ? cleaned : null;
+}
+
+/**
+ * Strict search-before-create matcher for Ops → Odoo employee pushes.
+ * Checks BOTH work_phone and mobile_phone on every Odoo record using trimmed,
+ * normalized 9-digit phone keys, then trimmed/lowercased email. Never merges
+ * on name alone so two people with similar names can never collide.
+ */
+export function findOdooEmployeeMatch(
+  local: { phone: string | null; email: string | null },
+  odooRecords: readonly RawOdooEmployeeRecord[],
+): { record: RawOdooEmployeeRecord; matchedBy: "phone" | "email" } | null {
+  const localPhone = normalizePhoneKey(local.phone);
+  if (localPhone) {
+    const phoneMatches = odooRecords.filter((o) => {
+      const workPhone = typeof o.work_phone === "string" ? normalizePhoneKey(o.work_phone) : null;
+      const mobilePhone = typeof o.mobile_phone === "string" ? normalizePhoneKey(o.mobile_phone) : null;
+      return workPhone === localPhone || mobilePhone === localPhone;
+    });
+    if (phoneMatches.length > 0) {
+      // If Odoo already has duplicates for this phone, pick the oldest (lowest ID)
+      const sorted = [...phoneMatches].sort((a, b) => a.id - b.id);
+      return { record: sorted[0]!, matchedBy: "phone" };
+    }
+  }
+
+  const localEmail = normalizeEmailKey(local.email);
+  if (localEmail) {
+    const emailMatches = odooRecords.filter((o) => {
+      const odooEmail = typeof o.work_email === "string" ? normalizeEmailKey(o.work_email) : null;
+      return odooEmail === localEmail;
+    });
+    if (emailMatches.length > 0) {
+      const sorted = [...emailMatches].sort((a, b) => a.id - b.id);
+      return { record: sorted[0]!, matchedBy: "email" };
+    }
+  }
+
+  return null;
 }
 
 function normalizeNameToken(value: string): string {
@@ -190,8 +235,8 @@ export function normalizeOdooEmployee(raw: RawOdooEmployeeRecord): NormalizedOdo
 
   const odooJobName = Array.isArray(raw.job_id) ? cleanOdooString(raw.job_id[1]) : null;
   const jobTitle = odooJobName ?? cleanOdooString(raw.job_title);
-  const email = cleanOdooString(raw.work_email)?.toLowerCase() ?? null;
-  const phone = cleanOdooString(raw.work_phone) ?? cleanOdooString(raw.mobile_phone) ?? null;
+  const email = normalizeEmailKey(cleanOdooString(raw.work_email));
+  const phone = cleanOdooString(raw.mobile_phone) ?? cleanOdooString(raw.work_phone) ?? null;
 
   const odooDepartmentName = Array.isArray(raw.department_id)
     ? cleanOdooString(raw.department_id[1]) ?? ""
@@ -263,9 +308,9 @@ export function matchOdooEmployeeToLocal(
   const odooForwardKey = `${normalizeNameToken(odooEmp.firstName)}|${normalizeNameToken(odooEmp.lastName)}`;
   const odooReverseKey = `${normalizeNameToken(odooEmp.lastName)}|${normalizeNameToken(odooEmp.firstName)}`;
 
-  if (odooEmp.email) {
-    const targetEmail = odooEmp.email.toLowerCase();
-    const linkedEmailMatch = linked.find((e) => e.email?.trim().toLowerCase() === targetEmail);
+  const targetEmail = normalizeEmailKey(odooEmp.email);
+  if (targetEmail) {
+    const linkedEmailMatch = linked.find((e) => normalizeEmailKey(e.email) === targetEmail);
     if (linkedEmailMatch) {
       return {
         kind: "duplicate_in_odoo",
@@ -303,9 +348,8 @@ export function matchOdooEmployeeToLocal(
   }
 
   // Next search unlinked local employees for linking
-  if (odooEmp.email) {
-    const targetEmail = odooEmp.email.toLowerCase();
-    const emailMatches = unlinked.filter((e) => e.email?.trim().toLowerCase() === targetEmail);
+  if (targetEmail) {
+    const emailMatches = unlinked.filter((e) => normalizeEmailKey(e.email) === targetEmail);
     if (emailMatches.length === 1) {
       return { kind: "link_existing", localEmployeeId: emailMatches[0].id, matchedBy: "email" };
     }

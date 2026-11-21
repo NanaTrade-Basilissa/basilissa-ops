@@ -7,6 +7,8 @@ import { getAccraDayEnd } from "@/lib/platform/date";
 import { FeedbackFilters } from "@/components/admin/feedback-filters";
 import { FeedbackTable } from "@/components/admin/feedback-table";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
+import { FeedbackSectionTabs } from "@/components/admin/feedback-section-tabs";
 import { requireAnyBranchPermission } from "@/lib/modules/identity/server";
 
 export const metadata: Metadata = { title: "All Submissions" };
@@ -93,7 +95,13 @@ export default async function AllFeedbackSubmissionsPage({ searchParams }: { sea
   }
 
   return (
-    <div className="space-y-4">
+    <PageShell>
+      <PageHeader
+        title="Customer Feedback"
+        description="Browse, filter, and inspect individual customer survey submissions."
+        tabs={<FeedbackSectionTabs active="submissions" />}
+      />
+
       <Suspense fallback={<div className="h-[74px]" />}>
         <FeedbackFilters branches={branches.map((b) => ({ id: b.id, label: b.name }))} />
       </Suspense>
@@ -107,6 +115,6 @@ export default async function AllFeedbackSubmissionsPage({ searchParams }: { sea
         pageSize={PAGE_SIZE}
         buildHref={pageHref}
       />
-    </div>
+    </PageShell>
   );
 }

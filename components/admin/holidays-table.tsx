@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable, dataTableFeatures } from "@/components/admin/data-table";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { TableRowActions } from "@/components/admin/table-row-actions";
 import { HolidayDialog } from "@/components/admin/holiday-dialog";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -104,14 +104,9 @@ export function HolidaysTable({ holidays, canEdit }: { holidays: HolidayRow[]; c
       header: "Status",
       cell: (info) =>
         info.getValue() ? (
-          <Badge variant="outline" className="gap-1 border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-            <CheckCircle2 className="size-3" />
-            Confirmed
-          </Badge>
+          <StatusBadge tone="good">Confirmed</StatusBadge>
         ) : (
-          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            Estimated
-          </Badge>
+          <StatusBadge tone="warning">Estimated</StatusBadge>
         ),
     }),
     columnHelper.accessor("source", {
@@ -152,6 +147,8 @@ export function HolidaysTable({ holidays, canEdit }: { holidays: HolidayRow[]; c
       <DataTable
         columns={columns}
         data={holidays}
+        ariaLabel="Public holidays"
+        pageSize={20}
         emptyMessage="No holidays for this year yet. Load the Ghana calendar or add one."
       />
       {editing && (

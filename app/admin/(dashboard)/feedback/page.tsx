@@ -18,6 +18,8 @@ import {
 } from "@/components/admin/charts";
 import { RecentSubmissionsTable } from "@/components/admin/recent-submissions-table";
 import { GeneralQrButton } from "@/components/admin/general-qr-button";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
+import { FeedbackSectionTabs } from "@/components/admin/feedback-section-tabs";
 import { getEnv } from "@/lib/platform/env";
 import { branchScope, requirePermission } from "@/lib/modules/identity/server";
 
@@ -80,10 +82,13 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
     : undefined;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-end">
-        <GeneralQrButton feedbackUrl={`${getEnv().NEXT_PUBLIC_APP_URL}/feedback`} />
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Customer Feedback"
+        description="Monitor branch ratings, submission trends, and customer sentiment across locations."
+        actions={<GeneralQrButton feedbackUrl={`${getEnv().NEXT_PUBLIC_APP_URL}/feedback`} />}
+        tabs={<FeedbackSectionTabs active="overview" />}
+      />
 
       <Suspense fallback={<div className="h-[74px]" />}>
         <DashboardFilters
@@ -191,6 +196,6 @@ export default async function FeedbackOverviewPage({ searchParams }: { searchPar
           <RecentSubmissionsTable submissions={data.recentSubmissions} />
         </CardContent>
       </Card>
-    </div>
+    </PageShell>
   );
 }

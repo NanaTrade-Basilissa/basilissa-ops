@@ -3,14 +3,9 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { getEmployeeDetailAction } from "@/lib/modules/employees/actions";
 import { EmployeeDetailContent } from "@/components/admin/employee-detail-content";
+import { InspectorSheet } from "@/components/admin/inspector-sheet";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 
 type Detail = NonNullable<Awaited<ReturnType<typeof getEmployeeDetailAction>>>;
 
@@ -43,12 +38,10 @@ function EmployeeDetailSkeleton() {
 
 export function EmployeeDetailSheet({
   employeeId,
-  trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
 }: {
   employeeId: string | null;
-  trigger?: React.ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -78,33 +71,54 @@ export function EmployeeDetailSheet({
     }
   }, [open, load]);
 
+  const employeeName = detail
+    ? `${detail.employee.firstName} ${detail.employee.lastName}`.trim()
+    : "Employee";
+  const status = detail?.employee.status;
+  const statusTone =
+    status === "ACTIVE"
+      ? "good"
+      : status === "SUSPENDED"
+        ? "warning"
+        : status === "TERMINATED"
+          ? "critical"
+          : "neutral";
+
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      {trigger ? <SheetTrigger render={trigger} /> : null}
-      <SheetContent className="w-full data-[side=right]:w-full sm:max-w-full data-[side=right]:sm:max-w-full lg:w-1/3 data-[side=right]:lg:w-1/3 lg:max-w-none data-[side=right]:lg:max-w-none overflow-y-auto">
-        <SheetHeader>
-
-          <SheetTitle>Employee</SheetTitle>
-        </SheetHeader>
-        <div className="px-4 pb-4">
-          {(isPending || !detail) && <EmployeeDetailSkeleton />}
-          {detail && (
-            <EmployeeDetailContent
-              employee={detail.employee}
-              branches={detail.branches}
-              shifts={detail.shifts}
-              shiftAssignments={detail.shiftAssignments}
-              canWrite={detail.canWrite}
-              canSchedule={detail.canSchedule}
-              attendanceEnabled={detail.attendanceEnabled}
-              attendanceHistory={detail.attendanceHistory}
-              branchDevices={detail.branchDevices}
-              onMutated={load}
-            />
-
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
+    <InspectorSheet
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={employeeName}
+      description={
+        detail
+          ? [detail.employee.employeeCode, detail.employee.jobTitle].filter(Boolean).join(" · ")
+          : "Loading employee profile..."
+      }
+      badge={
+        status ? (
+          <StatusBadge tone={statusTone} dot>
+            {status.charAt(0) + status.slice(1).toLowerCase()}
+          </StatusBadge>
+        ) : undefined
+      }
+      fullPageHref={employeeId ? `/admin/employees/${employeeId}` : undefined}
+      fullPageLabel="Full profile"
+    >
+      {(isPending || !detail) && <EmployeeDetailSkeleton />}
+      {detail && (
+        <EmployeeDetailContent
+          employee={detail.employee}
+          branches={detail.branches}
+          shifts={detail.shifts}
+          shiftAssignments={detail.shiftAssignments}
+          canWrite={detail.canWrite}
+          canSchedule={detail.canSchedule}
+          attendanceEnabled={detail.attendanceEnabled}
+          attendanceHistory={detail.attendanceHistory}
+          branchDevices={detail.branchDevices}
+          onMutated={load}
+        />
+      )}
+    </InspectorSheet>
   );
 }

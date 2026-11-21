@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MessageSquareText, SearchX } from "lucide-react";
 import { Badge, ratingBadgeVariant } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import type { RecentSubmissionRow } from "@/lib/modules/feedback/server";
@@ -59,13 +60,10 @@ export function RecentSubmissionsTable({
                 <div className="flex items-center gap-2">
                   <span>{formatAccraDateTime(s.submittedAt)}</span>
                   {textComments && (
-                    <span
-                      title={textComments}
-                      className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
-                    >
-                      <MessageSquareText className="size-2.5" />
+                    <StatusBadge tone="info" title={textComments}>
+                      <MessageSquareText className="size-3" />
                       Note
-                    </span>
+                    </StatusBadge>
                   )}
                 </div>
               </TableCell>

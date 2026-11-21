@@ -5,6 +5,7 @@ import { createBranch } from "@/lib/modules/branches/actions";
 import { Button } from "@/components/ui/button";
 import { BranchDialog } from "@/components/admin/branch-dialog";
 import { BranchesTable } from "@/components/admin/branches-table";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 import { requireAnyBranchPermission, can } from "@/lib/modules/identity/server";
 import { branchWhere } from "@/lib/modules/identity/authorization";
 
@@ -50,7 +51,27 @@ export default async function BranchesPage() {
   const avgByBranch = new Map(avgGroups.map((g) => [g.branchId, g._avg.overallScore]));
 
   return (
-    <div className="space-y-4">
+    <PageShell>
+      <PageHeader
+        title="Branches"
+        description={`Manage store locations, geofences, and branch feedback settings. ${branches.length} branch${branches.length === 1 ? "" : "es"}.`}
+        actions={
+          canCreate ? (
+            <BranchDialog
+              action={createBranch}
+              submitLabel="Create branch"
+              title="Create a branch"
+              description="New branches start out active and accept feedback immediately."
+              trigger={
+                <Button size="sm" className="h-9 gap-1.5">
+                  <Plus className="size-4" />
+                  <span>New branch</span>
+                </Button>
+              }
+            />
+          ) : undefined
+        }
+      />
       <BranchesTable
         branches={branches.map((branch) => ({
           id: branch.id,
@@ -66,23 +87,7 @@ export default async function BranchesPage() {
           _count: branch._count,
           avgScore: avgByBranch.get(branch.id) ?? null,
         }))}
-        actionSlot={
-          canCreate ? (
-            <BranchDialog
-              action={createBranch}
-              submitLabel="Create branch"
-              title="Create a branch"
-              description="New branches start out active and accept feedback immediately."
-              trigger={
-                <Button size="sm" className="h-9 gap-1.5 text-xs">
-                  <Plus className="size-4" />
-                  <span className="hidden sm:inline">New branch</span>
-                </Button>
-              }
-            />
-          ) : undefined
-        }
       />
-    </div>
+    </PageShell>
   );
 }
