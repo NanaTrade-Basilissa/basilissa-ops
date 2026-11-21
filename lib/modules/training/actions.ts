@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/platform/prisma";
-import { requirePermission } from "@/lib/modules/identity/server";
+import { auditActorFrom, requirePermission } from "@/lib/modules/identity/server";
+import { recordAudit } from "@/lib/platform/audit";
 import { deleteFromR2 } from "@/lib/platform/r2";
 import { notifyTrainingAssignment } from "./notifications";
 import type { TrainingMaterialType } from "@prisma/client";
@@ -70,6 +71,14 @@ export async function createCourseAction(formData: FormData): Promise<ActionResp
       select: { id: true },
     });
 
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "training.course_created",
+      entityType: "TrainingCourse",
+      entityId: course.id,
+      after: { title, category, isMandatory, estimatedMinutes, targetAll },
+    });
+
     revalidatePath("/admin/training");
     return { success: true, data: { id: course.id } };
   } catch (error) {
@@ -119,6 +128,11 @@ export async function updateCourseAction(courseId: string, formData: FormData): 
       }
     }
 
+    const before = await prisma.trainingCourse.findUnique({
+      where: { id: courseId },
+      select: { title: true, category: true, isMandatory: true, estimatedMinutes: true, dueDays: true, passScorePercent: true },
+    });
+
     await prisma.trainingCourse.update({
       where: { id: courseId },
       data: {
@@ -133,6 +147,15 @@ export async function updateCourseAction(courseId: string, formData: FormData): 
         quizAssessmentId,
         passScorePercent,
       },
+    });
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "training.course_updated",
+      entityType: "TrainingCourse",
+      entityId: courseId,
+      before: before ?? undefined,
+      after: { title, category, isMandatory, estimatedMinutes, dueDays, passScorePercent },
     });
 
     revalidatePath("/admin/training");
@@ -180,7 +203,7 @@ export async function addCourseMaterialAction({
 
     const nextOrder = (highestOrder?.order ?? -1) + 1;
 
-    await prisma.trainingMaterial.create({
+    const material = await prisma.trainingMaterial.create({
       data: {
         courseId,
         title,
@@ -193,6 +216,15 @@ export async function addCourseMaterialAction({
         durationSeconds: durationSeconds || null,
         order: nextOrder,
       },
+      select: { id: true },
+    });
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "training.material_added",
+      entityType: "TrainingCourse",
+      entityId: courseId,
+      after: { materialId: material.id, title, type },
     });
 
     revalidatePath(`/admin/training/${courseId}`);
@@ -213,7 +245,7 @@ export async function removeCourseMaterialAction(materialId: string): Promise<Ac
 
     const material = await prisma.trainingMaterial.findUnique({
       where: { id: materialId },
-      select: { id: true, courseId: true, fileKey: true },
+      select: { id: true, courseId: true, title: true, type: true, fileKey: true },
     });
 
     if (!material) {
@@ -223,6 +255,14 @@ export async function removeCourseMaterialAction(materialId: string): Promise<Ac
     // 1. Delete from database
     await prisma.trainingMaterial.delete({
       where: { id: materialId },
+    });
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "training.material_removed",
+      entityType: "TrainingCourse",
+      entityId: material.courseId,
+      before: { materialId: material.id, title: material.title, type: material.type },
     });
 
     // 2. Delete from Cloudflare R2
@@ -326,6 +366,14 @@ export async function publishCourseAction(courseId: string): Promise<ActionRespo
       estimatedMinutes: course.estimatedMinutes,
     }).catch((err) => console.warn("Background training notice failed:", err));
 
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "training.course_published",
+      entityType: "TrainingCourse",
+      entityId: courseId,
+      after: { title: course.title, status: "PUBLISHED", assignedCount: targetEmployees.length },
+    });
+
     revalidatePath("/admin/training");
     revalidatePath(`/admin/training/${courseId}`);
     return { success: true, message: `Course published and assigned to ${targetEmployees.length} employees.` };
@@ -343,6 +391,11 @@ export async function deleteCourseAction(courseId: string): Promise<ActionRespon
     const actor = await requirePermission("training:delete");
     if (!actor) return { success: false, error: "Unauthorized" };
 
+    const existingCourse = await prisma.trainingCourse.findUnique({
+      where: { id: courseId },
+      select: { title: true, category: true, status: true },
+    });
+
     const materials = await prisma.trainingMaterial.findMany({
       where: { courseId },
       select: { fileKey: true },
@@ -351,6 +404,14 @@ export async function deleteCourseAction(courseId: string): Promise<ActionRespon
     // Delete course (cascades materials and assignments in DB)
     await prisma.trainingCourse.delete({
       where: { id: courseId },
+    });
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "training.course_deleted",
+      entityType: "TrainingCourse",
+      entityId: courseId,
+      before: existingCourse ?? undefined,
     });
 
     // Clean up R2 objects
@@ -379,9 +440,23 @@ export async function updateCourseStatusAction(
     const actor = await requirePermission("training:publish");
     if (!actor) return { success: false, error: "Unauthorized" };
 
+    const before = await prisma.trainingCourse.findUnique({
+      where: { id: courseId },
+      select: { title: true, status: true },
+    });
+
     await prisma.trainingCourse.update({
       where: { id: courseId },
       data: { status },
+    });
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "training.status_updated",
+      entityType: "TrainingCourse",
+      entityId: courseId,
+      before: before ?? undefined,
+      after: { title: before?.title, status },
     });
 
     revalidatePath("/admin/training");
@@ -445,6 +520,14 @@ export async function assignCourseEmployeesAction({
       category: course.category,
       estimatedMinutes: course.estimatedMinutes,
     }).catch((err) => console.warn("Background training notice failed:", err));
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "training.course_assigned",
+      entityType: "TrainingCourse",
+      entityId: courseId,
+      after: { title: course.title, assignedCount: employeeIds.length },
+    });
 
     revalidatePath(`/admin/training/${courseId}`);
     return { success: true, message: `Successfully assigned ${employeeIds.length} employee(s).` };

@@ -736,7 +736,14 @@ export async function reviewLeaveRequestAction(
 
   const leave = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
-    select: { branchId: true, employeeId: true },
+    select: {
+      branchId: true,
+      employeeId: true,
+      type: true,
+      startDate: true,
+      endDate: true,
+      employee: { select: { firstName: true, lastName: true } },
+    },
   });
 
   if (!leave) {
@@ -753,6 +760,21 @@ export async function reviewLeaveRequestAction(
       reviewerUserId: actor.userId,
       decision,
       managerNotes,
+    });
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: decision === "APPROVED" ? "leave.approved" : "leave.rejected",
+      entityType: "LeaveRequest",
+      entityId: leaveRequestId,
+      after: {
+        employeeName: `${leave.employee.firstName} ${leave.employee.lastName}`.trim(),
+        leaveType: leave.type,
+        startDate: leave.startDate.toISOString().slice(0, 10),
+        endDate: leave.endDate.toISOString().slice(0, 10),
+        decision,
+        managerNotes: managerNotes?.trim() || null,
+      },
     });
 
     revalidatePath("/admin/leave");
@@ -1139,6 +1161,19 @@ export async function saveLeaveCycleAction(data: {
           status: data.status,
         },
       });
+      await recordAudit({
+        actor: auditActorFrom(actor),
+        action: "leave_cycle.updated",
+        entityType: "LeaveCycle",
+        entityId: data.id,
+        after: {
+          year: data.year,
+          status: data.status,
+          windowStart: data.windowStart,
+          windowEnd: data.windowEnd,
+          busyWeeksCount: cleanBlackoutWeeks.length,
+        },
+      });
     } else {
       const initialBlackoutWeeks =
         cleanBlackoutWeeks.length > 0 ? cleanBlackoutWeeks : getDefaultBlackoutWeeks(data.year);
@@ -1154,6 +1189,19 @@ export async function saveLeaveCycleAction(data: {
       });
       // Sync allocations for active employees
       await syncLeaveAllocations(cycle.id);
+      await recordAudit({
+        actor: auditActorFrom(actor),
+        action: "leave_cycle.created",
+        entityType: "LeaveCycle",
+        entityId: cycle.id,
+        after: {
+          year: data.year,
+          status: data.status,
+          windowStart: data.windowStart,
+          windowEnd: data.windowEnd,
+          busyWeeksCount: initialBlackoutWeeks.length,
+        },
+      });
     }
 
     revalidatePath("/admin/leave");
@@ -1171,6 +1219,14 @@ export async function runAutoSchedulerAction(cycleId: string): Promise<ActionRes
   try {
     const { runFairAutoScheduler } = await import("./leave-cycle");
     const result = await runFairAutoScheduler(cycleId, false);
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "leave_cycle.auto_scheduled",
+      entityType: "LeaveCycle",
+      entityId: cycleId,
+      after: { employeesProcessed: result.processedCount },
+    });
 
     revalidatePath("/admin/leave");
     revalidatePath("/admin/shifts");
@@ -1227,7 +1283,12 @@ export async function saveBranchQuotaAction(data: {
   if (!actor) return { ok: false, error: "Unauthorized" };
 
   try {
-    await prisma.branchLeaveQuota.upsert({
+    const branch = await prisma.branch.findUnique({
+      where: { id: data.branchId },
+      select: { name: true },
+    });
+
+    const quota = await prisma.branchLeaveQuota.upsert({
       where: {
         branchId_jobCategory: {
           branchId: data.branchId,
@@ -1241,6 +1302,18 @@ export async function saveBranchQuotaAction(data: {
       },
       update: {
         maxConcurrent: Math.max(1, data.maxConcurrent),
+      },
+    });
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "leave_quota.updated",
+      entityType: "BranchLeaveQuota",
+      entityId: quota.id,
+      after: {
+        branchName: branch?.name ?? data.branchId,
+        jobTitle: data.jobCategory,
+        maxConcurrent: quota.maxConcurrent,
       },
     });
 

@@ -15,7 +15,7 @@ export default async function AuditTrailPage({
 }: {
   searchParams: SearchParams;
 }) {
-  await requirePermission("user:read");
+  await requirePermission("audit:read");
   const sp = await searchParams;
 
   const page = Number(first(sp.page)) || 1;

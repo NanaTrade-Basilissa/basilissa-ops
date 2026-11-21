@@ -222,6 +222,30 @@ export const PERMISSION_REGISTRY = {
       manage: { label: "Manage", description: "Trigger employee/attendance sync, link Odoo IDs, and retry failed syncs" },
     },
   },
+  leave: {
+    label: "Leave Management",
+    description: "Annual leave planning windows, busy weeks, branch quotas, and sick/leave approvals",
+    actions: {
+      read: { label: "View", description: "View leave requests, balances, and annual leave schedules" },
+      approve: { label: "Approve", description: "Approve or decline staff leave requests" },
+      manage: { label: "Manage", description: "Configure annual leave windows, busy months/weeks, branch quotas, and auto-scheduler" },
+    },
+  },
+  payroll: {
+    label: "Payroll & Timesheets",
+    description: "Period timesheet summaries, payable hours, and payroll exports",
+    actions: {
+      read: { label: "View", description: "View payroll timesheet summaries and payable hours" },
+      export: { label: "Export", description: "Export payroll timesheets to CSV and Excel" },
+    },
+  },
+  audit: {
+    label: "Audit Trail",
+    description: "Executive activity log tracking all changes made across the dashboard",
+    actions: {
+      read: { label: "View", description: "View the full activity log and audit trail across the platform" },
+    },
+  },
 } as const;
 
 export type PermissionRegistryType = typeof PERMISSION_REGISTRY;

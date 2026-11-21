@@ -163,7 +163,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: "/admin/users", label: "Users", icon: UserCog, exact: false, permission: "user:read" },
       { href: "/admin/roles", label: "Roles & Permissions", icon: Shield, exact: false, permission: "roles:read" },
-      { href: "/admin/audit-trail", label: "Audit Trail", icon: History, exact: false, permission: "user:read" },
+      { href: "/admin/audit-trail", label: "Audit Trail", icon: History, exact: false, permission: "audit:read" },
       { href: "/admin/jobs", label: "Background Jobs", icon: Layers, exact: false, permission: "jobs:read" },
       { href: "/admin/email-queue", label: "Email Queue", icon: Mail, exact: false, permission: "email_queue:read" },
       { href: "/admin/releases", label: "App Releases", icon: Rocket, exact: false, permission: "releases:read" },

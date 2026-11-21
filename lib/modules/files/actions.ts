@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/platform/prisma";
 import { enqueue } from "@/lib/platform/jobs";
-import { requirePermission } from "@/lib/modules/identity/server";
+import { auditActorFrom, requirePermission } from "@/lib/modules/identity/server";
+import { recordAudit } from "@/lib/platform/audit";
 import type { HostedFileDisplayMode, HostedFileItem } from "./constants";
 import {
   createHostedFile,
@@ -63,6 +64,19 @@ export async function createHostedFileAction(input: {
       uploadedById: actor.userId,
     });
 
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "file.uploaded",
+      entityType: "HostedFile",
+      entityId: file.id,
+      after: {
+        title: file.title,
+        originalFilename: file.originalFilename,
+        isPublic: file.isPublic,
+        slug: file.slug,
+      },
+    });
+
     revalidatePath("/admin/files");
     return { success: true, data: file };
   } catch (error) {
@@ -82,11 +96,19 @@ export async function toggleFilePrivacyAction(input: {
   customSlug?: string;
 }): Promise<ActionResult<HostedFileItem>> {
   try {
-    await requirePermission("files:write");
+    const actor = await requirePermission("files:write");
     const file = await toggleHostedFilePrivacy({
       fileId: input.fileId,
       isPublic: input.isPublic,
       customSlug: input.customSlug,
+    });
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "file.privacy_changed",
+      entityType: "HostedFile",
+      entityId: file.id,
+      after: { title: file.title, isPublic: file.isPublic, slug: file.slug },
     });
 
     revalidatePath("/admin/files");
@@ -110,7 +132,7 @@ export async function updateFileSlugAction(input: {
   slug: string;
 }): Promise<ActionResult<HostedFileItem>> {
   try {
-    await requirePermission("files:write");
+    const actor = await requirePermission("files:write");
     const parsed = updateSlugSchema.safeParse(input);
     if (!parsed.success) {
       return {
@@ -122,6 +144,14 @@ export async function updateFileSlugAction(input: {
     const file = await updateHostedFileSlug({
       fileId: parsed.data.fileId,
       slug: parsed.data.slug,
+    });
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "file.slug_updated",
+      entityType: "HostedFile",
+      entityId: file.id,
+      after: { title: file.title, slug: file.slug },
     });
 
     revalidatePath("/admin/files");
@@ -143,8 +173,16 @@ export async function updateFileDisplayModeAction(input: {
   displayMode: HostedFileDisplayMode;
 }): Promise<ActionResult<HostedFileItem>> {
   try {
-    await requirePermission("files:write");
+    const actor = await requirePermission("files:write");
     const file = await updateHostedFileDisplayMode(input);
+
+    await recordAudit({
+      actor: auditActorFrom(actor),
+      action: "file.display_mode_updated",
+      entityType: "HostedFile",
+      entityId: file.id,
+      after: { title: file.title, displayMode: file.displayMode },
+    });
 
     revalidatePath("/admin/files");
     if (file.slug) {
@@ -201,8 +239,21 @@ export async function regenerateLowResAction(fileId: string): Promise<ActionResu
  */
 export async function deleteHostedFileAction(fileId: string): Promise<ActionResult<{ deleted: boolean }>> {
   try {
-    await requirePermission("files:write");
+    const actor = await requirePermission("files:write");
+    const existing = await prisma.hostedFile.findUnique({
+      where: { id: fileId },
+      select: { title: true, originalFilename: true, slug: true },
+    });
     const ok = await deleteHostedFile(fileId);
+    if (ok) {
+      await recordAudit({
+        actor: auditActorFrom(actor),
+        action: "file.deleted",
+        entityType: "HostedFile",
+        entityId: fileId,
+        before: existing ?? undefined,
+      });
+    }
     revalidatePath("/admin/files");
     return { success: true, data: { deleted: ok } };
   } catch (error) {

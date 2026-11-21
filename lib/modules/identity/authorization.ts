@@ -123,7 +123,14 @@ export type SystemPermission =
   | "releases:manage"
   // Odoo ERP integration: employee pull and end-of-day attendance sync
   | "odoo:read"
-  | "odoo:manage";
+  | "odoo:manage"
+  // Leave management, payroll summaries, and audit trail
+  | "leave:read"
+  | "leave:approve"
+  | "leave:manage"
+  | "payroll:read"
+  | "payroll:export"
+  | "audit:read";
 
 export type Permission = SystemPermission | PermissionKey | (string & {});
 
@@ -274,6 +281,10 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "releases:manage",
     "odoo:read",
     "odoo:manage",
+    "leave:read",
+    "payroll:read",
+    "payroll:export",
+    "audit:read",
   ],
 
   // Everything, including granting roles. Should be one or two people.
@@ -319,6 +330,12 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "releases:manage",
     "odoo:read",
     "odoo:manage",
+    "leave:read",
+    "leave:approve",
+    "leave:manage",
+    "payroll:read",
+    "payroll:export",
+    "audit:read",
   ],
 };
 
@@ -374,6 +391,12 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "meals:manage": ["meals:create", "meals:read", "meals:update", "meals:delete", "meals:publish"],
   "training:read": ["training:read"],
   "training:write": ["training:create", "training:update", "training:delete", "training:publish", "training:assign"],
+  "leave:read": ["leave:read", "attendance:read"],
+  "leave:approve": ["leave:approve", "attendance:approve"],
+  "leave:manage": ["leave:manage", "attendance:update"],
+  "payroll:read": ["payroll:read", "attendance:read"],
+  "payroll:export": ["payroll:export", "attendance:export"],
+  "audit:read": ["audit:read", "users:read"],
 };
 
 export const GRANULAR_TO_SYSTEM: Record<string, string> = {
