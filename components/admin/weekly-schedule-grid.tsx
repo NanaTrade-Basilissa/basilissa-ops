@@ -277,7 +277,9 @@ export function WeeklyScheduleGrid({
                             className={`inline-flex flex-col items-center justify-center rounded-lg px-2 py-1 text-xs transition-all w-full min-h-12 ${
                               sched.coverBranchName
                                 ? "border border-sky-500/40 bg-sky-500/10 text-sky-900 dark:text-sky-200"
-                                : sched.isException && !sched.exceptionReason?.startsWith(GENERATED_PREFIX)
+                                : sched.isException &&
+                                    !sched.exceptionReason?.startsWith(GENERATED_PREFIX) &&
+                                    !(sched.exceptionType === ScheduleExceptionType.EXTRA_SHIFT && sched.exceptionReason === "Scheduled shift")
                                 ? "border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
                                 : "border border-border/80 bg-background text-foreground shadow-2xs"
                             }`}
@@ -302,7 +304,8 @@ export function WeeklyScheduleGrid({
                               <span className="text-[9px] uppercase font-bold text-violet-600 dark:text-violet-400 mt-0.5">
                                 pattern
                               </span>
-                            ) : sched.isException ? (
+                            ) : sched.isException &&
+                              !(sched.exceptionType === ScheduleExceptionType.EXTRA_SHIFT && sched.exceptionReason === "Scheduled shift") ? (
                               <span className="text-[9px] uppercase font-bold text-amber-600 dark:text-amber-400 mt-0.5">
                                 override
                               </span>

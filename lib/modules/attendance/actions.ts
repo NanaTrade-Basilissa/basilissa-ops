@@ -286,7 +286,7 @@ export async function saveScheduleOverride(
     rawShiftId && !syntheticShiftIds.has(rawShiftId) ? rawShiftId : null;
   const rawOvertime = formData.get("overtimeMinutes");
   const overtimeMinutes = rawOvertime != null && rawOvertime !== "" ? Number(rawOvertime) : null;
-  const reason = String(formData.get("reason") ?? "").trim();
+  const rawReason = String(formData.get("reason") ?? "").trim();
 
   if (!employeeId || !branchId || !dateKey || !type) {
     return { error: "Missing required fields." };
@@ -303,9 +303,13 @@ export async function saveScheduleOverride(
     return { error: "Please select a shift.", fieldErrors: { shiftId: "Required" } };
   }
 
-  if (!reason) {
-    return { error: "Please provide a reason for this schedule override.", fieldErrors: { reason: "Required" } };
-  }
+  const defaultReasonByType: Record<ScheduleExceptionType, string> = {
+    [ScheduleExceptionType.EXTRA_SHIFT]: "Scheduled shift",
+    [ScheduleExceptionType.SHIFT_CHANGE]: "Shift updated",
+    [ScheduleExceptionType.DAY_OFF]: "Day off",
+    [ScheduleExceptionType.OVERTIME]: "Scheduled overtime",
+  };
+  const reason = rawReason || defaultReasonByType[type];
 
   const actor = await requirePermission("schedule:write", { branchId });
 
@@ -377,7 +381,7 @@ export async function saveScheduleOverride(
   revalidatePath("/admin/attendance");
   revalidatePath(`/admin/attendance/${employeeId}/${dateKey}`);
 
-  return { saved: "Schedule override saved." };
+  return { saved: "Shift saved." };
 }
 
 /**

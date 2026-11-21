@@ -57,14 +57,17 @@ function ScheduleOverrideForm({
   const router = useRouter();
   const formId = useId();
 
+  const hasExistingShift = Boolean(currentShiftId);
   const realCurrentShiftId =
     currentShiftId && shifts.some((s) => s.id === currentShiftId) ? currentShiftId : null;
 
   const [type, setType] = useState<ScheduleExceptionType>(
-    exceptionType ?? (currentShiftId ? ScheduleExceptionType.SHIFT_CHANGE : ScheduleExceptionType.EXTRA_SHIFT),
+    exceptionType ?? (hasExistingShift ? ScheduleExceptionType.SHIFT_CHANGE : ScheduleExceptionType.EXTRA_SHIFT),
   );
   const [shiftId, setShiftId] = useState<string>(realCurrentShiftId ?? (shifts[0]?.id || ""));
-  const [reason, setReason] = useState<string>(exceptionReason ?? "");
+  const [reason, setReason] = useState<string>(
+    exceptionReason && exceptionReason !== "Scheduled shift" ? exceptionReason : "",
+  );
 
   // Overtime preset state: "30" | "60" | "120" | "custom"
   const defaultOt = initialOvertimeMinutes ?? 60;
@@ -102,7 +105,7 @@ function ScheduleOverrideForm({
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <CalendarClock className="size-4 text-primary" />
-          Schedule override
+          {hasExistingShift ? "Edit shift" : "Assign shift"}
         </DialogTitle>
         <DialogDescription>
           {employeeName} · {formattedDate}
@@ -131,14 +134,9 @@ function ScheduleOverrideForm({
       )}
 
       <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
-        <div className="text-muted-foreground">Standard / Current Schedule:</div>
+        <div className="text-muted-foreground">Current Schedule:</div>
         <div className="font-medium text-foreground">
           {currentShiftName ? currentShiftName : "Not scheduled"}
-          {isException && (
-            <span className="ml-2 text-amber-600 dark:text-amber-400 font-normal">
-              (currently has an override)
-            </span>
-          )}
         </div>
       </div>
 
@@ -148,7 +146,7 @@ function ScheduleOverrideForm({
         <input type="hidden" name="dateKey" value={dateKey} />
 
         <div className="space-y-1.5">
-          <Label htmlFor={`${formId}-type`}>Override action</Label>
+          <Label htmlFor={`${formId}-type`}>Action</Label>
           <NativeSelect
             id={`${formId}-type`}
             name="type"
@@ -162,10 +160,20 @@ function ScheduleOverrideForm({
             }}
             className="w-full"
           >
-            <option value={ScheduleExceptionType.DAY_OFF}>Day off (Leave / Swap given away)</option>
-            <option value={ScheduleExceptionType.OVERTIME}>Overtime (Extra hours)</option>
-            <option value={ScheduleExceptionType.SHIFT_CHANGE}>Change shift for this day</option>
-            <option value={ScheduleExceptionType.EXTRA_SHIFT}>Extra shift (Cover other branch/shift)</option>
+            {hasExistingShift ? (
+              <>
+                <option value={ScheduleExceptionType.SHIFT_CHANGE}>Change shift for this day</option>
+                <option value={ScheduleExceptionType.OVERTIME}>Add overtime (Extra hours)</option>
+                <option value={ScheduleExceptionType.DAY_OFF}>Mark day off (Leave / Swap)</option>
+                <option value={ScheduleExceptionType.EXTRA_SHIFT}>Extra / Cover shift</option>
+              </>
+            ) : (
+              <>
+                <option value={ScheduleExceptionType.EXTRA_SHIFT}>Assign shift</option>
+                <option value={ScheduleExceptionType.OVERTIME}>Overtime (Extra hours)</option>
+                <option value={ScheduleExceptionType.DAY_OFF}>Mark day off</option>
+              </>
+            )}
           </NativeSelect>
         </div>
 
@@ -306,12 +314,11 @@ function ScheduleOverrideForm({
 
         <div className="space-y-1.5">
           <Label htmlFor={`${formId}-reason`}>
-            Reason <span className="text-destructive">*</span>
+            Note <span className="text-muted-foreground font-normal">(optional)</span>
           </Label>
           <Input
             id={`${formId}-reason`}
             name="reason"
-            required
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="e.g. Covering for Sarah / Personal leave / Requested swap"
@@ -329,7 +336,7 @@ function ScheduleOverrideForm({
               className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1 px-2"
             >
               <Trash2 className="size-3.5" />
-              Remove override
+              Clear shift
             </Button>
           ) : (
             <div />
@@ -346,7 +353,11 @@ function ScheduleOverrideForm({
             </Button>
             <Button type="submit" disabled={isPending}>
               {isSaving && <Loader2 className="size-4 animate-spin mr-1.5" />}
-              Save override
+              {type === ScheduleExceptionType.DAY_OFF
+                ? "Save day off"
+                : type === ScheduleExceptionType.OVERTIME
+                  ? "Save overtime"
+                  : "Save shift"}
             </Button>
           </div>
         </div>
