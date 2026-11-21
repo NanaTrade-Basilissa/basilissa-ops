@@ -42,7 +42,7 @@ import {
   verifyMfaChallenge,
 } from "./mfa";
 import { requireAuth, requirePermission, verifySession } from "./dal";
-import { can, isSuperAdmin } from "./authorization";
+import { can, findUnauthorizedPermissions, isSuperAdmin } from "./authorization";
 import { MFA_REQUIRED_ROLES, type RoleFormState } from "./constants";
 import { roleSchema } from "./validation";
 import {
@@ -698,9 +698,27 @@ export async function getUserDetailAction(userId: string) {
       },
     }),
     prisma.branch.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.customRole.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, description: true } }),
+    prisma.customRole.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        permissions: { select: { permission: { select: { key: true } } } },
+      },
+    }),
   ]);
   if (!user) return null;
+
+  // Non-Super-Admins may only assign roles whose permissions are a subset of their own.
+  // Keep the target user's currently assigned role in the list so the dropdown displays it.
+  const assignableCustomRoles = availableCustomRoles
+    .filter((r) => {
+      if (r.id === user.customRoleId) return true;
+      const keys = r.permissions.map((p) => p.permission.key);
+      return findUnauthorizedPermissions(actor, keys).length === 0;
+    })
+    .map(({ id, name, description }) => ({ id, name, description }));
 
   const branchName = new Map(branches.map((b) => [b.id, b.name]));
   const now = new Date();
@@ -733,7 +751,7 @@ export async function getUserDetailAction(userId: string) {
     isSuperAdmin: isTargetSuperAdmin,
     roles: Object.values(Role),
     branches,
-    availableCustomRoles,
+    availableCustomRoles: assignableCustomRoles,
     isSelf: user.id === actor.userId,
     emailConfigured: isEmailConfigured(),
     active: activeAssignments.map((a) => ({
@@ -863,6 +881,14 @@ export async function createRoleAction(
     return { error: "Please fix the errors below.", fieldErrors };
   }
 
+  // Anti-privilege-escalation: non-Super-Admins cannot grant permissions they do not hold
+  const unauthorized = findUnauthorizedPermissions(actor, parsed.data.permissions);
+  if (unauthorized.length > 0) {
+    return {
+      error: `You cannot grant permissions that you do not have access to (${unauthorized.slice(0, 5).join(", ")}${unauthorized.length > 5 ? `, +${unauthorized.length - 5} more` : ""}).`,
+    };
+  }
+
   const result = await createCustomRole(parsed.data, auditActorFrom(actor));
   if (!result.ok) {
     return {
@@ -903,6 +929,32 @@ export async function updateRoleAction(
     return { error: "Please fix the errors below.", fieldErrors };
   }
 
+  // Anti-privilege-escalation: cannot modify a role that exceeds the actor's permissions,
+  // and cannot grant any permission the actor does not hold.
+  if (!isSuperAdmin(actor)) {
+    const existingRole = await prisma.customRole.findUnique({
+      where: { id: roleId },
+      select: {
+        permissions: { select: { permission: { select: { key: true } } } },
+      },
+    });
+    if (existingRole) {
+      const existingKeys = existingRole.permissions.map((p) => p.permission.key);
+      if (findUnauthorizedPermissions(actor, existingKeys).length > 0) {
+        return {
+          error: "You cannot modify a role that grants permissions above your own access level.",
+        };
+      }
+    }
+
+    const unauthorized = findUnauthorizedPermissions(actor, parsed.data.permissions);
+    if (unauthorized.length > 0) {
+      return {
+        error: `You cannot grant permissions that you do not have access to (${unauthorized.slice(0, 5).join(", ")}${unauthorized.length > 5 ? `, +${unauthorized.length - 5} more` : ""}).`,
+      };
+    }
+  }
+
   const result = await updateCustomRole(roleId, parsed.data, auditActorFrom(actor));
   if (!result.ok) {
     return {
@@ -925,6 +977,24 @@ export async function deleteRoleAction(
   const roleId = String(formData.get("roleId") ?? "");
   if (!roleId) return { error: "Role ID is required." };
 
+  // Anti-privilege-escalation: cannot delete a role that exceeds the actor's permissions
+  if (!isSuperAdmin(actor)) {
+    const existingRole = await prisma.customRole.findUnique({
+      where: { id: roleId },
+      select: {
+        permissions: { select: { permission: { select: { key: true } } } },
+      },
+    });
+    if (existingRole) {
+      const existingKeys = existingRole.permissions.map((p) => p.permission.key);
+      if (findUnauthorizedPermissions(actor, existingKeys).length > 0) {
+        return {
+          error: "You cannot delete a role that grants permissions above your own access level.",
+        };
+      }
+    }
+  }
+
   const result = await deleteCustomRole(roleId, auditActorFrom(actor));
   if (!result.ok) {
     return { error: result.message };
@@ -945,6 +1015,24 @@ export async function assignUserCustomRoleAction(
   const customRoleId = typeof customRoleIdRaw === "string" && customRoleIdRaw.trim() ? customRoleIdRaw.trim() : null;
 
   if (!userId) return { error: "User ID is required." };
+
+  // Anti-privilege-escalation: non-Super-Admins cannot assign a role containing permissions they do not hold
+  if (customRoleId !== null && !isSuperAdmin(actor)) {
+    const targetRole = await prisma.customRole.findUnique({
+      where: { id: customRoleId },
+      select: {
+        permissions: { select: { permission: { select: { key: true } } } },
+      },
+    });
+    if (targetRole) {
+      const roleKeys = targetRole.permissions.map((p) => p.permission.key);
+      if (findUnauthorizedPermissions(actor, roleKeys).length > 0) {
+        return {
+          error: "You cannot assign a role that grants permissions you do not hold.",
+        };
+      }
+    }
+  }
 
   const result = await assignCustomRoleToUser(userId, customRoleId, auditActorFrom(actor));
   if (!result.ok) {

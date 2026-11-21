@@ -31,16 +31,27 @@ export function RolesTable({
   canCreate,
   canUpdate,
   canDelete,
+  grantablePermissions = null,
 }: {
   roles: FormattedCustomRole[];
   matrix: MatrixRow[];
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  /** Granular permission keys the current user holds, or null for unrestricted Super Admin. */
+  grantablePermissions?: string[] | null;
 }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selectedRole, setSelectedRole] = useState<FormattedCustomRole | null>(null);
+
+  const grantableSet = useMemo(
+    () => (grantablePermissions ? new Set(grantablePermissions) : null),
+    [grantablePermissions],
+  );
+
+  const roleExceedsActor = (role: FormattedCustomRole) =>
+    grantableSet !== null && role.permissions.some((p) => !grantableSet.has(p));
 
   const filteredRoles = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -76,7 +87,7 @@ export function RolesTable({
         </EmptyHeader>
         {canCreate && (
           <EmptyContent className="mt-4">
-            <RoleDialog matrix={matrix} />
+            <RoleDialog matrix={matrix} grantablePermissions={grantablePermissions} />
           </EmptyContent>
         )}
       </Empty>
@@ -119,7 +130,7 @@ export function RolesTable({
             )}
           </>
         }
-        actions={canCreate && <RoleDialog matrix={matrix} />}
+        actions={canCreate && <RoleDialog matrix={matrix} grantablePermissions={grantablePermissions} />}
       />
 
       {/* Table */}
@@ -145,6 +156,9 @@ export function RolesTable({
             ) : (
               paginatedRoles.map((role) => {
                 const isSuperAdmin = role.id === "super-admin" || role.name === "Super Admin";
+                const lockedAboveActor = !isSuperAdmin && roleExceedsActor(role);
+                const canModifyRole = canUpdate && !isSuperAdmin && !lockedAboveActor;
+                const canDeleteRole = canDelete && !isSuperAdmin && !lockedAboveActor;
                 return (
                   <TableRow
                     key={role.id}
@@ -190,11 +204,11 @@ export function RolesTable({
                         actions={[
                           {
                             id: "edit",
-                            label: !canUpdate || isSuperAdmin ? "View permissions" : "Edit role",
-                            icon: !canUpdate || isSuperAdmin ? Shield : Edit2,
+                            label: !canModifyRole ? "View permissions" : "Edit role",
+                            icon: !canModifyRole ? Shield : Edit2,
                             onClick: () => setSelectedRole(role),
                           },
-                          canDelete && !isSuperAdmin && {
+                          canDeleteRole && {
                             id: "delete",
                             label: "Delete role",
                             icon: Trash2,
@@ -233,7 +247,8 @@ export function RolesTable({
           key={selectedRole.id}
           role={selectedRole}
           matrix={matrix}
-          readOnly={!canUpdate}
+          grantablePermissions={grantablePermissions}
+          readOnly={!canUpdate || roleExceedsActor(selectedRole)}
           open={selectedRole !== null}
           onOpenChange={(open) => {
             if (!open) setSelectedRole(null);

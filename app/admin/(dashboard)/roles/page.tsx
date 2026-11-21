@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/platform/prisma";
 import {
   can,
+  getGrantablePermissions,
   requirePermission,
   listCustomRoles,
   getPermissionMatrix,
@@ -18,6 +19,7 @@ export default async function RolesPage() {
   const canCreate = can(actor, "roles:create");
   const canUpdate = can(actor, "roles:update");
   const canDelete = can(actor, "roles:delete");
+  const grantablePermissions = getGrantablePermissions(actor);
 
   await ensureStandardRolesExist(prisma);
 
@@ -34,6 +36,7 @@ export default async function RolesPage() {
         canCreate={canCreate}
         canUpdate={canUpdate}
         canDelete={canDelete}
+        grantablePermissions={grantablePermissions}
       />
     </div>
   );

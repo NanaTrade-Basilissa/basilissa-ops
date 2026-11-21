@@ -154,11 +154,11 @@ export const PERMISSION_REGISTRY = {
     label: "Roles & Permissions",
     description: "Custom roles and access control configurations",
     actions: {
-      create: { label: "Create", description: "Create new custom roles" },
-      read: { label: "View", description: "View custom roles and their assigned permissions" },
-      update: { label: "Update", description: "Edit custom roles and modify permissions" },
-      delete: { label: "Delete", description: "Delete custom roles not in use" },
-      assign: { label: "Assign", description: "Assign roles to users" },
+      create: { label: "Create", description: "Create new custom roles (limited to permissions you hold)" },
+      read: { label: "View", description: "View the Roles & Permissions page and inspect role capabilities" },
+      update: { label: "Update", description: "Edit custom roles and modify permissions (limited to permissions you hold)" },
+      delete: { label: "Delete", description: "Delete unused custom roles within your permission level" },
+      assign: { label: "Assign", description: "Assign roles to users (limited to roles within your permissions)" },
     },
   },
   announcements: {

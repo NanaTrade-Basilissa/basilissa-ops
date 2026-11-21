@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { CheckSquare, Loader2, Plus, Square } from "lucide-react";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { CheckSquare, Loader2, Lock, Plus, Square } from "lucide-react";
 import { toast } from "sonner";
 import {
   createRoleAction,
@@ -36,6 +36,7 @@ export function RoleDialog({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   readOnly: explicitReadOnly,
+  grantablePermissions = null,
 }: {
   role?: FormattedCustomRole;
   matrix: MatrixRow[];
@@ -44,6 +45,8 @@ export function RoleDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   readOnly?: boolean;
+  /** Granular permissions the current user holds, or null for unrestricted Super Admin. */
+  grantablePermissions?: string[] | null;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
@@ -51,6 +54,12 @@ export function RoleDialog({
   const isEditing = Boolean(role);
   const isSuperAdmin = role?.id === "super-admin" || role?.name === "Super Admin";
   const isReadOnly = isSuperAdmin || Boolean(explicitReadOnly);
+
+  const grantableSet = useMemo(
+    () => (grantablePermissions ? new Set(grantablePermissions) : null),
+    [grantablePermissions],
+  );
+  const canGrant = (key: string) => grantableSet === null || grantableSet.has(key);
 
   const [name, setName] = useState(role?.name ?? "");
   const [description, setDescription] = useState(role?.description ?? "");
@@ -89,6 +98,7 @@ export function RoleDialog({
   }, [state, isEditing, name, onSaved, setOpen]);
 
   const setPermission = (key: string, enabled: boolean) => {
+    if (!canGrant(key)) return;
     setSelectedPermissions((prev) => {
       const next = new Set(prev);
       if (enabled) {
@@ -100,20 +110,11 @@ export function RoleDialog({
     });
   };
 
-  const togglePermission = (key: string) => {
-    setSelectedPermissions((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
-
   const toggleRow = (row: MatrixRow) => {
-    const rowKeys = Object.values(row.actions).map((a) => a.key);
+    const rowKeys = Object.values(row.actions)
+      .map((a) => a.key)
+      .filter(canGrant);
+    if (rowKeys.length === 0) return;
     const allSelected = rowKeys.every((k) => selectedPermissions.has(k));
 
     setSelectedPermissions((prev) => {
@@ -130,7 +131,9 @@ export function RoleDialog({
   };
 
   const selectAll = () => {
-    const allKeys = matrix.flatMap((row) => Object.values(row.actions).map((a) => a.key));
+    const allKeys = matrix
+      .flatMap((row) => Object.values(row.actions).map((a) => a.key))
+      .filter(canGrant);
     setSelectedPermissions(new Set(allKeys));
   };
 
@@ -186,6 +189,17 @@ export function RoleDialog({
             <Alert className="border-amber-500/20 bg-amber-500/5 text-foreground">
               <AlertDescription className="text-xs text-amber-700 dark:text-amber-400 font-medium">
                 Super Admin permissions are fixed and locked by the system. All capabilities are granted by default.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {!isSuperAdmin && !isReadOnly && grantableSet !== null && (
+            <Alert className="border-border bg-muted/40 text-foreground">
+              <AlertDescription className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Lock className="size-3.5 shrink-0 text-muted-foreground" />
+                <span>
+                  You can only grant permissions that your own account has access to. Permissions outside your access are locked.
+                </span>
               </AlertDescription>
             </Alert>
           )}
@@ -285,10 +299,9 @@ export function RoleDialog({
                 <tbody className="divide-y divide-border">
                   {matrix.map((row) => {
                     const rowKeys = Object.values(row.actions).map((a) => a.key);
+                    const grantableRowKeys = rowKeys.filter(canGrant);
                     const allInRowSelected =
-                      rowKeys.length > 0 && rowKeys.every((k) => selectedPermissions.has(k));
-                    const _someInRowSelected =
-                      rowKeys.some((k) => selectedPermissions.has(k)) && !allInRowSelected;
+                      grantableRowKeys.length > 0 && grantableRowKeys.every((k) => selectedPermissions.has(k));
 
                     return (
                       <tr key={row.resource} className="hover:bg-muted/30 transition-colors">
@@ -317,17 +330,19 @@ export function RoleDialog({
                           }
 
                           const isChecked = isSuperAdmin ? true : selectedPermissions.has(actionDef.key);
+                          const isLockedForActor = !isReadOnly && !canGrant(actionDef.key);
+                          const cellDisabled = isReadOnly || isLockedForActor;
 
                           return (
                             <td
                               key={actionCol.key}
                               className={`p-2.5 text-center align-middle ${
-                                isReadOnly
-                                  ? "cursor-default bg-muted/20"
+                                cellDisabled
+                                  ? "cursor-not-allowed bg-muted/20 opacity-60"
                                   : "cursor-pointer hover:bg-muted/40"
                               }`}
                               onClick={
-                                isReadOnly
+                                cellDisabled
                                   ? undefined
                                   : (e) => {
                                       const target = e.target as HTMLElement;
@@ -340,20 +355,24 @@ export function RoleDialog({
                                       setPermission(actionDef.key, !isChecked);
                                     }
                               }
-                              title={`${actionDef.label} ${row.resourceLabel}`}
+                              title={
+                                isLockedForActor
+                                  ? "Locked — you do not have access to this permission"
+                                  : `${actionDef.label} ${row.resourceLabel}`
+                              }
                             >
                               <div className="flex items-center justify-center">
                                 <Checkbox
                                   id={actionDef.key}
                                   checked={isChecked}
                                   onCheckedChange={
-                                    isReadOnly
+                                    cellDisabled
                                       ? undefined
                                       : (checked) => {
                                           setPermission(actionDef.key, !!checked);
                                         }
                                   }
-                                  disabled={isPending || isReadOnly}
+                                  disabled={isPending || cellDisabled}
                                   aria-label={`${actionDef.label} ${row.resourceLabel}`}
                                 />
                               </div>
@@ -367,7 +386,7 @@ export function RoleDialog({
                             variant="ghost"
                             size="sm"
                             onClick={() => toggleRow(row)}
-                            disabled={isPending || isReadOnly}
+                            disabled={isPending || isReadOnly || grantableRowKeys.length === 0}
                             className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
                           >
                             {allInRowSelected ? "None" : "All"}

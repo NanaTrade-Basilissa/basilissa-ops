@@ -382,9 +382,9 @@ export const SYSTEM_TO_GRANULAR: Record<string, readonly string[]> = {
   "assessment:write": ["assessments:create", "assessments:update", "assessments:delete", "assessments:publish", "assessments:assign"],
   "aptitude:read": ["aptitude:read"],
   "aptitude:write": ["aptitude:create", "aptitude:update", "aptitude:delete", "aptitude:publish", "aptitude:assign"],
-  "user:read": ["users:read", "roles:read"],
+  "user:read": ["users:read"],
   "user:write": ["users:create", "users:update", "users:delete"],
-  "role:assign": ["roles:assign", "users:assign", "roles:create", "roles:update"],
+  "role:assign": ["roles:assign", "users:assign"],
   "announcement:read": ["announcements:read"],
   "announcement:write": ["announcements:create"],
   "email_queue:read": ["email_queue:read"],
@@ -420,7 +420,6 @@ export const GRANULAR_TO_SYSTEM: Record<string, string> = {
   "aptitude:read": "aptitude:read",
   "announcements:read": "announcement:read",
   "users:read": "user:read",
-  "roles:read": "user:read",
   "jobs:read": "jobs:read",
   "jobs:manage": "jobs:manage",
   "releases:read": "releases:read",
@@ -529,6 +528,32 @@ export function hasPermission(
 ): boolean {
   if (!actor) return false;
   return can(actor, permission, resource);
+}
+
+/**
+ * Returns the list of granular permission keys this actor is allowed to grant
+ * when creating/editing roles, or `null` if the actor is a Super Admin (unrestricted).
+ *
+ * Anti-privilege-escalation rule: a non-Super-Admin may never grant a permission
+ * they do not themselves hold.
+ */
+export function getGrantablePermissions(actor: Actor): string[] | null {
+  if (isSuperAdmin(actor)) return null;
+  return getAllPermissions()
+    .map((p) => p.key)
+    .filter((key) => can(actor, key as Permission));
+}
+
+/**
+ * Returns any permission keys from `requestedPermissions` that `actor` does NOT
+ * hold. Always empty for Super Admins.
+ */
+export function findUnauthorizedPermissions(
+  actor: Actor,
+  requestedPermissions: readonly string[],
+): string[] {
+  if (isSuperAdmin(actor)) return [];
+  return requestedPermissions.filter((key) => !can(actor, key as Permission));
 }
 
 /**
