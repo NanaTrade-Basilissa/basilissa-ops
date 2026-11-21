@@ -817,4 +817,133 @@ export async function linkDevicePin(
   return { success: true };
 }
 
+/**
+ * Assigns a fixed weekly schedule (with optional remote/WFH days) to one or more employees.
+ * Closes any prior open fixed schedule assignments cleanly so attendance history stays accurate.
+ */
+export async function bulkAssignFixedScheduleAction(input: {
+  employeeIds: string[];
+  shiftId: string;
+  daysOfWeek: number[];
+  remoteDaysOfWeek?: number[];
+  validFrom?: string;
+}): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const { actor } = await requireAnyBranchPermission("schedule:write");
+
+  const employeeIds = Array.from(new Set(input.employeeIds.filter(Boolean)));
+  if (employeeIds.length === 0) {
+    return { ok: false, error: "Select at least one employee." };
+  }
+
+  const daysOfWeek = Array.from(
+    new Set(input.daysOfWeek.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7)),
+  ).sort((a, b) => a - b);
+  if (daysOfWeek.length === 0) {
+    return { ok: false, error: "Select at least one working day." };
+  }
+
+  const daysSet = new Set(daysOfWeek);
+  const remoteDaysOfWeek = Array.from(
+    new Set((input.remoteDaysOfWeek ?? []).filter((d) => daysSet.has(d))),
+  ).sort((a, b) => a - b);
+
+  const shift = await prisma.shift.findUnique({
+    where: { id: input.shiftId },
+    select: { id: true, name: true, isActive: true },
+  });
+  if (!shift || !shift.isActive) {
+    return { ok: false, error: "Selected shift template was not found or is inactive." };
+  }
+
+  const validFrom =
+    input.validFrom && /^\d{4}-\d{2}-\d{2}$/.test(input.validFrom)
+      ? new Date(`${input.validFrom}T00:00:00.000Z`)
+      : new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
+
+  await prisma.$transaction(async (tx) => {
+    // Close any previous open fixed assignments for these employees
+    await tx.employeeShiftAssignment.updateMany({
+      where: {
+        employeeId: { in: employeeIds },
+        validTo: null,
+      },
+      data: { validTo: validFrom },
+    });
+
+    await tx.employeeShiftAssignment.createMany({
+      data: employeeIds.map((employeeId) => ({
+        employeeId,
+        shiftId: shift.id,
+        daysOfWeek,
+        remoteDaysOfWeek,
+        validFrom,
+        createdBy: actor.userId,
+      })),
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "shift.fixed_assigned",
+        entityType: "Shift",
+        entityId: shift.id,
+        after: {
+          shiftName: shift.name,
+          assignedCount: employeeIds.length,
+          daysOfWeek,
+          remoteDaysOfWeek,
+          validFrom: validFrom.toISOString().slice(0, 10),
+        },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/admin/shifts");
+  revalidatePath("/admin/employees");
+  return { ok: true, count: employeeIds.length };
+}
+
+/**
+ * Ends an employee's fixed schedule assignment so they operate on the Rotating Weekly Rota instead.
+ */
+export async function clearFixedScheduleAction(
+  employeeId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { actor } = await requireAnyBranchPermission("schedule:write");
+  if (!employeeId) return { ok: false, error: "Employee is required." };
+
+  const emp = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { id: true, firstName: true, lastName: true },
+  });
+  if (!emp) return { ok: false, error: "Employee not found." };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.employeeShiftAssignment.updateMany({
+      where: { employeeId, validTo: null },
+      data: { validTo: new Date() },
+    });
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "shift.fixed_cleared",
+        entityType: "Employee",
+        entityId: employeeId,
+        after: {
+          employeeName: `${emp.firstName} ${emp.lastName}`.trim(),
+          scheduleMode: "Rotating Weekly Rota",
+        },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/admin/shifts");
+  revalidatePath(`/admin/employees/${employeeId}`);
+  return { ok: true };
+}
+
+
 

@@ -25,6 +25,8 @@ export type AssignmentLike = {
   shiftId: string;
   /** ISO weekdays: 1 = Monday … 7 = Sunday. */
   daysOfWeek: number[];
+  /** Subset of daysOfWeek when this employee works remotely (WFH). */
+  remoteDaysOfWeek?: number[];
   validFrom: Date;
   validTo: Date | null;
 };
@@ -81,6 +83,8 @@ export type ResolvedSchedule = {
   source: "exception" | "pattern" | "assignment";
   /** Set when the day is a cover shift at another branch. */
   coverBranchId: string | null;
+  /** True when the employee is scheduled to work remotely (WFH) on this day. */
+  isRemote?: boolean;
   /** Scheduled overtime in minutes, if set for this day. */
   scheduledOvertimeMinutes?: number;
 };
@@ -264,7 +268,9 @@ export function resolveScheduleForDate(
   const shift = findShift(shifts, assignment.shiftId);
   if (!shift) return null;
   if (shift.offOnPublicHolidays && inputs.holidays.has(workDateKey)) return null;
-  return build(shift, workDateKey, timeZone, "assignment");
+  const built = build(shift, workDateKey, timeZone, "assignment");
+  const isRemote = Boolean(assignment.remoteDaysOfWeek?.includes(weekday));
+  return isRemote ? { ...built, isRemote: true } : built;
 }
 
 /**

@@ -32,7 +32,7 @@ export async function loadScheduleInputs(
     tx.branch.findUnique({ where: { id: branchId }, select: { timezone: true } }),
     tx.employeeShiftAssignment.findMany({
       where: { employeeId },
-      select: { shiftId: true, daysOfWeek: true, validFrom: true, validTo: true },
+      select: { shiftId: true, daysOfWeek: true, remoteDaysOfWeek: true, validFrom: true, validTo: true },
     }),
     tx.scheduleException.findMany({
       where: { employeeId },

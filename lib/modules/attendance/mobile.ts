@@ -149,8 +149,73 @@ export async function recordMobilePunch(
     };
   }
 
-  // 3. Evaluate geofence rules
-  const geofenceResult = evaluateGeofence(branch, coordinates, direction);
+  // 3. Resolve today's schedule first so scheduled Remote / WFH days bypass branch geofencing
+  const branchTz = branch.timezone || "Africa/Accra";
+  const punchNow = occurredAt || new Date();
+  const todayKey = dateKeyInZone(punchNow, branchTz);
+  const todayDate = new Date(`${todayKey}T00:00:00.000Z`);
+
+  const [shifts, shiftAssignments, exceptions, holidays, patterns] = await Promise.all([
+    prisma.shift.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        startMinute: true,
+        endMinute: true,
+        unpaidBreakMinutes: true,
+        offOnPublicHolidays: true,
+      },
+    }),
+    prisma.employeeShiftAssignment.findMany({
+      where: {
+        employeeId,
+        validFrom: { lte: punchNow },
+        OR: [{ validTo: null }, { validTo: { gte: punchNow } }],
+      },
+      select: {
+        employeeId: true,
+        shiftId: true,
+        daysOfWeek: true,
+        remoteDaysOfWeek: true,
+        validFrom: true,
+        validTo: true,
+      },
+    }),
+    prisma.scheduleException.findMany({
+      where: {
+        employeeId,
+        date: todayDate,
+      },
+      select: { date: true, shiftId: true, type: true, branchId: true, overtimeMinutes: true },
+    }),
+    loadHolidayKeys(),
+    loadLivePatternsFor(employeeId),
+  ]);
+
+  const resolvedSchedule = resolveScheduleForDate(todayKey, {
+    timeZone: branchTz,
+    shifts,
+    assignments: shiftAssignments,
+    exceptions: exceptions.map((ex) => ({
+      dateKey: todayKey,
+      shiftId: ex.shiftId,
+      type: ex.type,
+      branchId: ex.branchId,
+      overtimeMinutes: ex.overtimeMinutes,
+    })),
+    holidays,
+    patterns,
+  });
+
+  const isScheduledRemoteToday = Boolean(resolvedSchedule?.isRemote);
+
+  // 4. Evaluate geofence rules (bypassed when scheduled to work remotely today)
+  const geofenceResult = evaluateGeofence(
+    isScheduledRemoteToday ? { ...branch, geofenceEnabled: false } : branch,
+    coordinates,
+    direction,
+  );
 
   if (!geofenceResult.isAccepted) {
     return {
@@ -165,14 +230,9 @@ export async function recordMobilePunch(
     };
   }
 
-  // 4. For clock-in punches, enforce single-shift and scheduled shift policy
+  // 5. For clock-in punches, enforce single-shift and scheduled shift policy
   if (direction === AttendanceDirection.IN && !input.skipScheduleCheck) {
-    const branchTz = branch.timezone || "Africa/Accra";
-    const punchNow = occurredAt || new Date();
-    const todayKey = dateKeyInZone(punchNow, branchTz);
-    const todayDate = new Date(`${todayKey}T00:00:00.000Z`);
-
-    // 4a. Reject if today's shift is already completed (clocked in and clocked out)
+    // 5a. Reject if today's shift is already completed (clocked in and clocked out)
     const existingDay = await prisma.attendanceDay.findFirst({
       where: {
         employeeId,
@@ -193,59 +253,7 @@ export async function recordMobilePunch(
       };
     }
 
-    // 4b. Reject if employee has no shift scheduled for today
-    const [shifts, shiftAssignments, exceptions, holidays, patterns] = await Promise.all([
-      prisma.shift.findMany({
-        where: { isActive: true },
-        select: {
-          id: true,
-          name: true,
-          startMinute: true,
-          endMinute: true,
-          unpaidBreakMinutes: true,
-          offOnPublicHolidays: true,
-        },
-      }),
-      prisma.employeeShiftAssignment.findMany({
-        where: {
-          employeeId,
-          validFrom: { lte: punchNow },
-          OR: [{ validTo: null }, { validTo: { gte: punchNow } }],
-        },
-        select: {
-          employeeId: true,
-          shiftId: true,
-          daysOfWeek: true,
-          validFrom: true,
-          validTo: true,
-        },
-      }),
-      prisma.scheduleException.findMany({
-        where: {
-          employeeId,
-          date: todayDate,
-        },
-        select: { date: true, shiftId: true, type: true, branchId: true, overtimeMinutes: true },
-      }),
-      loadHolidayKeys(),
-      loadLivePatternsFor(employeeId),
-    ]);
-
-    const resolvedSchedule = resolveScheduleForDate(todayKey, {
-      timeZone: branchTz,
-      shifts,
-      assignments: shiftAssignments,
-      exceptions: exceptions.map((ex) => ({
-        dateKey: todayKey,
-        shiftId: ex.shiftId,
-        type: ex.type,
-        branchId: ex.branchId,
-        overtimeMinutes: ex.overtimeMinutes,
-      })),
-      holidays,
-      patterns,
-    });
-
+    // 5b. Reject if employee has no shift scheduled for today
     if (!resolvedSchedule) {
       return {
         ok: false,

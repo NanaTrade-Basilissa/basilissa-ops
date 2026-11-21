@@ -90,6 +90,8 @@ const ACTION_LABELS: Record<string, { title: string; category: string; tone: Aud
   "shift.created": { title: "Created shift template", category: "Shifts", tone: "cyan" },
   "shift.updated": { title: "Updated shift template", category: "Shifts", tone: "cyan" },
   "shift.assigned": { title: "Assigned shift to employee", category: "Shifts", tone: "cyan" },
+  "shift.fixed_assigned": { title: "Assigned fixed schedule (with remote days)", category: "Shifts", tone: "cyan" },
+  "shift.fixed_cleared": { title: "Switched employee to rotating weekly rota", category: "Shifts", tone: "amber" },
   "schedule.override_set": { title: "Set daily shift override", category: "Shifts", tone: "cyan" },
   "schedule.override_cleared": { title: "Cleared daily shift override", category: "Shifts", tone: "amber" },
   "pattern.created": { title: "Created shift rotation pattern", category: "Shifts", tone: "cyan" },

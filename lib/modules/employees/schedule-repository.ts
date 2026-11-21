@@ -217,6 +217,7 @@ export async function getWeeklyBranchSchedule(
       employeeId: true,
       shiftId: true,
       daysOfWeek: true,
+      remoteDaysOfWeek: true,
       validFrom: true,
       validTo: true,
     },

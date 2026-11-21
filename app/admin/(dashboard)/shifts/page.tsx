@@ -16,6 +16,7 @@ import { ShiftDialog } from "@/components/admin/shift-dialog";
 import { ShiftsTable } from "@/components/admin/shifts-table";
 import { WeeklyScheduleGrid } from "@/components/admin/weekly-schedule-grid";
 import { ScheduleBranchSelect } from "@/components/admin/schedule-branch-select";
+import { FixedSchedulesPanel, type FixedScheduleEmployeeRow } from "@/components/admin/fixed-schedules-panel";
 import { accraDateKey, getAccraWeekStart, shiftDateKey } from "@/lib/platform/date";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +31,14 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
   const allowGlobal = can(actor, "schedule:write");
 
   const raw = await searchParams;
-  const activeTab = raw.tab === "templates" ? "templates" : raw.tab === "patterns" ? "patterns" : "schedule";
+  const activeTab =
+    raw.tab === "fixed"
+      ? "fixed"
+      : raw.tab === "templates"
+        ? "templates"
+        : raw.tab === "patterns"
+          ? "patterns"
+          : "schedule";
 
   const branchFilter =
     scope.kind === "branches"
@@ -108,6 +116,76 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
         }))
       : [];
 
+  // Load fixed schedule rows when on the Fixed Schedules tab
+  let fixedScheduleRows: FixedScheduleEmployeeRow[] = [];
+  if (activeTab === "fixed") {
+    const activeEmployees = await listEmployees(scope, { status: "ACTIVE" });
+    const empIds = activeEmployees.map((e) => e.id);
+    const [openAssignments, openPatterns] = empIds.length
+      ? await Promise.all([
+          prisma.employeeShiftAssignment.findMany({
+            where: {
+              employeeId: { in: empIds },
+              validTo: null,
+            },
+            orderBy: { validFrom: "desc" },
+            include: {
+              shift: {
+                select: {
+                  id: true,
+                  name: true,
+                  startMinute: true,
+                  endMinute: true,
+                },
+              },
+            },
+          }),
+          prisma.employeePatternAssignment.findMany({
+            where: {
+              employeeId: { in: empIds },
+              validTo: null,
+            },
+            select: { employeeId: true },
+          }),
+        ])
+      : [[], []];
+
+    const latestByEmployee = new Map<string, (typeof openAssignments)[number]>();
+    for (const a of openAssignments) {
+      if (!latestByEmployee.has(a.employeeId)) {
+        latestByEmployee.set(a.employeeId, a);
+      }
+    }
+    const patternEmpSet = new Set(openPatterns.map((p) => p.employeeId));
+
+    fixedScheduleRows = activeEmployees.map((e) => {
+      const primaryBranch =
+        e.branchAssignments.find((ba) => ba.isPrimary)?.branch ?? e.branchAssignments[0]?.branch ?? null;
+      const fixed = latestByEmployee.get(e.id);
+      return {
+        id: e.id,
+        employeeCode: e.employeeCode,
+        name: `${e.firstName} ${e.lastName}`.trim(),
+        jobTitle: e.jobTitle ?? null,
+        department: e.department ?? null,
+        branchId: primaryBranch?.id ?? null,
+        branchName: primaryBranch?.name ?? "Unassigned",
+        hasPattern: patternEmpSet.has(e.id),
+        fixedAssignment: fixed
+          ? {
+              id: fixed.id,
+              shiftId: fixed.shiftId,
+              shiftName: fixed.shift.name,
+              timeRange: `${minutesToTime(fixed.shift.startMinute)}–${minutesToTime(fixed.shift.endMinute)}`,
+              daysOfWeek: fixed.daysOfWeek,
+              remoteDaysOfWeek: fixed.remoteDaysOfWeek,
+              validFrom: fixed.validFrom.toISOString().slice(0, 10),
+            }
+          : null,
+      };
+    });
+  }
+
   return (
     <div className="space-y-6">
       {/* Tab switcher */}
@@ -122,6 +200,17 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
           )}
         >
           Weekly Rota
+        </Link>
+        <Link
+          href="/admin/shifts?tab=fixed"
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+            activeTab === "fixed"
+              ? "border-primary text-foreground font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Fixed Schedules
         </Link>
         <Link
           href="/admin/shifts?tab=templates"
@@ -260,6 +349,18 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
             </Empty>
           )}
         </div>
+      ) : activeTab === "fixed" ? (
+        <FixedSchedulesPanel
+          employees={fixedScheduleRows}
+          shifts={shifts.map((s) => ({
+            id: s.id,
+            name: s.name,
+            timeRange: `${minutesToTime(s.startMinute)}–${minutesToTime(s.endMinute)}`,
+            isActive: s.isActive,
+          }))}
+          branches={branches.map((b) => ({ id: b.id, name: b.name }))}
+          canManage={canWriteAny}
+        />
       ) : activeTab === "patterns" ? (
         <PatternsTable
           patterns={patterns.map((p) => ({

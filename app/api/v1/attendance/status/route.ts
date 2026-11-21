@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
         validFrom: { lte: new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000) },
         OR: [{ validTo: null }, { validTo: { gte: now } }],
       },
-      select: { employeeId: true, shiftId: true, daysOfWeek: true, validFrom: true, validTo: true },
+      select: { employeeId: true, shiftId: true, daysOfWeek: true, remoteDaysOfWeek: true, validFrom: true, validTo: true },
     }),
     prisma.scheduleException.findMany({
       where: {

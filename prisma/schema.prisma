@@ -574,6 +574,9 @@ model EmployeeShiftAssignment {
   /// ISO weekdays this applies to: 1 = Monday … 7 = Sunday.
   daysOfWeek Int[]
 
+  /// Subset of daysOfWeek when this employee works remotely (WFH), 1 = Monday … 7 = Sunday.
+  remoteDaysOfWeek Int[] @default([])
+
   validFrom DateTime  @default(now())
   validTo   DateTime?
 
