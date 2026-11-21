@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckSquare, Loader2, Search, Square, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -59,8 +59,22 @@ export function ScheduleBulkAssignDialog({
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]); // default Mon-Fri
   const [validFrom, setValidFrom] = useState(activeWeekStart);
   const [validTo, setValidTo] = useState("");
-
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    setValidFrom(activeWeekStart);
+  }, [activeWeekStart]);
+
+  useEffect(() => {
+    if (!shifts.some((s) => s.id === selectedShiftId)) {
+      setSelectedShiftId(shifts[0]?.id ?? "");
+    }
+  }, [shifts, selectedShiftId]);
+
+  useEffect(() => {
+    setSelectedEmpIds([]);
+    setQuery("");
+  }, [branchId]);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return employees;
@@ -103,6 +117,10 @@ export function ScheduleBulkAssignDialog({
       toast.error("Please select at least one day of the week.");
       return;
     }
+    if (validTo && validTo < validFrom) {
+      toast.error("End date must be on or after the start date.");
+      return;
+    }
 
     startTransition(async () => {
       try {
@@ -117,6 +135,8 @@ export function ScheduleBulkAssignDialog({
 
         if (result.ok) {
           toast.success(result.message || `Shift assigned to ${result.count} staff members.`);
+          setSelectedEmpIds([]);
+          setQuery("");
           setOpen(false);
           router.refresh();
         } else {

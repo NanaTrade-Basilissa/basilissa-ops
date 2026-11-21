@@ -219,6 +219,24 @@ export function resolveScheduleForDate(
           .filter((entry) => isAssignmentInEffect(entry, dayStart) && entry.daysOfWeek.includes(weekday))
           .sort((a, b) => b.validFrom.getTime() - a.validFrom.getTime())[0];
         if (assignment) baseShift = findShift(shifts, assignment.shiftId);
+
+        if (!baseShift) {
+          const fixed = inputs.branchFixedSchedule;
+          if (
+            fixed &&
+            fixed.workDays.includes(weekday) &&
+            !(fixed.offOnPublicHolidays && inputs.holidays.has(workDateKey))
+          ) {
+            baseShift = {
+              id: "branch-fixed",
+              name: "Fixed Schedule",
+              startMinute: fixed.startMinute,
+              endMinute: fixed.endMinute,
+              unpaidBreakMinutes: fixed.unpaidBreakMinutes ?? 0,
+              offOnPublicHolidays: fixed.offOnPublicHolidays,
+            };
+          }
+        }
       }
 
       if (baseShift) {

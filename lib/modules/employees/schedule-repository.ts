@@ -327,12 +327,14 @@ export async function getWeeklyBranchSchedule(
 
       if (resolved) {
         const matchedShift = shifts.find((s) => s.id === resolved.shiftId);
+        const isBranchFixed =
+          resolved.source === "branch_fixed" || resolved.shiftId === "branch-fixed";
         const startMinute =
           matchedShift?.startMinute ??
-          (resolved.source === "branch_fixed" ? branchFixedSchedule?.startMinute ?? null : null);
+          (isBranchFixed ? branchFixedSchedule?.startMinute ?? null : null);
         const endMinute =
           matchedShift?.endMinute ??
-          (resolved.source === "branch_fixed" ? branchFixedSchedule?.endMinute ?? null : null);
+          (isBranchFixed ? branchFixedSchedule?.endMinute ?? null : null);
 
         daySchedules[d.dateKey] = {
           dateKey: d.dateKey,

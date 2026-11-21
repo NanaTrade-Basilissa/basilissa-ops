@@ -941,9 +941,9 @@ export async function bulkAssignFixedScheduleAction(input: {
 
   const shift = await prisma.shift.findUnique({
     where: { id: input.shiftId },
-    select: { id: true, name: true, isActive: true },
+    select: { id: true, name: true, isActive: true, deletedAt: true },
   });
-  if (!shift || !shift.isActive) {
+  if (!shift || !shift.isActive || shift.deletedAt) {
     return { ok: false, error: "Selected shift template was not found or is inactive." };
   }
 
@@ -953,13 +953,22 @@ export async function bulkAssignFixedScheduleAction(input: {
       : new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
 
   await prisma.$transaction(async (tx) => {
-    // Close any previous open fixed assignments for these employees
+    // Close any previous assignments starting before `validFrom` that still overlap
     await tx.employeeShiftAssignment.updateMany({
       where: {
         employeeId: { in: employeeIds },
-        validTo: null,
+        validFrom: { lt: validFrom },
+        OR: [{ validTo: null }, { validTo: { gt: validFrom } }],
       },
       data: { validTo: validFrom },
+    });
+
+    // Replace any conflicting assignments starting on or after `validFrom`
+    await tx.employeeShiftAssignment.deleteMany({
+      where: {
+        employeeId: { in: employeeIds },
+        validFrom: { gte: validFrom },
+      },
     });
 
     await tx.employeeShiftAssignment.createMany({

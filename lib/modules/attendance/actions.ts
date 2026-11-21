@@ -277,7 +277,13 @@ export async function saveScheduleOverride(
   const branchId = String(formData.get("branchId") ?? "");
   const dateKey = String(formData.get("dateKey") ?? "");
   const type = String(formData.get("type") ?? "") as ScheduleExceptionType;
-  const shiftId = String(formData.get("shiftId") ?? "") || null;
+  const rawShiftId = String(formData.get("shiftId") ?? "").trim();
+  // Synthetic shift IDs produced by schedule resolution (e.g. "branch-fixed",
+  // "overtime") are not rows in the `shifts` table and must never be written
+  // to the `ScheduleException.shiftId` foreign key.
+  const syntheticShiftIds = new Set(["branch-fixed", "overtime"]);
+  let shiftId: string | null =
+    rawShiftId && !syntheticShiftIds.has(rawShiftId) ? rawShiftId : null;
   const rawOvertime = formData.get("overtimeMinutes");
   const overtimeMinutes = rawOvertime != null && rawOvertime !== "" ? Number(rawOvertime) : null;
   const reason = String(formData.get("reason") ?? "").trim();
@@ -286,7 +292,10 @@ export async function saveScheduleOverride(
     return { error: "Missing required fields." };
   }
 
-  if (type === ScheduleExceptionType.OVERTIME && (!overtimeMinutes || overtimeMinutes <= 0)) {
+  if (
+    type === ScheduleExceptionType.OVERTIME &&
+    (overtimeMinutes === null || !Number.isFinite(overtimeMinutes) || overtimeMinutes <= 0)
+  ) {
     return { error: "Please select or enter an overtime duration.", fieldErrors: { overtimeMinutes: "Required" } };
   }
 
@@ -299,6 +308,22 @@ export async function saveScheduleOverride(
   }
 
   const actor = await requirePermission("schedule:write", { branchId });
+
+  if (shiftId) {
+    const existingShift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!existingShift || existingShift.deletedAt) {
+      if (type === ScheduleExceptionType.OVERTIME) {
+        // Overtime overrides can resolve the employee's base shift dynamically
+        // (from pattern, assignment, or branch fixed schedule) when shiftId is null.
+        shiftId = null;
+      } else {
+        return { error: "Selected shift template no longer exists.", fieldErrors: { shiftId: "Invalid shift" } };
+      }
+    }
+  }
 
   const date = new Date(`${dateKey}T00:00:00.000Z`);
 
@@ -655,9 +680,13 @@ export type BulkAssignShiftInput = {
 export async function bulkAssignShiftAction(
   input: BulkAssignShiftInput,
 ): Promise<{ ok: boolean; count?: number; error?: string; message?: string }> {
-  const { employeeIds, shiftId, daysOfWeek, validFrom, validTo, branchId } = input;
+  const { shiftId, validFrom, validTo, branchId } = input;
+  const employeeIds = Array.from(new Set((input.employeeIds ?? []).filter(Boolean)));
+  const daysOfWeek = Array.from(
+    new Set((input.daysOfWeek ?? []).filter((d) => Number.isInteger(d) && d >= 1 && d <= 7)),
+  ).sort((a, b) => a - b);
 
-  if (!employeeIds || employeeIds.length === 0) {
+  if (employeeIds.length === 0) {
     return { ok: false, error: "Please select at least one employee." };
   }
 
@@ -665,7 +694,7 @@ export async function bulkAssignShiftAction(
     return { ok: false, error: "Please select a shift template." };
   }
 
-  if (!daysOfWeek || daysOfWeek.length === 0) {
+  if (daysOfWeek.length === 0) {
     return { ok: false, error: "Please select at least one day of the week." };
   }
 
@@ -675,26 +704,56 @@ export async function bulkAssignShiftAction(
 
   const actor = await requirePermission("schedule:write", { branchId });
 
+  const shift = await prisma.shift.findUnique({
+    where: { id: shiftId },
+    select: { id: true, name: true, isActive: true, deletedAt: true },
+  });
+  if (!shift || !shift.isActive || shift.deletedAt) {
+    return { ok: false, error: "Selected shift template was not found or is inactive." };
+  }
+
   const fromDate = new Date(`${validFrom}T00:00:00.000Z`);
   const toDate = validTo && /^\d{4}-\d{2}-\d{2}$/.test(validTo)
     ? new Date(`${validTo}T23:59:59.999Z`)
     : null;
 
-  let createdCount = 0;
+  if (toDate && toDate.getTime() < fromDate.getTime()) {
+    return { ok: false, error: "End date must be on or after the start date." };
+  }
 
   await prisma.$transaction(async (tx) => {
-    for (const empId of employeeIds) {
-      await tx.employeeShiftAssignment.create({
-        data: {
-          employeeId: empId,
-          shiftId,
-          daysOfWeek,
-          validFrom: fromDate,
-          validTo: toDate,
-        },
-      });
-      createdCount++;
-    }
+    // 1. Close any prior assignments starting before `fromDate` that still
+    //    overlap `fromDate` onward (either open-ended or ending after `fromDate`).
+    await tx.employeeShiftAssignment.updateMany({
+      where: {
+        employeeId: { in: employeeIds },
+        validFrom: { lt: fromDate },
+        OR: [{ validTo: null }, { validTo: { gt: fromDate } }],
+      },
+      data: { validTo: fromDate },
+    });
+
+    // 2. Remove any conflicting assignments starting on or after `fromDate`
+    //    so re-assigning the same week/start date never leaves duplicate rows
+    //    with non-deterministic sort order.
+    await tx.employeeShiftAssignment.deleteMany({
+      where: {
+        employeeId: { in: employeeIds },
+        validFrom: { gte: fromDate },
+      },
+    });
+
+    // 3. Insert the new assignments atomically in a single batch.
+    await tx.employeeShiftAssignment.createMany({
+      data: employeeIds.map((employeeId) => ({
+        employeeId,
+        shiftId: shift.id,
+        daysOfWeek,
+        validFrom: fromDate,
+        validTo: toDate,
+        createdBy: actor.userId,
+      })),
+    });
 
     await recordAudit(
       {
@@ -703,8 +762,9 @@ export async function bulkAssignShiftAction(
         entityType: "EmployeeShiftAssignment",
         entityId: branchId,
         metadata: {
-          employeeCount: createdCount,
-          shiftId,
+          employeeCount: employeeIds.length,
+          shiftId: shift.id,
+          shiftName: shift.name,
           daysOfWeek,
           validFrom,
           validTo,
@@ -715,10 +775,11 @@ export async function bulkAssignShiftAction(
   });
 
   revalidatePath("/admin/shifts");
+  revalidatePath("/admin/employees");
   return {
     ok: true,
-    count: createdCount,
-    message: `Successfully assigned shift to ${createdCount} staff member(s).`,
+    count: employeeIds.length,
+    message: `Successfully assigned ${shift.name} to ${employeeIds.length} staff member(s).`,
   };
 }
 

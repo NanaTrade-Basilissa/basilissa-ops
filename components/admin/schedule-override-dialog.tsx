@@ -57,10 +57,13 @@ function ScheduleOverrideForm({
   const router = useRouter();
   const formId = useId();
 
+  const realCurrentShiftId =
+    currentShiftId && shifts.some((s) => s.id === currentShiftId) ? currentShiftId : null;
+
   const [type, setType] = useState<ScheduleExceptionType>(
     exceptionType ?? (currentShiftId ? ScheduleExceptionType.SHIFT_CHANGE : ScheduleExceptionType.EXTRA_SHIFT),
   );
-  const [shiftId, setShiftId] = useState<string>(currentShiftId ?? (shifts[0]?.id || ""));
+  const [shiftId, setShiftId] = useState<string>(realCurrentShiftId ?? (shifts[0]?.id || ""));
   const [reason, setReason] = useState<string>(exceptionReason ?? "");
 
   // Overtime preset state: "30" | "60" | "120" | "custom"
@@ -277,7 +280,7 @@ function ScheduleOverrideForm({
             )}
 
             <input type="hidden" name="overtimeMinutes" value={overtimeMinutes} />
-            <input type="hidden" name="shiftId" value={currentShiftId ?? ""} />
+            <input type="hidden" name="shiftId" value={realCurrentShiftId ?? ""} />
           </div>
         )}
 
@@ -317,20 +320,17 @@ function ScheduleOverrideForm({
 
         <div className="flex items-center justify-between pt-2">
           {isException && exceptionId ? (
-            <form action={clearAction}>
-              <input type="hidden" name="exceptionId" value={exceptionId} />
-              <input type="hidden" name="branchId" value={branchId} />
-              <Button
-                type="submit"
-                variant="ghost"
-                size="sm"
-                disabled={isPending}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1 px-2"
-              >
-                <Trash2 className="size-3.5" />
-                Remove override
-              </Button>
-            </form>
+            <Button
+              type="submit"
+              form={`${formId}-clear`}
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1 px-2"
+            >
+              <Trash2 className="size-3.5" />
+              Remove override
+            </Button>
           ) : (
             <div />
           )}
@@ -351,6 +351,13 @@ function ScheduleOverrideForm({
           </div>
         </div>
       </form>
+
+      {isException && exceptionId && (
+        <form id={`${formId}-clear`} action={clearAction} className="hidden">
+          <input type="hidden" name="exceptionId" value={exceptionId} />
+          <input type="hidden" name="branchId" value={branchId} />
+        </form>
+      )}
     </div>
   );
 }
