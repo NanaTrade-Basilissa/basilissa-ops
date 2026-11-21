@@ -510,6 +510,7 @@ export async function syncAttendanceToOdoo(
       scheduledEnd: day.scheduledEnd,
       overtimeMinutes: day.overtimeMinutes,
       payableOvertimeMinutes: day.payableOvertimeMinutes,
+      flags: day.flags,
     });
 
     if (!window.ok) {

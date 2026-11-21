@@ -254,7 +254,11 @@ export function projectDay(input: ProjectionInput): ProjectedDay {
   let lateMinutes = 0;
   let earlyDepartureMinutes = 0;
   let overtimeMinutes = 0;
-  let regularMinutes = netWorkedMinutes;
+  // Unscheduled days are NEVER payable (`regularMinutes = 0`) until a manager
+  // approves the shift via a schedule override (e.g. EXTRA_SHIFT / SHIFT_CHANGE),
+  // which re-projects the day with a real schedule. `netWorkedMinutes` still
+  // records the punched duration for HR review.
+  let regularMinutes = 0;
 
   if (schedule) {
     if (actualIn) {

@@ -221,7 +221,7 @@ describe("overtime", () => {
     expect(day.flags).not.toContain("OVERTIME_PENDING_APPROVAL");
   });
 
-  it("computes no overtime at all without a schedule to exceed", () => {
+  it("computes no overtime or payable regular hours without a schedule", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,
       events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("20:00"))],
@@ -231,8 +231,10 @@ describe("overtime", () => {
     });
     expect(day.overtimeMinutes).toBe(0);
     expect(day.lateMinutes).toBe(0);
-    expect(day.regularMinutes).toBe(720);
+    expect(day.netWorkedMinutes).toBe(720);
+    expect(day.regularMinutes).toBe(0);
     expect(day.flags).toContain("UNSCHEDULED");
+    expect(day.status).toBe("NEEDS_REVIEW");
   });
 });
 

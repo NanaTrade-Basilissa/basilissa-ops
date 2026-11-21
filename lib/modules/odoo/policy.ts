@@ -18,6 +18,8 @@ export type OdooAttendanceDayInput = {
   scheduledEnd: Date | null;
   overtimeMinutes: number;
   payableOvertimeMinutes: number;
+  /** Optional attendance day flags (e.g. UNSCHEDULED, MISSING_CLOCK_OUT, AUTO_CLOSED). */
+  flags?: readonly string[];
 };
 
 export type EffectiveOdooAttendanceWindow =
@@ -34,7 +36,11 @@ export type EffectiveOdooAttendanceWindow =
     }
   | {
       ok: false;
-      reason: "MISSING_PUNCH" | "CHECK_OUT_NOT_AFTER_CHECK_IN";
+      reason:
+        | "MISSING_PUNCH"
+        | "UNSCHEDULED_UNAPPROVED"
+        | "UNRESOLVED_PUNCH_EXCEPTION"
+        | "CHECK_OUT_NOT_AFTER_CHECK_IN";
     };
 
 /**
@@ -71,13 +77,44 @@ export function parseOdooUtcDatetime(value: string): Date {
  *     we send `scheduledEnd + payableOvertimeMinutes` (or `actualOut` when there is no `scheduledEnd`,
  *     such as an unscheduled/extra shift).
  */
+const ODOO_BLOCKING_PUNCH_FLAGS = new Set([
+  "MISSING_CLOCK_IN",
+  "MISSING_CLOCK_OUT",
+  "UNPAIRED_BREAK",
+  "DUPLICATE_CLOCK_IN",
+]);
+
 export function resolveEffectiveOdooAttendanceWindow(
   input: OdooAttendanceDayInput,
 ): EffectiveOdooAttendanceWindow {
-  const { actualIn, actualOut, scheduledEnd, overtimeMinutes, payableOvertimeMinutes } = input;
+  const {
+    actualIn,
+    actualOut,
+    scheduledStart,
+    scheduledEnd,
+    overtimeMinutes,
+    payableOvertimeMinutes,
+    flags = [],
+  } = input;
 
   if (!actualIn || !actualOut) {
     return { ok: false, reason: "MISSING_PUNCH" };
+  }
+
+  // Only clean final records go to Odoo: block any unresolved punch exceptions
+  // (e.g. missing clock-in/out, unpaired break, duplicate clock-in).
+  // Note: AUTO_CLOSED is intentionally allowed because it carries a valid
+  // SYSTEM_AUTO_CLOSE clock-out at scheduledEnd.
+  if (flags.some((f) => ODOO_BLOCKING_PUNCH_FLAGS.has(f))) {
+    return { ok: false, reason: "UNRESOLVED_PUNCH_EXCEPTION" };
+  }
+
+  // Unscheduled days are never payable or synced to Odoo unless explicitly
+  // approved (either by assigning a schedule override which clears UNSCHEDULED,
+  // or by approving payable overtime).
+  const isUnscheduled = flags.includes("UNSCHEDULED") || (!scheduledStart && !scheduledEnd);
+  if (isUnscheduled && payableOvertimeMinutes <= 0) {
+    return { ok: false, reason: "UNSCHEDULED_UNAPPROVED" };
   }
 
   const checkIn = actualIn;

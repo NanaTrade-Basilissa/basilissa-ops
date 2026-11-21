@@ -3,6 +3,7 @@ import {
   findOdooEmployeeMatch,
   normalizeEmailKey,
   normalizePhoneKey,
+  resolveEffectiveOdooAttendanceWindow,
   type RawOdooEmployeeRecord,
 } from "@/lib/modules/odoo/policy";
 
@@ -72,5 +73,75 @@ describe("Odoo strict trimming & search-before-create matching", () => {
       odooRecords,
     );
     expect(res).toBeNull();
+  });
+});
+
+describe("Odoo attendance export gating — clean final records only", () => {
+  it("blocks unscheduled shifts that have not been approved", () => {
+    const res = resolveEffectiveOdooAttendanceWindow({
+      actualIn: new Date("2026-11-21T08:00:00Z"),
+      actualOut: new Date("2026-11-21T17:00:00Z"),
+      scheduledStart: null,
+      scheduledEnd: null,
+      overtimeMinutes: 0,
+      payableOvertimeMinutes: 0,
+      flags: ["UNSCHEDULED"],
+    });
+    expect(res).toEqual({ ok: false, reason: "UNSCHEDULED_UNAPPROVED" });
+  });
+
+  it("allows unscheduled shifts once explicitly approved via payable overtime", () => {
+    const res = resolveEffectiveOdooAttendanceWindow({
+      actualIn: new Date("2026-11-21T08:00:00Z"),
+      actualOut: new Date("2026-11-21T12:00:00Z"),
+      scheduledStart: null,
+      scheduledEnd: null,
+      overtimeMinutes: 240,
+      payableOvertimeMinutes: 240,
+      flags: ["UNSCHEDULED"],
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  it("blocks incomplete shifts with no clock-out at all", () => {
+    const res = resolveEffectiveOdooAttendanceWindow({
+      actualIn: new Date("2026-11-21T08:00:00Z"),
+      actualOut: null,
+      scheduledStart: new Date("2026-11-21T08:00:00Z"),
+      scheduledEnd: new Date("2026-11-21T17:00:00Z"),
+      overtimeMinutes: 0,
+      payableOvertimeMinutes: 0,
+      flags: ["MISSING_CLOCK_OUT"],
+    });
+    expect(res).toEqual({ ok: false, reason: "MISSING_PUNCH" });
+  });
+
+  it("blocks shifts with unresolved punch exception flags (e.g. UNPAIRED_BREAK)", () => {
+    const res = resolveEffectiveOdooAttendanceWindow({
+      actualIn: new Date("2026-11-21T08:00:00Z"),
+      actualOut: new Date("2026-11-21T17:00:00Z"),
+      scheduledStart: new Date("2026-11-21T08:00:00Z"),
+      scheduledEnd: new Date("2026-11-21T17:00:00Z"),
+      overtimeMinutes: 0,
+      payableOvertimeMinutes: 0,
+      flags: ["UNPAIRED_BREAK"],
+    });
+    expect(res).toEqual({ ok: false, reason: "UNRESOLVED_PUNCH_EXCEPTION" });
+  });
+
+  it("allows auto-closed scheduled shifts because SYSTEM_AUTO_CLOSE provides scheduledEnd as clock-out", () => {
+    const res = resolveEffectiveOdooAttendanceWindow({
+      actualIn: new Date("2026-11-21T08:05:00Z"),
+      actualOut: new Date("2026-11-21T17:00:00Z"),
+      scheduledStart: new Date("2026-11-21T08:00:00Z"),
+      scheduledEnd: new Date("2026-11-21T17:00:00Z"),
+      overtimeMinutes: 0,
+      payableOvertimeMinutes: 0,
+      flags: ["AUTO_CLOSED"],
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.checkOutUtc).toBe("2026-11-21 17:00:00");
+    }
   });
 });
