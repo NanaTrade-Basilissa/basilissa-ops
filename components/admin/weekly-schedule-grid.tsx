@@ -2,11 +2,25 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { RotateCcw, Search, UserCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CalendarPlus, CalendarSync, ChevronDown, RotateCcw, Search, User, UserCheck } from "lucide-react";
 import { ScheduleExceptionType } from "@prisma/client";
 import { ScheduleOverrideDialog } from "@/components/admin/schedule-override-dialog";
+import { ScheduleBulkAssignDialog } from "@/components/admin/schedule-bulk-assign-dialog";
+import {
+  ScheduleAssignPatternDialog,
+  type AssignablePattern,
+} from "@/components/admin/schedule-assign-pattern-dialog";
+import type { CycleShift } from "@/components/admin/pattern-cycle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { minutesToTime } from "@/lib/modules/employees/validation";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { dateKeyInZone } from "@/lib/platform/date";
@@ -77,13 +91,20 @@ export function WeeklyScheduleGrid({
   canManage,
   toolbarFilters,
   toolbarActions,
+  patterns = [],
+  patternShifts = [],
 }: {
   data: WeeklyScheduleData;
   canManage: boolean;
   toolbarFilters?: ReactNode;
   toolbarActions?: ReactNode;
+  patterns?: AssignablePattern[];
+  patternShifts?: CycleShift[];
 }) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
+  const [shiftTarget, setShiftTarget] = useState<EmployeeScheduleRow | null>(null);
+  const [patternTarget, setPatternTarget] = useState<EmployeeScheduleRow | null>(null);
   const [selectedCell, setSelectedCell] = useState<{
     employeeId: string;
     employeeName: string;
@@ -221,12 +242,48 @@ export function WeeklyScheduleGrid({
               filteredEmployees.map((emp) => (
                 <tr key={emp.employeeId} className="hover:bg-muted/20 transition-colors">
                   <td className="p-3 pl-4 align-middle">
-                    <Link
-                      href={`/admin/employees/${emp.employeeId}`}
-                      className="font-medium text-foreground hover:underline block truncate max-w-52"
-                    >
-                      {emp.name}
-                    </Link>
+                    {canManage && !emp.isVisitor ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <button
+                              type="button"
+                              className="group inline-flex max-w-52 cursor-pointer items-center gap-1 text-left font-medium text-foreground hover:underline"
+                            >
+                              <span className="truncate">{emp.name}</span>
+                              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100" />
+                            </button>
+                          }
+                        />
+                        <DropdownMenuContent
+                          align="start"
+                          className="w-auto min-w-48 [&_[role=menuitem]]:whitespace-nowrap"
+                        >
+                          <DropdownMenuItem onClick={() => setShiftTarget(emp)}>
+                            <CalendarPlus className="size-4" />
+                            Assign shift
+                          </DropdownMenuItem>
+                          {patterns.length > 0 && (
+                            <DropdownMenuItem onClick={() => setPatternTarget(emp)}>
+                              <CalendarSync className="size-4" />
+                              Assign rota pattern
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => router.push(`/admin/employees/${emp.employeeId}`)}>
+                            <User className="size-4" />
+                            View employee profile
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <Link
+                        href={`/admin/employees/${emp.employeeId}`}
+                        className="font-medium text-foreground hover:underline block truncate max-w-52"
+                      >
+                        {emp.name}
+                      </Link>
+                    )}
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       {emp.employeeCode && (
                         <span className="font-mono text-[11px]">{emp.employeeCode}</span>
@@ -400,6 +457,48 @@ export function WeeklyScheduleGrid({
           exceptionReason={selectedCell.exceptionReason}
           overtimeMinutes={selectedCell.overtimeMinutes ?? undefined}
           shifts={data.shifts}
+        />
+      )}
+      {canManage && shiftTarget && (
+        <ScheduleBulkAssignDialog
+          open={Boolean(shiftTarget)}
+          onOpenChange={(open) => {
+            if (!open) setShiftTarget(null);
+          }}
+          branchId={data.branchId}
+          branchName={data.branchName}
+          employees={[{ id: shiftTarget.employeeId, name: shiftTarget.name, employeeCode: shiftTarget.employeeCode }]}
+          targetEmployee={{ id: shiftTarget.employeeId, name: shiftTarget.name, employeeCode: shiftTarget.employeeCode }}
+          shifts={data.shifts}
+          activeWeekStart={data.weekStartKey}
+        />
+      )}
+
+      {canManage && patternTarget && (
+        <ScheduleAssignPatternDialog
+          open={Boolean(patternTarget)}
+          onOpenChange={(open) => {
+            if (!open) setPatternTarget(null);
+          }}
+          branchId={data.branchId}
+          branchName={data.branchName}
+          weekStartKey={data.weekStartKey}
+          patterns={patterns}
+          shifts={patternShifts}
+          employees={[
+            {
+              id: patternTarget.employeeId,
+              name: patternTarget.name,
+              employeeCode: patternTarget.employeeCode,
+              patternName: patternTarget.patternName,
+            },
+          ]}
+          targetEmployee={{
+            id: patternTarget.employeeId,
+            name: patternTarget.name,
+            employeeCode: patternTarget.employeeCode,
+            patternName: patternTarget.patternName,
+          }}
         />
       )}
     </div>

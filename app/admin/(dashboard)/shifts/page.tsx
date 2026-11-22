@@ -228,6 +228,10 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
             <WeeklyScheduleGrid
               data={weeklyData}
               canManage={canManageBranch}
+              patterns={patterns
+                .filter((p) => p.isActive && (p.branchId === null || p.branchId === selectedBranchId))
+                .map((p) => ({ id: p.id, name: p.name, cycle: p.cycle.map((d) => d.shiftId) }))}
+              patternShifts={shiftOptions}
               toolbarFilters={
                 <>
                   {branches.length > 1 ? (

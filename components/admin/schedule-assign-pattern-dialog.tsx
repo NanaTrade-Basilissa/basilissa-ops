@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -34,6 +34,7 @@ export function ScheduleAssignPatternDialog({
   employees,
   open,
   onOpenChange,
+  targetEmployee,
 }: {
   branchId: string;
   branchName: string;
@@ -43,6 +44,8 @@ export function ScheduleAssignPatternDialog({
   employees: PatternCandidate[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When set, locks the dialog to a single employee (hides stagger & staff checklist). */
+  targetEmployee?: PatternCandidate | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -50,7 +53,22 @@ export function ScheduleAssignPatternDialog({
   const [startDateKey, setStartDateKey] = useState(weekStartKey);
   const [stagger, setStagger] = useState(1);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(targetEmployee ? [targetEmployee.id] : []);
+
+  useEffect(() => {
+    setStartDateKey(weekStartKey);
+  }, [weekStartKey]);
+
+  useEffect(() => {
+    if (patternId !== "" && !patterns.some((p) => p.id === patternId)) {
+      setPatternId(patterns[0]?.id ?? "");
+    }
+  }, [patterns, patternId]);
+
+  useEffect(() => {
+    setSelected(targetEmployee ? [targetEmployee.id] : []);
+    setQuery("");
+  }, [branchId, targetEmployee]);
 
   const pattern = patterns.find((p) => p.id === patternId);
   const ending = patternId === "";
@@ -79,7 +97,7 @@ export function ScheduleAssignPatternDialog({
         patternId: patternId || null,
         employeeIds: selected,
         startDateKey,
-        staggerDays: stagger,
+        staggerDays: targetEmployee ? 0 : stagger,
       });
       if (!result.ok) {
         toast.error(result.error ?? "Could not assign the pattern.");
@@ -100,14 +118,20 @@ export function ScheduleAssignPatternDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Assign rota pattern at {branchName}</DialogTitle>
+          <DialogTitle>
+            {targetEmployee
+              ? `Assign rota pattern — ${targetEmployee.name}`
+              : `Assign rota pattern at ${branchName}`}
+          </DialogTitle>
           <DialogDescription>
-            Replaces each person&apos;s pattern here from the start date. Their earlier weeks keep the rota they had.
+            {targetEmployee
+              ? `Replaces ${targetEmployee.name}'s pattern from the start date. Earlier weeks keep the rota they had.`
+              : "Replaces each person's pattern here from the start date. Their earlier weeks keep the rota they had."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className={`grid gap-3 ${targetEmployee ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
             <div className="space-y-1.5 sm:col-span-1">
               <Label htmlFor="assignPattern">Pattern</Label>
               <NativeSelect id="assignPattern" value={patternId} onChange={(e) => setPatternId(e.target.value)}>
@@ -123,20 +147,22 @@ export function ScheduleAssignPatternDialog({
               <Label htmlFor="assignStart">From</Label>
               <Input id="assignStart" type="date" value={startDateKey} onChange={(e) => setStartDateKey(e.target.value)} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="assignStagger">Stagger (days)</Label>
-              <Input
-                id="assignStagger"
-                type="number"
-                min={0}
-                max={27}
-                value={stagger}
-                disabled={ending}
-                onChange={(e) => setStagger(Math.max(0, Math.min(27, Number(e.target.value) || 0)))}
-              />
-            </div>
+            {!targetEmployee && (
+              <div className="space-y-1.5">
+                <Label htmlFor="assignStagger">Stagger (days)</Label>
+                <Input
+                  id="assignStagger"
+                  type="number"
+                  min={0}
+                  max={27}
+                  value={stagger}
+                  disabled={ending}
+                  onChange={(e) => setStagger(Math.max(0, Math.min(27, Number(e.target.value) || 0)))}
+                />
+              </div>
+            )}
           </div>
-          {!ending && (
+          {!ending && !targetEmployee && (
             <p className="text-xs text-muted-foreground">
               Each person you tick starts {stagger} {stagger === 1 ? "day" : "days"} further into the cycle than the
               one before, so days off do not all fall together. 0 puts everyone on the same days.
@@ -150,6 +176,7 @@ export function ScheduleAssignPatternDialog({
             </div>
           )}
 
+          {!targetEmployee && (
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label>People ({selected.length} selected)</Label>
@@ -190,6 +217,7 @@ export function ScheduleAssignPatternDialog({
               )}
             </div>
           </div>
+          )}
 
           {pattern && !ending && ordered.length > 0 && (
             <div className="space-y-1.5">

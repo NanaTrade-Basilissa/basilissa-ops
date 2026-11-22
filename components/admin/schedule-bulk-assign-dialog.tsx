@@ -37,6 +37,7 @@ export function ScheduleBulkAssignDialog({
   activeWeekStart,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  targetEmployee,
 }: {
   branchId: string;
   branchName: string;
@@ -46,6 +47,8 @@ export function ScheduleBulkAssignDialog({
   /** Controlled by a parent (the rota actions menu); no trigger is rendered. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** When set, locks the dialog to a single employee (hides the staff multi-select). */
+  targetEmployee?: { id: string; name: string; employeeCode: string | null } | null;
 }) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -54,7 +57,9 @@ export function ScheduleBulkAssignDialog({
   const setOpen = controlled ? (next: boolean) => controlledOnOpenChange?.(next) : setInternalOpen;
   const [isPending, startTransition] = useTransition();
 
-  const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>([]);
+  const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>(
+    targetEmployee ? [targetEmployee.id] : [],
+  );
   const [selectedShiftId, setSelectedShiftId] = useState<string>(shifts[0]?.id ?? "");
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]); // default Mon-Fri
   const [validFrom, setValidFrom] = useState(activeWeekStart);
@@ -72,9 +77,9 @@ export function ScheduleBulkAssignDialog({
   }, [shifts, selectedShiftId]);
 
   useEffect(() => {
-    setSelectedEmpIds([]);
+    setSelectedEmpIds(targetEmployee ? [targetEmployee.id] : []);
     setQuery("");
-  }, [branchId]);
+  }, [branchId, targetEmployee]);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return employees;
@@ -162,9 +167,13 @@ export function ScheduleBulkAssignDialog({
       )}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Bulk Assign Shift</DialogTitle>
+          <DialogTitle>
+            {targetEmployee ? `Assign Shift — ${targetEmployee.name}` : "Bulk Assign Shift"}
+          </DialogTitle>
           <DialogDescription>
-            Assign a recurring shift pattern to multiple staff members at {branchName}.
+            {targetEmployee
+              ? `Assign a recurring weekly shift to ${targetEmployee.name} at ${branchName}.`
+              : `Assign a recurring shift pattern to multiple staff members at ${branchName}.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -232,7 +241,8 @@ export function ScheduleBulkAssignDialog({
             </div>
           </div>
 
-          {/* Employee multi-select checklist */}
+          {/* Employee multi-select checklist (hidden in single-employee mode) */}
+          {!targetEmployee && (
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label>Select Staff ({selectedEmpIds.length}/{employees.length} selected)</Label>
@@ -287,6 +297,7 @@ export function ScheduleBulkAssignDialog({
               )}
             </div>
           </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
