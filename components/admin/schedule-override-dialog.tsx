@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useId, useState } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, CheckCircle2, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -85,18 +85,36 @@ function ScheduleOverrideForm({
     undefined,
   );
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const handledSaveRef = useRef<ScheduleOverrideState>(undefined);
+  const handledClearRef = useRef<ScheduleOverrideState>(undefined);
+
   useEffect(() => {
-    if (saveState?.saved || clearState?.saved) {
-      toast.success(saveState?.saved || clearState?.saved);
+    if (!saveState || saveState === handledSaveRef.current) return;
+    handledSaveRef.current = saveState;
+
+    if (saveState.saved) {
+      toast.success(saveState.saved);
+      onCloseRef.current();
       router.refresh();
-      const timer = setTimeout(() => {
-        onClose();
-      }, 500);
-      return () => clearTimeout(timer);
-    } else if (saveState?.error || clearState?.error) {
-      toast.error(saveState?.error || clearState?.error);
+    } else if (saveState.error) {
+      toast.error(saveState.error);
     }
-  }, [saveState, clearState, router, onClose]);
+  }, [saveState, router]);
+
+  useEffect(() => {
+    if (!clearState || clearState === handledClearRef.current) return;
+    handledClearRef.current = clearState;
+
+    if (clearState.saved) {
+      toast.success(clearState.saved);
+      onCloseRef.current();
+      router.refresh();
+    } else if (clearState.error) {
+      toast.error(clearState.error);
+    }
+  }, [clearState, router]);
 
   const isPending = isSaving || isClearing;
 

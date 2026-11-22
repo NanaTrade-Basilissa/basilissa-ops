@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requirePermission, listAuditLogs } from "@/lib/modules/identity/server";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
+import { PageHeader, PageShell } from "@/components/admin/page-shell";
 
 export const metadata: Metadata = { title: "Audit Trail" };
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export default async function AuditTrailPage({
   const sp = await searchParams;
 
   const page = Number(first(sp.page)) || 1;
-  const pageSize = Number(first(sp.pageSize)) || 25;
+  const pageSize = Number(first(sp.pageSize)) || 20;
 
   const auditData = await listAuditLogs({
     search: first(sp.search),
@@ -33,8 +34,12 @@ export default async function AuditTrailPage({
   });
 
   return (
-    <div className="space-y-4">
+    <PageShell>
+      <PageHeader
+        title="Audit Trail"
+        description="Track administrative changes, sign-ins, and automated system events across the platform."
+      />
       <AuditLogTable data={auditData} />
-    </div>
+    </PageShell>
   );
 }

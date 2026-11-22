@@ -109,12 +109,14 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
   const [showRawJson, setShowRawJson] = useState(false);
 
   const currentSearch = searchParams.get("search") ?? "";
+  const currentActor = searchParams.get("actorEmail") ?? "all";
   const currentEntity = searchParams.get("entityType") ?? "all";
   const currentAction = searchParams.get("action") ?? "all";
   const currentStart = searchParams.get("startDate") ?? "";
   const currentEnd = searchParams.get("endDate") ?? "";
 
   const [searchInput, setSearchInput] = useState(currentSearch);
+  const [actorInput, setActorInput] = useState(currentActor);
   const [entityInput, setEntityInput] = useState(currentEntity);
   const [actionInput, setActionInput] = useState(currentAction);
   const [startDateInput, setStartDateInput] = useState(currentStart);
@@ -122,7 +124,7 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
 
   const applyFilters = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("tab", "audit");
+    params.delete("tab");
     // Always reset to page 1 on filter change
     if (!updates.page) {
       params.delete("page");
@@ -136,14 +138,16 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
       }
     }
 
+    const qs = params.toString();
     startTransition(() => {
-      router.push(`${pathname}?${params.toString()}`);
+      router.push(qs ? `${pathname}?${qs}` : pathname);
     });
   };
 
   const handleSearchSubmit = () => {
     applyFilters({
       search: searchInput.trim() || null,
+      actorEmail: actorInput,
       entityType: entityInput,
       action: actionInput,
       startDate: startDateInput || null,
@@ -153,14 +157,13 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
 
   const handleReset = () => {
     setSearchInput("");
+    setActorInput("all");
     setEntityInput("all");
     setActionInput("all");
     setStartDateInput("");
     setEndDateInput("");
-    const params = new URLSearchParams();
-    params.set("tab", "audit");
     startTransition(() => {
-      router.push(`${pathname}?${params.toString()}`);
+      router.push(pathname);
     });
   };
 
@@ -168,8 +171,17 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
     applyFilters({ page: String(newPage) });
   };
 
+  const handlePageSizeChange = (newSize: number) => {
+    applyFilters({ pageSize: String(newSize), page: "1" });
+  };
+
   const hasActiveFilters = Boolean(
-    currentSearch || currentEntity !== "all" || currentAction !== "all" || currentStart || currentEnd,
+    currentSearch ||
+      currentActor !== "all" ||
+      currentEntity !== "all" ||
+      currentAction !== "all" ||
+      currentStart ||
+      currentEnd,
   );
 
   return (
@@ -196,6 +208,27 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
         }
         filters={
           <>
+            <NativeSelect
+              value={actorInput}
+              onChange={(e) => setActorInput(e.target.value)}
+              className="h-9 text-xs"
+              containerClassName="w-full sm:w-fit sm:min-w-[165px] sm:shrink-0"
+              aria-label="Filter by who performed the action"
+            >
+              <option value="all">All Actors (Who)</option>
+              <option value="__system__">Automated System</option>
+              <option value="__users__">All Users (Human)</option>
+              {data.actorOptions.length > 0 && (
+                <optgroup label="Individual Users">
+                  {data.actorOptions.map((email) => (
+                    <option key={email} value={email}>
+                      {email}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </NativeSelect>
+
             <NativeSelect
               value={entityInput}
               onChange={(e) => setEntityInput(e.target.value)}
@@ -353,6 +386,9 @@ export function AuditLogTable({ data }: { data: AuditLogSearchResult }) {
         total={data.total}
         pageSize={data.pageSize}
         onPageChange={goToPage}
+        onPageSizeChange={handlePageSizeChange}
+        pageSizeOptions={[10, 20, 50]}
+        alwaysShow
       />
 
       {/* Executive-Readable Activity Detail Dialog */}

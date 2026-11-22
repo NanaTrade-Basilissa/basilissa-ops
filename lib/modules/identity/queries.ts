@@ -14,7 +14,7 @@ export async function listAuditLogs(filters: AuditLogFilters): Promise<AuditLogS
   await requirePermission("user:read");
 
   const page = Math.max(1, filters.page ?? 1);
-  const pageSize = Math.min(100, Math.max(10, filters.pageSize ?? 25));
+  const pageSize = Math.min(100, Math.max(10, filters.pageSize ?? 20));
   const skip = (page - 1) * pageSize;
 
   const whereConditions: Prisma.AuditLogWhereInput[] = [];
@@ -43,10 +43,16 @@ export async function listAuditLogs(filters: AuditLogFilters): Promise<AuditLogS
     });
   }
 
-  if (filters.actorEmail) {
-    whereConditions.push({
-      actorEmail: { contains: filters.actorEmail, mode: "insensitive" },
-    });
+  if (filters.actorEmail && filters.actorEmail !== "all") {
+    if (filters.actorEmail === "__system__") {
+      whereConditions.push({ actorEmail: null });
+    } else if (filters.actorEmail === "__users__") {
+      whereConditions.push({ actorEmail: { not: null } });
+    } else {
+      whereConditions.push({
+        actorEmail: { equals: filters.actorEmail, mode: "insensitive" },
+      });
+    }
   }
 
   if (filters.search && filters.search.trim().length > 0) {
@@ -64,7 +70,7 @@ export async function listAuditLogs(filters: AuditLogFilters): Promise<AuditLogS
   const where: Prisma.AuditLogWhereInput =
     whereConditions.length > 0 ? { AND: whereConditions } : {};
 
-  const [total, items] = await Promise.all([
+  const [total, items, distinctActors] = await Promise.all([
     prisma.auditLog.count({ where }),
     prisma.auditLog.findMany({
       where,
@@ -85,9 +91,18 @@ export async function listAuditLogs(filters: AuditLogFilters): Promise<AuditLogS
         metadata: true,
       },
     }),
+    prisma.auditLog.findMany({
+      where: { actorEmail: { not: null } },
+      distinct: ["actorEmail"],
+      orderBy: { actorEmail: "asc" },
+      select: { actorEmail: true },
+    }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const actorOptions = distinctActors
+    .map((a) => a.actorEmail)
+    .filter((email): email is string => Boolean(email));
 
   return {
     items,
@@ -95,5 +110,6 @@ export async function listAuditLogs(filters: AuditLogFilters): Promise<AuditLogS
     page,
     pageSize,
     totalPages,
+    actorOptions,
   };
 }

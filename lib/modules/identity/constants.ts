@@ -144,6 +144,8 @@ export type AuditLogSearchResult = {
   page: number;
   pageSize: number;
   totalPages: number;
+  /** Distinct human actor emails present in the audit log, sorted alphabetically. */
+  actorOptions: string[];
 };
 
 export type FormattedCustomRole = {
