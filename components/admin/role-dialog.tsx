@@ -155,7 +155,7 @@ export function RoleDialog({
           }
         />
       ) : null}
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isSuperAdmin
@@ -282,11 +282,11 @@ export function RoleDialog({
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
-                    <th className="p-2.5 font-semibold text-foreground min-w-[160px]">Resource</th>
+                    <th className="p-2.5 font-semibold text-foreground min-w-[200px]">Resource</th>
                     {MATRIX_ACTIONS.map((actionCol) => (
                       <th
                         key={actionCol.key}
-                        className="p-2.5 font-semibold text-center text-foreground min-w-[75px]"
+                        className="p-2.5 font-semibold text-center text-foreground min-w-[68px]"
                       >
                         {actionCol.label}
                       </th>
@@ -322,7 +322,7 @@ export function RoleDialog({
                             return (
                               <td
                                 key={actionCol.key}
-                                className="p-2.5 text-center align-middle bg-muted/10 text-muted-foreground/30"
+                                className="p-2.5 text-center align-middle bg-muted/15 text-muted-foreground/75 font-medium text-sm select-none"
                               >
                                 —
                               </td>
@@ -374,6 +374,7 @@ export function RoleDialog({
                                   }
                                   disabled={isPending || cellDisabled}
                                   aria-label={`${actionDef.label} ${row.resourceLabel}`}
+                                  className="size-[18px] border-[1.5px] border-foreground/45 bg-background shadow-2xs hover:border-foreground/75 data-checked:border-primary data-checked:bg-primary"
                                 />
                               </div>
                             </td>
