@@ -7,6 +7,7 @@ import { CalendarPlus, CalendarSync, ChevronDown, RotateCcw, Search, User, UserC
 import { ScheduleExceptionType } from "@prisma/client";
 import { ScheduleOverrideDialog } from "@/components/admin/schedule-override-dialog";
 import { ScheduleBulkAssignDialog } from "@/components/admin/schedule-bulk-assign-dialog";
+import { FilterBar } from "@/components/admin/filter-bar";
 import {
   ScheduleAssignPatternDialog,
   type AssignablePattern,
@@ -189,9 +190,10 @@ export function WeeklyScheduleGrid({
 
   return (
     <div className="space-y-3">
-      {/* Unified toolbar: Search + Branch + Week Navigator + Actions */}
-      <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      {/* Unified FilterBar: Search + Job Title & Branch filters (mobile drawer) + Actions */}
+      <FilterBar
+        hasActiveFilters={hasLocalFilters}
+        search={
           <div className="relative w-full shrink-0 sm:w-56 md:w-64">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -202,54 +204,54 @@ export function WeeklyScheduleGrid({
               className="h-9 pl-8 text-xs"
             />
           </div>
+        }
+        filters={
+          <>
+            {jobTitleOptions.sorted.length > 0 && (
+              <NativeSelect
+                id="rota-job-title-filter"
+                value={jobTitleFilter}
+                onChange={(e) => setJobTitleFilter(e.target.value)}
+                className="h-9 text-xs"
+                containerClassName="w-full sm:w-fit sm:min-w-[160px] sm:shrink-0"
+                aria-label="Filter by job title"
+              >
+                <option value="all">All Job Titles</option>
+                {jobTitleOptions.sorted.map(([title, count]) => (
+                  <option key={title} value={title}>
+                    {title} ({count})
+                  </option>
+                ))}
+                {jobTitleOptions.unassignedCount > 0 && (
+                  <option value="__none__">
+                    No Job Title ({jobTitleOptions.unassignedCount})
+                  </option>
+                )}
+              </NativeSelect>
+            )}
 
-          {jobTitleOptions.sorted.length > 0 && (
-            <NativeSelect
-              id="rota-job-title-filter"
-              value={jobTitleFilter}
-              onChange={(e) => setJobTitleFilter(e.target.value)}
-              className="h-9 text-xs"
-              containerClassName="w-full sm:w-fit sm:min-w-[160px] sm:shrink-0"
-              aria-label="Filter by job title"
-            >
-              <option value="all">All Job Titles</option>
-              {jobTitleOptions.sorted.map(([title, count]) => (
-                <option key={title} value={title}>
-                  {title} ({count})
-                </option>
-              ))}
-              {jobTitleOptions.unassignedCount > 0 && (
-                <option value="__none__">
-                  No Job Title ({jobTitleOptions.unassignedCount})
-                </option>
-              )}
-            </NativeSelect>
-          )}
+            {toolbarFilters}
 
-          {toolbarFilters}
-
-          {hasLocalFilters && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearch("");
-                setJobTitleFilter("all");
-              }}
-              className="h-9 gap-1.5 text-xs"
-              title="Reset filters"
-            >
-              <RotateCcw className="size-3.5" />
-              Reset
-            </Button>
-          )}
-        </div>
-
-        {toolbarActions && (
-          <div className="flex items-center justify-end gap-2">{toolbarActions}</div>
-        )}
-      </div>
+            {hasLocalFilters && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearch("");
+                  setJobTitleFilter("all");
+                }}
+                className="h-9 gap-1.5 text-xs"
+                title="Reset filters"
+              >
+                <RotateCcw className="size-3.5" />
+                Reset
+              </Button>
+            )}
+          </>
+        }
+        actions={toolbarActions}
+      />
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
         {calendarHeader && (
