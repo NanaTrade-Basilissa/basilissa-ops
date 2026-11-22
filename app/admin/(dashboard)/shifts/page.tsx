@@ -286,14 +286,16 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
               }
               toolbarActions={
                 <>
-                  <a
-                    href={`/api/admin/shifts/export/excel?branchId=${encodeURIComponent(selectedBranchId)}&week=${weekStartKey}`}
-                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9 gap-1.5 text-xs")}
-                    title={`Download ${formattedWeek} as an Excel file`}
-                  >
-                    <Download className="size-3.5" />
-                    <span>Export</span>
-                  </a>
+                  {!canManageBranch && (
+                    <a
+                      href={`/api/admin/shifts/export/excel?branchId=${encodeURIComponent(selectedBranchId)}&week=${weekStartKey}`}
+                      className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9 gap-1.5 text-xs")}
+                      title={`Download ${formattedWeek} as an Excel file`}
+                    >
+                      <Download className="size-3.5" />
+                      <span>Export</span>
+                    </a>
+                  )}
 
                   {canManageBranch && (
                     <ScheduleActionsMenu

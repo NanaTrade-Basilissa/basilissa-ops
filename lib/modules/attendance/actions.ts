@@ -31,7 +31,8 @@ import {
 } from "./validation";
 import { canAuthorizeOvertime } from "./overtime-auth";
 import { autoCloseStaleDays, type AutoCloseSummary } from "./auto-close";
-import { shiftDateKey } from "@/lib/platform/date";
+import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
+import { dateKeyInZone, shiftDateKey } from "@/lib/platform/date";
 import { reviewLeaveRequest } from "./leave";
 import { DuplicateHolidayError, deleteHoliday, importCalendarHolidays, resettleDates, saveHoliday } from "./holidays";
 import {
@@ -1391,11 +1392,13 @@ export async function saveBranchQuotaAction(data: {
 }
 
 /**
- * Clears the active rota board for a branch starting from `weekStartKey` (Mon–Sun):
- * - Deletes single-day ScheduleException entries for this branch's staff in that week
- * - Ends (or deletes if starting on/after `weekStartKey`) recurring shift assignments
- * - Ends (or deletes if starting on/after `weekStartKey`) rota pattern assignments
- * Preserves all historical weeks before `weekStartKey`.
+ * Clears upcoming shifts on a branch's rota board from `max(weekStartKey, today)`
+ * through `weekEndKey` (Sun):
+ * - Rejects completely past weeks (`weekEndKey < today`) so historical attendance
+ *   and payroll records can never be wiped.
+ * - On the current week, only clears from today onward (never earlier days this week).
+ * - Deletes single-day ScheduleException entries for `[effectiveStart, weekEnd]`.
+ * - Ends (or deletes if starting on/after `effectiveStart`) recurring shifts & patterns.
  */
 export async function clearBranchWeekAction(input: {
   branchId: string;
@@ -1403,6 +1406,7 @@ export async function clearBranchWeekAction(input: {
 }): Promise<{
   ok: boolean;
   error?: string;
+  effectiveStartKey?: string;
   clearedExceptions?: number;
   clearedShiftAssignments?: number;
   clearedPatterns?: number;
@@ -1414,8 +1418,18 @@ export async function clearBranchWeekAction(input: {
 
   const actor = await requirePermission("schedule:write", { branchId });
 
-  const weekStartDate = new Date(`${weekStartKey}T00:00:00.000Z`);
+  const todayKey = dateKeyInZone(new Date(), DISPLAY_TIMEZONE);
   const weekEndKey = shiftDateKey(weekStartKey, 6);
+
+  if (weekEndKey < todayKey) {
+    return {
+      ok: false,
+      error: "Past weeks cannot be cleared — historical attendance and payroll records are protected.",
+    };
+  }
+
+  const effectiveStartKey = weekStartKey < todayKey ? todayKey : weekStartKey;
+  const effectiveStartDate = new Date(`${effectiveStartKey}T00:00:00.000Z`);
   const weekEndDate = new Date(`${weekEndKey}T23:59:59.999Z`);
 
   const summary = await prisma.$transaction(async (tx) => {
@@ -1430,10 +1444,10 @@ export async function clearBranchWeekAction(input: {
     });
     const employeeIds = branchEmployees.map((b) => b.employeeId);
 
-    // 1. Delete single-day overrides/cover shifts for this week at this branch
+    // 1. Delete single-day overrides/cover shifts from effectiveStart through weekEnd
     const delExceptions = await tx.scheduleException.deleteMany({
       where: {
-        date: { gte: weekStartDate, lte: weekEndDate },
+        date: { gte: effectiveStartDate, lte: weekEndDate },
         OR: [
           { branchId },
           ...(employeeIds.length > 0 ? [{ employeeId: { in: employeeIds } }] : []),
@@ -1445,38 +1459,38 @@ export async function clearBranchWeekAction(input: {
     let clearedPatterns = 0;
 
     if (employeeIds.length > 0) {
-      // 2. End recurring shift assignments started before this week, delete ones starting on/after
+      // 2. End recurring shift assignments started before effectiveStart, delete ones starting on/after
       const closedShifts = await tx.employeeShiftAssignment.updateMany({
         where: {
           employeeId: { in: employeeIds },
-          validFrom: { lt: weekStartDate },
-          OR: [{ validTo: null }, { validTo: { gt: weekStartDate } }],
+          validFrom: { lt: effectiveStartDate },
+          OR: [{ validTo: null }, { validTo: { gt: effectiveStartDate } }],
         },
-        data: { validTo: weekStartDate },
+        data: { validTo: effectiveStartDate },
       });
       const deletedShifts = await tx.employeeShiftAssignment.deleteMany({
         where: {
           employeeId: { in: employeeIds },
-          validFrom: { gte: weekStartDate },
+          validFrom: { gte: effectiveStartDate },
         },
       });
       clearedShiftAssignments = closedShifts.count + deletedShifts.count;
 
-      // 3. End rota patterns started before this week, delete ones starting on/after
+      // 3. End rota patterns started before effectiveStart, delete ones starting on/after
       const closedPatterns = await tx.employeePatternAssignment.updateMany({
         where: {
           branchId,
           employeeId: { in: employeeIds },
-          validFrom: { lt: weekStartDate },
-          OR: [{ validTo: null }, { validTo: { gt: weekStartDate } }],
+          validFrom: { lt: effectiveStartDate },
+          OR: [{ validTo: null }, { validTo: { gt: effectiveStartDate } }],
         },
-        data: { validTo: weekStartDate },
+        data: { validTo: effectiveStartDate },
       });
       const deletedPatterns = await tx.employeePatternAssignment.deleteMany({
         where: {
           branchId,
           employeeId: { in: employeeIds },
-          validFrom: { gte: weekStartDate },
+          validFrom: { gte: effectiveStartDate },
         },
       });
       clearedPatterns = closedPatterns.count + deletedPatterns.count;
@@ -1491,6 +1505,7 @@ export async function clearBranchWeekAction(input: {
         metadata: {
           branchName: branch?.name ?? branchId,
           weekStartKey,
+          effectiveStartKey,
           weekEndKey,
           clearedExceptions: delExceptions.count,
           clearedShiftAssignments,
@@ -1501,6 +1516,7 @@ export async function clearBranchWeekAction(input: {
     );
 
     return {
+      effectiveStartKey,
       clearedExceptions: delExceptions.count,
       clearedShiftAssignments,
       clearedPatterns,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft, CalendarSync, ChevronDown, Copy, Settings2, Trash2, Users, Zap } from "lucide-react";
+import { ArrowRightLeft, CalendarSync, ChevronDown, Copy, Download, Settings2, Trash2, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +24,8 @@ import { ScheduleCopyWeekDialog } from "@/components/admin/schedule-copy-week-di
 import { ScheduleCoverDialog, type CoverCandidate } from "@/components/admin/schedule-cover-dialog";
 import { ScheduleBulkAssignDialog } from "@/components/admin/schedule-bulk-assign-dialog";
 import { ScheduleClearRotaDialog } from "@/components/admin/schedule-clear-rota-dialog";
+import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
+import { dateKeyInZone, shiftDateKey } from "@/lib/platform/date";
 
 type Dialog = "copy" | "cover" | "bulk" | "pattern" | "generate" | "auto" | "clear" | null;
 
@@ -61,9 +63,22 @@ export function ScheduleActionsMenu({
 }) {
   const [open, setOpen] = useState<Dialog>(null);
   const onOpenChange = (which: Exclude<Dialog, null>) => (next: boolean) => setOpen(next ? which : null);
+  const todayKey = dateKeyInZone(new Date(), DISPLAY_TIMEZONE);
+  const weekEndKey = shiftDateKey(weekStartKey, 6);
+  const isPastWeek = weekEndKey < todayKey;
 
   return (
-    <>
+    <div className="flex items-center gap-2">
+      <Button
+        type="button"
+        size="sm"
+        onClick={() => setOpen("bulk")}
+        className="h-9 gap-1.5 text-xs"
+      >
+        <Users className="size-3.5" />
+        <span>Bulk assign</span>
+      </Button>
+
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -86,9 +101,13 @@ export function ScheduleActionsMenu({
               <ArrowRightLeft className="size-4" />
               Cover shift
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setOpen("bulk")}>
-              <Users className="size-4" />
-              Bulk assign
+            <DropdownMenuItem
+              onClick={() => {
+                window.location.href = `/api/admin/shifts/export/excel?branchId=${encodeURIComponent(branchId)}&week=${weekStartKey}`;
+              }}
+            >
+              <Download className="size-4" />
+              Export Excel
             </DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
@@ -118,11 +137,13 @@ export function ScheduleActionsMenu({
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
-            onClick={() => setOpen("clear")}
+            disabled={isPastWeek}
+            onClick={() => !isPastWeek && setOpen("clear")}
             className="whitespace-nowrap"
+            title={isPastWeek ? "Past weeks are locked to preserve history" : undefined}
           >
             <Trash2 className="size-4" />
-            Clear rota
+            {isPastWeek ? "Clear rota (past week locked)" : "Clear rota"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -187,6 +208,6 @@ export function ScheduleActionsMenu({
         open={open === "clear"}
         onOpenChange={onOpenChange("clear")}
       />
-    </>
+    </div>
   );
 }

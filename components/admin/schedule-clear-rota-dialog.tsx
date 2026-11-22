@@ -77,10 +77,10 @@ export function ScheduleClearRotaDialog({
             Clear rota board — {branchName}
           </DialogTitle>
           <DialogDescription>
-            This clears all scheduled shifts, overrides, and active patterns for{" "}
-            <span className="font-medium text-foreground">{branchName}</span> starting{" "}
-            <span className="font-medium text-foreground">{weekLabel}</span> so you can start fresh.
-            Earlier weeks and attendance history are preserved.
+            This clears upcoming scheduled shifts, overrides, and active patterns for{" "}
+            <span className="font-medium text-foreground">{branchName}</span> from today onward
+            within <span className="font-medium text-foreground">{weekLabel}</span> so you can start fresh.
+            Past days, earlier weeks, and attendance history are never modified.
           </DialogDescription>
         </DialogHeader>
 
