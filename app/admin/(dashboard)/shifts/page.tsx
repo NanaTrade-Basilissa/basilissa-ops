@@ -252,6 +252,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
                   <div className="inline-flex h-8 items-center rounded-md border border-input bg-background shadow-xs">
                     <Link
                       href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${prevWeekKey}`}
+                      scroll={false}
                       className="inline-flex h-full items-center justify-center border-r border-border/60 px-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                       title="Previous week"
                       aria-label="Previous week"
@@ -263,6 +264,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
                     </span>
                     <Link
                       href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${nextWeekKey}`}
+                      scroll={false}
                       className="inline-flex h-full items-center justify-center border-l border-border/60 px-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                       title="Next week"
                       aria-label="Next week"
@@ -274,6 +276,7 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
                   {weekStartKey !== currentWeekStart && (
                     <Link
                       href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${currentWeekStart}`}
+                      scroll={false}
                       className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 text-xs")}
                     >
                       Today

@@ -20,7 +20,7 @@ export function ScheduleBranchSelect({
       aria-label="Select branch"
       value={selectedBranchId}
       onChange={(e) => {
-        router.replace(`/admin/shifts?tab=schedule&branchId=${e.target.value}&week=${week}`);
+        router.replace(`/admin/shifts?tab=schedule&branchId=${e.target.value}&week=${week}`, { scroll: false });
       }}
       className="h-9 text-xs"
       containerClassName="w-full sm:w-fit sm:min-w-[170px] sm:shrink-0"
