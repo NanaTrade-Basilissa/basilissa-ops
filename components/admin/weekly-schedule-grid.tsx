@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarPlus, CalendarSync, ChevronDown, RotateCcw, Search, User, UserCheck } from "lucide-react";
@@ -14,6 +14,7 @@ import {
 import type { CycleShift } from "@/components/admin/pattern-cycle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -104,6 +105,7 @@ export function WeeklyScheduleGrid({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [jobTitleFilter, setJobTitleFilter] = useState("all");
   const [shiftTarget, setShiftTarget] = useState<EmployeeScheduleRow | null>(null);
   const [patternTarget, setPatternTarget] = useState<EmployeeScheduleRow | null>(null);
   const [selectedCell, setSelectedCell] = useState<{
@@ -122,14 +124,46 @@ export function WeeklyScheduleGrid({
 
   const todayKey = dateKeyInZone(new Date(), DISPLAY_TIMEZONE);
 
+  const jobTitleOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    let unassignedCount = 0;
+    for (const emp of data.employees) {
+      const title = emp.jobTitle?.trim();
+      if (title) {
+        counts.set(title, (counts.get(title) ?? 0) + 1);
+      } else {
+        unassignedCount += 1;
+      }
+    }
+    const sorted = Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    return { sorted, unassignedCount };
+  }, [data.employees]);
+
+  useEffect(() => {
+    if (
+      jobTitleFilter !== "all" &&
+      jobTitleFilter !== "__none__" &&
+      !jobTitleOptions.sorted.some(([title]) => title === jobTitleFilter)
+    ) {
+      setJobTitleFilter("all");
+    }
+  }, [data.branchId, jobTitleFilter, jobTitleOptions.sorted]);
+
   const filteredEmployees = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return data.employees;
     return data.employees.filter((emp) => {
+      if (jobTitleFilter === "__none__") {
+        if (emp.jobTitle?.trim()) return false;
+      } else if (jobTitleFilter !== "all") {
+        if ((emp.jobTitle?.trim() ?? "") !== jobTitleFilter) return false;
+      }
+      if (!q) return true;
       const hay = `${emp.name} ${emp.employeeCode ?? ""} ${emp.jobTitle ?? ""} ${emp.patternName ?? ""}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [data.employees, search]);
+  }, [data.employees, search, jobTitleFilter]);
+
+  const hasLocalFilters = Boolean(search.trim()) || jobTitleFilter !== "all";
 
   function handleCellClick(emp: EmployeeScheduleRow, day: DayColumn) {
     if (!canManage) return;
@@ -167,21 +201,47 @@ export function WeeklyScheduleGrid({
             />
           </div>
 
-          {search.trim() && (
+          {jobTitleOptions.sorted.length > 0 && (
+            <NativeSelect
+              id="rota-job-title-filter"
+              value={jobTitleFilter}
+              onChange={(e) => setJobTitleFilter(e.target.value)}
+              className="h-9 text-xs"
+              containerClassName="w-full sm:w-fit sm:min-w-[160px] sm:shrink-0"
+              aria-label="Filter by job title"
+            >
+              <option value="all">All Job Titles</option>
+              {jobTitleOptions.sorted.map(([title, count]) => (
+                <option key={title} value={title}>
+                  {title} ({count})
+                </option>
+              ))}
+              {jobTitleOptions.unassignedCount > 0 && (
+                <option value="__none__">
+                  No Job Title ({jobTitleOptions.unassignedCount})
+                </option>
+              )}
+            </NativeSelect>
+          )}
+
+          {toolbarFilters}
+
+          {hasLocalFilters && (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setSearch("")}
+              onClick={() => {
+                setSearch("");
+                setJobTitleFilter("all");
+              }}
               className="h-9 gap-1.5 text-xs"
-              title="Clear search"
+              title="Reset filters"
             >
               <RotateCcw className="size-3.5" />
               Reset
             </Button>
           )}
-
-          {toolbarFilters}
         </div>
 
         {toolbarActions && (
@@ -194,7 +254,7 @@ export function WeeklyScheduleGrid({
           <thead>
             <tr className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               <th scope="col" className="p-3.5 pl-4 w-56">
-                Employee ({search.trim() ? `${filteredEmployees.length}/${data.employees.length}` : data.employees.length})
+                Employee ({hasLocalFilters ? `${filteredEmployees.length}/${data.employees.length}` : data.employees.length})
               </th>
               {data.days.map((day) => {
                 const isToday = day.dateKey === todayKey;
