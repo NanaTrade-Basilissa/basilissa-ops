@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft, CalendarSync, ChevronDown, Copy, Settings2, Users, Zap } from "lucide-react";
+import { ArrowRightLeft, CalendarSync, ChevronDown, Copy, Settings2, Trash2, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,8 +23,9 @@ import type { CycleShift } from "@/components/admin/pattern-cycle";
 import { ScheduleCopyWeekDialog } from "@/components/admin/schedule-copy-week-dialog";
 import { ScheduleCoverDialog, type CoverCandidate } from "@/components/admin/schedule-cover-dialog";
 import { ScheduleBulkAssignDialog } from "@/components/admin/schedule-bulk-assign-dialog";
+import { ScheduleClearRotaDialog } from "@/components/admin/schedule-clear-rota-dialog";
 
-type Dialog = "copy" | "cover" | "bulk" | "pattern" | "generate" | "auto" | null;
+type Dialog = "copy" | "cover" | "bulk" | "pattern" | "generate" | "auto" | "clear" | null;
 
 /**
  * Every rota-changing action behind one button, so the controls card stays
@@ -114,6 +115,15 @@ export function ScheduleActionsMenu({
           >
             Auto rota
           </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => setOpen("clear")}
+            className="whitespace-nowrap"
+          >
+            <Trash2 className="size-4" />
+            Clear rota
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -168,6 +178,14 @@ export function ScheduleActionsMenu({
         autoRota={autoRota}
         open={open === "auto"}
         onOpenChange={onOpenChange("auto")}
+      />
+      <ScheduleClearRotaDialog
+        branchId={branchId}
+        branchName={branchName}
+        weekStartKey={weekStartKey}
+        weekLabel={weekLabel}
+        open={open === "clear"}
+        onOpenChange={onOpenChange("clear")}
       />
     </>
   );

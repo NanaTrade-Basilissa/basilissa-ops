@@ -1389,3 +1389,125 @@ export async function saveBranchQuotaAction(data: {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to save branch quota" };
   }
 }
+
+/**
+ * Clears the active rota board for a branch starting from `weekStartKey` (Mon–Sun):
+ * - Deletes single-day ScheduleException entries for this branch's staff in that week
+ * - Ends (or deletes if starting on/after `weekStartKey`) recurring shift assignments
+ * - Ends (or deletes if starting on/after `weekStartKey`) rota pattern assignments
+ * Preserves all historical weeks before `weekStartKey`.
+ */
+export async function clearBranchWeekAction(input: {
+  branchId: string;
+  weekStartKey: string;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  clearedExceptions?: number;
+  clearedShiftAssignments?: number;
+  clearedPatterns?: number;
+}> {
+  const { branchId, weekStartKey } = input;
+  if (!branchId || !/^\d{4}-\d{2}-\d{2}$/.test(weekStartKey)) {
+    return { ok: false, error: "Invalid branch or week start date." };
+  }
+
+  const actor = await requirePermission("schedule:write", { branchId });
+
+  const weekStartDate = new Date(`${weekStartKey}T00:00:00.000Z`);
+  const weekEndKey = shiftDateKey(weekStartKey, 6);
+  const weekEndDate = new Date(`${weekEndKey}T23:59:59.999Z`);
+
+  const summary = await prisma.$transaction(async (tx) => {
+    const branch = await tx.branch.findUnique({
+      where: { id: branchId },
+      select: { name: true },
+    });
+
+    const branchEmployees = await tx.employeeBranchAssignment.findMany({
+      where: { branchId, validTo: null, employee: { status: "ACTIVE" } },
+      select: { employeeId: true },
+    });
+    const employeeIds = branchEmployees.map((b) => b.employeeId);
+
+    // 1. Delete single-day overrides/cover shifts for this week at this branch
+    const delExceptions = await tx.scheduleException.deleteMany({
+      where: {
+        date: { gte: weekStartDate, lte: weekEndDate },
+        OR: [
+          { branchId },
+          ...(employeeIds.length > 0 ? [{ employeeId: { in: employeeIds } }] : []),
+        ],
+      },
+    });
+
+    let clearedShiftAssignments = 0;
+    let clearedPatterns = 0;
+
+    if (employeeIds.length > 0) {
+      // 2. End recurring shift assignments started before this week, delete ones starting on/after
+      const closedShifts = await tx.employeeShiftAssignment.updateMany({
+        where: {
+          employeeId: { in: employeeIds },
+          validFrom: { lt: weekStartDate },
+          OR: [{ validTo: null }, { validTo: { gt: weekStartDate } }],
+        },
+        data: { validTo: weekStartDate },
+      });
+      const deletedShifts = await tx.employeeShiftAssignment.deleteMany({
+        where: {
+          employeeId: { in: employeeIds },
+          validFrom: { gte: weekStartDate },
+        },
+      });
+      clearedShiftAssignments = closedShifts.count + deletedShifts.count;
+
+      // 3. End rota patterns started before this week, delete ones starting on/after
+      const closedPatterns = await tx.employeePatternAssignment.updateMany({
+        where: {
+          branchId,
+          employeeId: { in: employeeIds },
+          validFrom: { lt: weekStartDate },
+          OR: [{ validTo: null }, { validTo: { gt: weekStartDate } }],
+        },
+        data: { validTo: weekStartDate },
+      });
+      const deletedPatterns = await tx.employeePatternAssignment.deleteMany({
+        where: {
+          branchId,
+          employeeId: { in: employeeIds },
+          validFrom: { gte: weekStartDate },
+        },
+      });
+      clearedPatterns = closedPatterns.count + deletedPatterns.count;
+    }
+
+    await recordAudit(
+      {
+        actor: auditActorFrom(actor),
+        action: "schedule.week_cleared",
+        entityType: "Branch",
+        entityId: branchId,
+        metadata: {
+          branchName: branch?.name ?? branchId,
+          weekStartKey,
+          weekEndKey,
+          clearedExceptions: delExceptions.count,
+          clearedShiftAssignments,
+          clearedPatterns,
+        },
+      },
+      tx,
+    );
+
+    return {
+      clearedExceptions: delExceptions.count,
+      clearedShiftAssignments,
+      clearedPatterns,
+    };
+  });
+
+  revalidatePath("/admin/shifts");
+  revalidatePath("/admin/employees");
+  return { ok: true, ...summary };
+}
