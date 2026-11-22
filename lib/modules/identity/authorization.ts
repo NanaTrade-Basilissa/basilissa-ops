@@ -630,10 +630,16 @@ export function isSuperAdmin(actor: Actor): boolean {
 export function hasAnyPermission(actor: Actor, permission: Permission): boolean {
   if (actor.status !== UserStatus.ACTIVE) return false;
   if (isSuperAdmin(actor)) return true;
-  if (actor.customRole?.permissions?.includes(permission)) return true;
-  const legacy = SYSTEM_TO_GRANULAR[permission];
-  if (legacy && legacy.length === 1 && actor.customRole?.permissions?.includes(legacy[0]!)) {
-    return true;
+  if (actor.customRole?.permissions?.length) {
+    if (actor.customRole.permissions.includes(permission)) return true;
+    const legacy = SYSTEM_TO_GRANULAR[permission];
+    if (legacy && legacy.some((target) => actor.customRole!.permissions.includes(target))) {
+      return true;
+    }
+    const coarseTarget = GRANULAR_TO_SYSTEM[permission];
+    if (coarseTarget && actor.customRole.permissions.includes(coarseTarget)) {
+      return true;
+    }
   }
 
   const grants = grantsOf(actor).filter(
