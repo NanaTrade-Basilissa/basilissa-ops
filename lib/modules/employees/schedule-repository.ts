@@ -4,6 +4,7 @@ import { prisma } from "@/lib/platform/prisma";
 import type { BranchScope } from "@/lib/modules/identity/authorization";
 import { shiftDateKey } from "@/lib/platform/date";
 import {
+  patternDayFor,
   resolveScheduleForDate,
   type ShiftTemplate,
   type ScheduleInputs,
@@ -369,7 +370,27 @@ export async function getWeeklyBranchSchedule(
         };
         coverage[d.dateKey].totalDayOff += 1;
       } else {
-        daySchedules[d.dateKey] = empty(d.dateKey);
+        // If an active rota pattern explicitly schedules an off day (null) on
+        // this date, show it as a pattern Day off rather than an unscheduled dash.
+        const dayStartUtc = new Date(`${d.dateKey}T00:00:00.000Z`);
+        const activePattern = (isVisitor ? [] : (livePatterns.get(emp.id) ?? []))
+          .filter(
+            (p) =>
+              p.validFrom.getTime() <= dayStartUtc.getTime() &&
+              (p.validTo === null || p.validTo.getTime() > dayStartUtc.getTime()),
+          )
+          .sort((a, b) => b.validFrom.getTime() - a.validFrom.getTime())[0];
+
+        if (activePattern && patternDayFor(d.dateKey, activePattern) === null) {
+          daySchedules[d.dateKey] = {
+            ...empty(d.dateKey),
+            isPattern: true,
+            exceptionType: ScheduleExceptionType.DAY_OFF,
+          };
+          coverage[d.dateKey].totalDayOff += 1;
+        } else {
+          daySchedules[d.dateKey] = empty(d.dateKey);
+        }
       }
     }
 

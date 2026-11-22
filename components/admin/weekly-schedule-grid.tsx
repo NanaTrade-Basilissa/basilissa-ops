@@ -373,8 +373,8 @@ export function WeeklyScheduleGrid({
                         ) : sched.exceptionType === ScheduleExceptionType.DAY_OFF ? (
                           <div className="inline-flex flex-col items-center justify-center rounded-lg px-2 py-1 text-xs border border-muted bg-muted/30 text-muted-foreground w-full min-h-12">
                             <span className="font-medium text-xs">Day off</span>
-                            {sched.exceptionReason?.startsWith(GENERATED_PREFIX) ? (
-                              <span className="text-[9px] uppercase font-bold text-violet-600 dark:text-violet-400">
+                            {sched.isPattern || sched.exceptionReason?.startsWith(GENERATED_PREFIX) ? (
+                              <span className="text-[9px] uppercase font-bold text-violet-700 dark:text-violet-300">
                                 pattern
                               </span>
                             ) : (
