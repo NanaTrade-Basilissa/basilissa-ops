@@ -93,6 +93,7 @@ export function WeeklyScheduleGrid({
   canManage,
   toolbarFilters,
   toolbarActions,
+  calendarHeader,
   patterns = [],
   patternShifts = [],
 }: {
@@ -100,6 +101,7 @@ export function WeeklyScheduleGrid({
   canManage: boolean;
   toolbarFilters?: ReactNode;
   toolbarActions?: ReactNode;
+  calendarHeader?: ReactNode;
   patterns?: AssignablePattern[];
   patternShifts?: CycleShift[];
 }) {
@@ -249,7 +251,13 @@ export function WeeklyScheduleGrid({
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+        {calendarHeader && (
+          <div className="flex flex-wrap items-center justify-center gap-2 border-b border-border bg-muted/20 px-4 py-2.5">
+            {calendarHeader}
+          </div>
+        )}
+        <div className="overflow-x-auto">
         <table className="w-full min-w-[920px] text-sm text-left border-collapse">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -498,6 +506,7 @@ export function WeeklyScheduleGrid({
             </tr>
           </tfoot>
         </table>
+        </div>
       </div>
 
       {canManage && selectedCell && (

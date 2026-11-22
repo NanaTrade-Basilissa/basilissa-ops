@@ -245,43 +245,44 @@ export default async function ShiftsPage({ searchParams }: { searchParams: Searc
                       {branches[0].name}
                     </div>
                   ) : null}
-
-                  <div className="flex items-center justify-between gap-1.5 sm:justify-start">
-                    <div className="inline-flex h-9 items-center rounded-md border border-input bg-background shadow-xs">
-                      <Link
-                        href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${prevWeekKey}`}
-                        className="inline-flex h-full items-center justify-center border-r border-border/60 px-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                        title="Previous week"
-                        aria-label="Previous week"
-                      >
-                        <ChevronLeft className="size-4" />
-                      </Link>
-                      <span className="px-3 text-xs font-medium tabular-nums text-foreground">
-                        {formattedWeek}
-                      </span>
-                      <Link
-                        href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${nextWeekKey}`}
-                        className="inline-flex h-full items-center justify-center border-l border-border/60 px-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                        title="Next week"
-                        aria-label="Next week"
-                      >
-                        <ChevronRight className="size-4" />
-                      </Link>
-                    </div>
-
-                    {weekStartKey !== currentWeekStart && (
-                      <Link
-                        href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${currentWeekStart}`}
-                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9 text-xs")}
-                      >
-                        Today
-                      </Link>
-                    )}
-
-                    {weeklyData.autoRota && (
-                      <StatusBadge tone="info">Auto rota</StatusBadge>
-                    )}
+                </>
+              }
+              calendarHeader={
+                <>
+                  <div className="inline-flex h-8 items-center rounded-md border border-input bg-background shadow-xs">
+                    <Link
+                      href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${prevWeekKey}`}
+                      className="inline-flex h-full items-center justify-center border-r border-border/60 px-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                      title="Previous week"
+                      aria-label="Previous week"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </Link>
+                    <span className="px-3 text-xs font-semibold tabular-nums text-foreground">
+                      {formattedWeek}
+                    </span>
+                    <Link
+                      href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${nextWeekKey}`}
+                      className="inline-flex h-full items-center justify-center border-l border-border/60 px-2.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                      title="Next week"
+                      aria-label="Next week"
+                    >
+                      <ChevronRight className="size-4" />
+                    </Link>
                   </div>
+
+                  {weekStartKey !== currentWeekStart && (
+                    <Link
+                      href={`/admin/shifts?tab=schedule&branchId=${selectedBranchId}&week=${currentWeekStart}`}
+                      className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 text-xs")}
+                    >
+                      Today
+                    </Link>
+                  )}
+
+                  {weeklyData.autoRota && (
+                    <StatusBadge tone="info">Auto rota</StatusBadge>
+                  )}
                 </>
               }
               toolbarActions={
