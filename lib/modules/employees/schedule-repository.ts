@@ -28,6 +28,7 @@ export type EmployeeDaySchedule = {
   startMinute: number | null;
   endMinute: number | null;
   isException: boolean;
+  isPattern?: boolean;
   exceptionId?: string;
   exceptionType?: ScheduleExceptionType;
   exceptionReason?: string;
@@ -343,6 +344,7 @@ export async function getWeeklyBranchSchedule(
           startMinute,
           endMinute,
           isException: resolved.source === "exception",
+          isPattern: resolved.source === "pattern",
           exceptionId: ex?.id,
           exceptionType: ex?.type,
           exceptionReason: ex?.reason,

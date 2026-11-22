@@ -69,10 +69,18 @@ function ScheduleOverrideForm({
     exceptionReason && exceptionReason !== "Scheduled shift" ? exceptionReason : "",
   );
 
-  // Overtime preset state: "30" | "60" | "120" | "custom"
+  // Overtime preset state: "30" | "60" | "120" | "480" | "custom"
   const defaultOt = initialOvertimeMinutes ?? 60;
-  const [otPreset, setOtPreset] = useState<"30" | "60" | "120" | "custom">(
-    defaultOt === 30 ? "30" : defaultOt === 60 ? "60" : defaultOt === 120 ? "120" : "custom",
+  const [otPreset, setOtPreset] = useState<"30" | "60" | "120" | "480" | "custom">(
+    defaultOt === 30
+      ? "30"
+      : defaultOt === 60
+        ? "60"
+        : defaultOt === 120
+          ? "120"
+          : defaultOt === 480
+            ? "480"
+            : "custom",
   );
   const [overtimeMinutes, setOvertimeMinutes] = useState<number>(defaultOt);
 
@@ -208,63 +216,80 @@ function ScheduleOverrideForm({
               </span>
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-1.5">
               <Button
                 type="button"
                 size="sm"
                 variant={otPreset === "30" ? "default" : "outline"}
-                className={`text-xs ${
+                className={`text-xs px-2 ${
                   otPreset === "30" ? "bg-amber-600 hover:bg-amber-700 text-white" : "border-amber-500/30"
                 }`}
                 onClick={() => {
                   setOtPreset("30");
                   setOvertimeMinutes(30);
                   if (!reason || reason.startsWith("Scheduled Overtime")) {
-                    setReason("Scheduled Overtime: 30 minutes");
+                    setReason("Scheduled Overtime: 30m");
                   }
                 }}
               >
-                30 mins
+                30m
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant={otPreset === "60" ? "default" : "outline"}
-                className={`text-xs ${
+                className={`text-xs px-2 ${
                   otPreset === "60" ? "bg-amber-600 hover:bg-amber-700 text-white" : "border-amber-500/30"
                 }`}
                 onClick={() => {
                   setOtPreset("60");
                   setOvertimeMinutes(60);
                   if (!reason || reason.startsWith("Scheduled Overtime")) {
-                    setReason("Scheduled Overtime: 1 hour");
+                    setReason("Scheduled Overtime: 1h");
                   }
                 }}
               >
-                1 hour
+                1h
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant={otPreset === "120" ? "default" : "outline"}
-                className={`text-xs ${
+                className={`text-xs px-2 ${
                   otPreset === "120" ? "bg-amber-600 hover:bg-amber-700 text-white" : "border-amber-500/30"
                 }`}
                 onClick={() => {
                   setOtPreset("120");
                   setOvertimeMinutes(120);
                   if (!reason || reason.startsWith("Scheduled Overtime")) {
-                    setReason("Scheduled Overtime: 2 hours");
+                    setReason("Scheduled Overtime: 2h");
                   }
                 }}
               >
-                2 hours
+                2h
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={otPreset === "480" ? "default" : "outline"}
+                className={`text-xs px-2 ${
+                  otPreset === "480" ? "bg-amber-600 hover:bg-amber-700 text-white" : "border-amber-500/30"
+                }`}
+                onClick={() => {
+                  setOtPreset("480");
+                  setOvertimeMinutes(480);
+                  if (!reason || reason.startsWith("Scheduled Overtime")) {
+                    setReason("Scheduled Overtime: 8h");
+                  }
+                }}
+              >
+                8h
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant={otPreset === "custom" ? "default" : "outline"}
-                className={`text-xs ${
+                className={`text-xs px-2 ${
                   otPreset === "custom" ? "bg-amber-600 hover:bg-amber-700 text-white" : "border-amber-500/30"
                 }`}
                 onClick={() => setOtPreset("custom")}

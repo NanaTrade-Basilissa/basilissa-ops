@@ -44,9 +44,10 @@ function toPatternLike(row: AssignmentRow): PatternLike {
 }
 
 /**
- * The patterns that apply live, per employee: those on branches with Auto rota
- * on. A branch on manual rota is deliberately absent; its patterns reach the
- * schedule only through generated weeks.
+ * Active rota patterns per employee. Once an employee is assigned a pattern,
+ * it applies immediately across the weekly rota grid, attendance settlement,
+ * and mobile clock-in; individual day overrides (`ScheduleException`) still
+ * take precedence whenever a manager adjusts a specific date.
  */
 export async function loadLivePatterns(
   employeeIds: readonly string[],
@@ -56,7 +57,7 @@ export async function loadLivePatterns(
   if (employeeIds.length === 0) return result;
 
   const rows = await tx.employeePatternAssignment.findMany({
-    where: { employeeId: { in: [...employeeIds] }, branch: { autoRota: true } },
+    where: { employeeId: { in: [...employeeIds] } },
     select: ASSIGNMENT_SELECT,
   });
   for (const row of rows) {
