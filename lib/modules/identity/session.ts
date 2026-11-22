@@ -129,6 +129,7 @@ export type ResolvedSession = {
       name: string;
       permissions: string[];
     } | null;
+    scopedBranchIds?: string[];
   };
 };
 
@@ -187,6 +188,7 @@ export async function resolveSessionFromToken(tokenString: string | undefined): 
           email: true,
           status: true,
           sessionVersion: true,
+          scopedBranchIds: true,
           roleAssignments: {
             where: {
               validFrom: { lte: new Date() },
@@ -249,6 +251,7 @@ export async function resolveSessionFromToken(tokenString: string | undefined): 
             permissions: session.user.customRole.permissions.map((p) => p.permission.key),
           }
         : null,
+      scopedBranchIds: session.user.scopedBranchIds ?? [],
     },
   };
 }

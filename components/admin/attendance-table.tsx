@@ -7,9 +7,12 @@ import {
   AlertTriangle,
   Clock,
   Download,
+  Fingerprint,
   RotateCcw,
   Search,
   SearchX,
+  Smartphone,
+  UserPen,
 } from "lucide-react";
 import { DataTablePagination } from "@/components/admin/data-table-pagination";
 import { FilterBar } from "@/components/admin/filter-bar";
@@ -34,6 +37,7 @@ export type AttendanceRow = {
   branchName: string;
   actualInLabel: string;
   actualOutLabel: string;
+  clockInMethod?: "MOBILE_APP" | "FINGERPRINT" | "MANAGER_MANUAL" | null;
   workedLabel: string;
   overtimeLabel: string;
   calculatedOvertimeMinutes?: number;
@@ -51,7 +55,57 @@ const LAYOUT_SPRING = {
   duration: 0.35,
 };
 
-const LIVE_POLL_INTERVAL_MS = 15_000;
+const LIVE_POLL_INTERVAL_MS = 10_000;
+
+type AttendanceStatusFilter =
+  | "all"
+  | "clocked_in"
+  | "late"
+  | "clocked_out"
+  | "not_clocked_in"
+  | "needs_attention";
+
+function ClockInSourceTag({ method }: { method?: "MOBILE_APP" | "FINGERPRINT" | "MANAGER_MANUAL" | null }) {
+  if (!method) return null;
+  if (method === "MOBILE_APP") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+        title="Clocked in via Mobile App"
+      >
+        <Smartphone className="size-2.5" />
+        Mobile
+      </span>
+    );
+  }
+  if (method === "FINGERPRINT") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+        title="Clocked in via Biometric Terminal"
+      >
+        <Fingerprint className="size-2.5" />
+        Terminal
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+      title="Recorded manually by manager"
+    >
+      <UserPen className="size-2.5" />
+      Manual
+    </span>
+  );
+}
+
+function clockInMethodLabel(method?: "MOBILE_APP" | "FINGERPRINT" | "MANAGER_MANUAL" | null): string {
+  if (method === "MOBILE_APP") return "Mobile App";
+  if (method === "FINGERPRINT") return "Terminal";
+  if (method === "MANAGER_MANUAL") return "Manual";
+  return "";
+}
 
 export function AttendanceTable({
   days,
@@ -73,10 +127,17 @@ export function AttendanceTable({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>(
+    exceptionsOnly ? "needs_attention" : "all",
+  );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
-  // Live mode automatically switches the roster into the animated grid layout + 15s polling
+  useEffect(() => {
+    if (exceptionsOnly) setStatusFilter("needs_attention");
+  }, [exceptionsOnly]);
+
+  // Live mode automatically switches the roster into the animated grid layout + 10s polling
   const liveActive =
     searchParams.get("live") === "1" ||
     searchParams.get("view") === "live" ||
@@ -126,6 +187,7 @@ export function AttendanceTable({
 
   function handleResetFilters() {
     setSearch("");
+    setStatusFilter("all");
     setPage(1);
     const next = new URLSearchParams();
     if (liveMode) {
@@ -140,19 +202,35 @@ export function AttendanceTable({
     search.trim() ||
       branchId ||
       exceptionsOnly ||
+      statusFilter !== "all" ||
       (date && todayKey && date !== todayKey),
   );
 
   const filteredDays = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return days;
     return days.filter((d) => {
+      if (statusFilter === "clocked_in" && !(d.actualInLabel !== "-" && d.actualOutLabel === "-")) {
+        return false;
+      }
+      if (statusFilter === "late" && !(d.lateMinutes > 0)) {
+        return false;
+      }
+      if (statusFilter === "clocked_out" && !(d.actualInLabel !== "-" && d.actualOutLabel !== "-")) {
+        return false;
+      }
+      if (statusFilter === "not_clocked_in" && d.actualInLabel !== "-") {
+        return false;
+      }
+      if (statusFilter === "needs_attention" && d.status !== "NEEDS_REVIEW") {
+        return false;
+      }
+      if (!q) return true;
       const name = (d.employeeName ?? "").toLowerCase();
       const code = (d.employeeCode ?? "").toLowerCase();
       const branch = d.branchName.toLowerCase();
       return name.includes(q) || code.includes(q) || branch.includes(q);
     });
-  }, [days, search]);
+  }, [days, search, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredDays.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -169,6 +247,7 @@ export function AttendanceTable({
       "Branch",
       "Date",
       "Clock In",
+      "Clock-In Method",
       "Clock Out",
       "Worked",
       "Overtime",
@@ -182,6 +261,7 @@ export function AttendanceTable({
       `"${day.branchName.replace(/"/g, '""')}"`,
       `"${day.date}"`,
       `"${day.actualInLabel}"`,
+      `"${clockInMethodLabel(day.clockInMethod)}"`,
       `"${day.actualOutLabel}"`,
       `"${day.workedLabel}"`,
       `"${day.overtimeLabel}"`,
@@ -263,15 +343,26 @@ export function AttendanceTable({
               )}
 
               <NativeSelect
-                id="attendance-attention"
-                aria-label="Filter by attention status"
-                value={exceptionsOnly ? "1" : ""}
-                onChange={(e) => updateParam("exceptions", e.target.value || null)}
+                id="attendance-status"
+                aria-label="Filter by attendance status"
+                value={statusFilter}
+                onChange={(e) => {
+                  const nextStatus = e.target.value as AttendanceStatusFilter;
+                  setStatusFilter(nextStatus);
+                  setPage(1);
+                  if (exceptionsOnly && nextStatus !== "needs_attention") {
+                    updateParam("exceptions", null);
+                  }
+                }}
                 className="h-9 text-xs"
-                containerClassName="w-full sm:w-fit sm:min-w-[145px] sm:shrink-0"
+                containerClassName="w-full sm:w-fit sm:min-w-[165px] sm:shrink-0"
               >
-                <option value="">All records</option>
-                <option value="1">Needs attention</option>
+                <option value="all">All statuses</option>
+                <option value="clocked_in">On duty (Clocked in)</option>
+                <option value="late">Late</option>
+                <option value="clocked_out">Clocked out</option>
+                <option value="not_clocked_in">Not clocked in</option>
+                <option value="needs_attention">Needs attention</option>
               </NativeSelect>
 
               {hasActiveFilters && (
@@ -418,7 +509,10 @@ export function AttendanceTable({
                         <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-2.5 text-xs tabular-nums">
                           <div>
                             <span className="text-[11px] text-muted-foreground">In</span>
-                            <p className="font-medium text-foreground">{item.actualInLabel}</p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="font-medium text-foreground">{item.actualInLabel}</p>
+                              <ClockInSourceTag method={item.clockInMethod} />
+                            </div>
                           </div>
                           <div>
                             <span className="text-[11px] text-muted-foreground">Out</span>
@@ -483,8 +577,9 @@ export function AttendanceTable({
                         {item.branchName}
                       </div>
 
-                      <div className="flex items-center gap-1.5 text-sm tabular-nums">
+                      <div className="flex flex-wrap items-center gap-1.5 text-sm tabular-nums">
                         <span>{item.actualInLabel}</span>
+                        <ClockInSourceTag method={item.clockInMethod} />
                         {item.lateMinutes > 0 && (
                           <StatusBadge tone="warning">{item.lateMinutes}m late</StatusBadge>
                         )}

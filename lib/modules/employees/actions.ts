@@ -60,7 +60,7 @@ export async function createEmployee(
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const actor = await requirePermission("employees:create");
+  const { actor, scope } = await requireAnyBranchPermission("employees:create");
 
   const parsed = parseEmployee(formData);
   if (!parsed.success) {
@@ -76,6 +76,20 @@ export async function createEmployee(
         data: parsed.data,
       });
       createdId = employee.id;
+
+      // If created by a branch-scoped user, automatically assign the employee
+      // to their managed branch so the record immediately appears in their scope.
+      if (scope.kind === "branches" && scope.branchIds.length > 0) {
+        await tx.employeeBranchAssignment.create({
+          data: {
+            employeeId: employee.id,
+            branchId: scope.branchIds[0]!,
+            isPrimary: true,
+            validFrom: new Date(),
+          },
+        });
+      }
+
       await recordAudit(
         {
           actor: auditActorFrom(actor),
@@ -111,7 +125,21 @@ export async function updateEmployee(
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const actor = await requirePermission("employees:update");
+  const { actor, scope } = await requireAnyBranchPermission("employees:update");
+
+  if (scope.kind === "branches") {
+    const inScope = await prisma.employeeBranchAssignment.findFirst({
+      where: {
+        employeeId,
+        validTo: null,
+        branchId: { in: scope.branchIds },
+      },
+      select: { id: true },
+    });
+    if (!inScope) {
+      return { error: "You do not have permission to edit employees outside your assigned branch." };
+    }
+  }
 
   const parsed = parseEmployee(formData);
   if (!parsed.success) {

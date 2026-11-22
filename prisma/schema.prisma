@@ -88,6 +88,9 @@ model User {
 
   customRoleId        String?
   customRole          CustomRole?          @relation(fields: [customRoleId], references: [id], onDelete: Restrict)
+  /// When empty, a custom role applies company-wide (all branches). When non-empty,
+  /// all custom-role permissions are strictly scoped to these branch IDs.
+  scopedBranchIds     String[]             @default([])
   createdCustomRoles  CustomRole[]         @relation("CustomRoleCreatedBy")
   createdTrainingCourses TrainingCourse[]  @relation("TrainingCourseCreatedBy")
 

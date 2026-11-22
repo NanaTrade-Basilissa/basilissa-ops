@@ -13,15 +13,22 @@ export function ExceptionsFilters({
   branchId,
   flag,
   search: initialSearch,
+  datePreset,
+  startDate,
+  endDate,
 }: {
   branches: { id: string; name: string }[];
   branchId?: string;
   flag?: string;
   search?: string;
+  datePreset?: string;
+  startDate?: string;
+  endDate?: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
   const [search, setSearch] = useState(initialSearch ?? "");
+  const activePreset = datePreset || (startDate ? "custom" : "");
 
   function update(updates: Record<string, string | null>) {
     const next = new URLSearchParams(params ? params.toString() : "");
@@ -40,11 +47,11 @@ export function ExceptionsFilters({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const hasFilters = Boolean(branchId || flag || search);
+  const hasFilters = Boolean(branchId || flag || search || activePreset || startDate || endDate);
 
   return (
     <FilterBar
-      hasActiveFilters={Boolean(branchId || flag)}
+      hasActiveFilters={Boolean(branchId || flag || activePreset || startDate || endDate)}
       search={
         <div className="relative w-full sm:w-64 md:w-72 shrink-0">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -91,6 +98,50 @@ export function ExceptionsFilters({
             <option value="MANUAL_ENTRY">Manual Punch</option>
           </NativeSelect>
 
+          <NativeSelect
+            id="exceptionsDatePreset"
+            aria-label="Filter by date"
+            value={activePreset}
+            onChange={(e) => {
+              const nextPreset = e.target.value;
+              if (!nextPreset) {
+                update({ datePreset: null, startDate: null, endDate: null });
+              } else if (nextPreset === "custom") {
+                update({ datePreset: "custom" });
+              } else {
+                update({ datePreset: nextPreset, startDate: null, endDate: null });
+              }
+            }}
+            className="h-9 text-xs"
+            containerClassName="w-full sm:w-fit sm:min-w-[140px] sm:shrink-0"
+          >
+            <option value="">All dates</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="last7">Last 7 days</option>
+            <option value="custom">Custom date</option>
+          </NativeSelect>
+
+          {activePreset === "custom" && (
+            <div className="flex items-center gap-1.5 sm:shrink-0">
+              <Input
+                type="date"
+                aria-label="Start date"
+                value={startDate ?? ""}
+                onChange={(e) => update({ datePreset: "custom", startDate: e.target.value || null })}
+                className="h-9 flex-1 min-w-0 px-2.5 text-xs sm:w-[140px] sm:flex-none"
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="date"
+                aria-label="End date"
+                value={endDate ?? ""}
+                onChange={(e) => update({ datePreset: "custom", endDate: e.target.value || null })}
+                className="h-9 flex-1 min-w-0 px-2.5 text-xs sm:w-[140px] sm:flex-none"
+              />
+            </div>
+          )}
+
           {hasFilters && (
             <Button
               type="button"
@@ -99,7 +150,7 @@ export function ExceptionsFilters({
               className="h-9 gap-1.5 text-xs"
               onClick={() => {
                 setSearch("");
-                update({ branchId: null, flag: null, search: null });
+                update({ branchId: null, flag: null, search: null, datePreset: null, startDate: null, endDate: null });
               }}
             >
               <RotateCcw className="size-3.5" />

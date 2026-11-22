@@ -59,6 +59,7 @@ export function UserDetailContent({
     mfaEnabledAt: Date | null;
     createdAt: Date;
     mfaRecoveryCodesLeft: number;
+    scopedBranchIds?: string[];
   };
   canWrite: boolean;
   canAssign: boolean;
@@ -112,6 +113,8 @@ export function UserDetailContent({
       <UserCustomRoleCard
         userId={user.id}
         customRole={customRole}
+        scopedBranchIds={user.scopedBranchIds ?? []}
+        branches={branches}
         availableCustomRoles={availableCustomRoles}
         canAssign={canAssign}
         isSuperAdmin={isSuperAdmin}

@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { SearchX, RotateCcw } from "lucide-react";
 import { prisma } from "@/lib/platform/prisma";
-import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
+import { hasAnyPermission, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import { countEmployees, listEmployees } from "@/lib/modules/employees/server";
 import { employeeListFilterSchema } from "@/lib/modules/employees/validation";
 import { buttonVariants } from "@/components/ui/button";
@@ -80,7 +80,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
   const pageHref = (targetPage: number) => buildUrl(targetPage, pageSize);
   const pageSizeHref = (targetSize: number) => buildUrl(1, targetSize);
 
-  const actionSlot = <EmployeeTopActions canCreate={can(actor, "employees:create")} />;
+  const actionSlot = <EmployeeTopActions canCreate={hasAnyPermission(actor, "employees:create")} />;
 
   return (
     <PageShell>

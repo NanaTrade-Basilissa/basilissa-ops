@@ -9,7 +9,7 @@ import {
 } from "@/lib/modules/attendance/server";
 import { listEmployees } from "@/lib/modules/employees/server";
 import { prisma } from "@/lib/platform/prisma";
-import { dateKeyInZone } from "@/lib/platform/date";
+import { dateKeyInZone, shiftDateKey } from "@/lib/platform/date";
 import { DISPLAY_TIMEZONE } from "@/lib/platform/constants";
 import { StatCard } from "@/components/admin/stat-card";
 import { AttendanceTabs, type AttendanceView } from "@/components/admin/attendance-tabs";
@@ -76,6 +76,9 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
   const exceptionsOnly = first(raw.exceptions) === "1";
   const search = first(raw.search);
   const flag = first(raw.flag);
+  const datePreset = first(raw.datePreset);
+  const startDate = first(raw.startDate);
+  const endDate = first(raw.endDate);
 
   const canManualEntry =
     can(actor, "attendance:manual_entry") ||
@@ -171,6 +174,10 @@ export default async function AttendancePage({ searchParams }: { searchParams: S
           branchId={branchId}
           flag={flag}
           search={search}
+          datePreset={datePreset}
+          startDate={startDate}
+          endDate={endDate}
+          todayKey={todayKey}
           canWrite={canWrite}
         />
       )}
@@ -199,7 +206,57 @@ async function DailyRosterView({
 }) {
   const days = await listAttendanceDays(scope, { date, branchId, exceptionsOnly });
 
-  const employees = await employeeLookup(days.map((day) => day.employeeId));
+  const empIds = days.map((day) => day.employeeId);
+  const dayStartMs = new Date(`${date}T00:00:00.000Z`).getTime();
+  const [employees, clockInEvents] = await Promise.all([
+    employeeLookup(empIds),
+    empIds.length > 0
+      ? prisma.attendanceEvent.findMany({
+          where: {
+            employeeId: { in: empIds },
+            direction: "IN",
+            occurredAt: {
+              gte: new Date(dayStartMs - 6 * 3600_000),
+              lte: new Date(dayStartMs + 30 * 3600_000),
+            },
+          },
+          orderBy: { occurredAt: "asc" },
+          select: { employeeId: true, providerType: true, occurredAt: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  // Match each employee's clock-in providerType (preferring the event closest to actualIn)
+  const clockInByEmp = new Map<string, "MOBILE_APP" | "FINGERPRINT" | "MANAGER_MANUAL">();
+  const eventsByEmp = new Map<string, typeof clockInEvents>();
+  for (const ev of clockInEvents) {
+    const list = eventsByEmp.get(ev.employeeId) ?? [];
+    list.push(ev);
+    eventsByEmp.set(ev.employeeId, list);
+  }
+  for (const day of days) {
+    if (!day.actualIn) continue;
+    const empEvents = eventsByEmp.get(day.employeeId);
+    if (!empEvents || empEvents.length === 0) continue;
+    const targetMs = day.actualIn.getTime();
+    let best = empEvents[0];
+    let bestDiff = Math.abs(best.occurredAt.getTime() - targetMs);
+    for (const ev of empEvents) {
+      const diff = Math.abs(ev.occurredAt.getTime() - targetMs);
+      if (diff < bestDiff) {
+        best = ev;
+        bestDiff = diff;
+      }
+    }
+    if (
+      best.providerType === "MOBILE_APP" ||
+      best.providerType === "FINGERPRINT" ||
+      best.providerType === "MANAGER_MANUAL"
+    ) {
+      clockInByEmp.set(day.employeeId, best.providerType);
+    }
+  }
+
   const branchName = new Map(branches.map((b) => [b.id, b.name]));
 
   return (
@@ -223,6 +280,7 @@ async function DailyRosterView({
             branchName: branchName.get(day.branchId) ?? "-",
             actualInLabel: time(day.actualIn),
             actualOutLabel: time(day.actualOut),
+            clockInMethod: clockInByEmp.get(day.employeeId) ?? null,
             workedLabel: hours(day.netWorkedMinutes),
             overtimeLabel: hours(day.overtimeMinutes),
             calculatedOvertimeMinutes: day.overtimeMinutes,
@@ -244,6 +302,10 @@ async function ExceptionsQueueView({
   branchId,
   flag,
   search,
+  datePreset,
+  startDate,
+  endDate,
+  todayKey,
   canWrite,
 }: {
   scope: Parameters<typeof listPendingExceptions>[0];
@@ -251,12 +313,35 @@ async function ExceptionsQueueView({
   branchId?: string;
   flag?: string;
   search?: string;
+  datePreset?: string;
+  startDate?: string;
+  endDate?: string;
+  todayKey: string;
   canWrite: boolean;
 }) {
+  let resolvedStart = startDate;
+  let resolvedEnd = endDate;
+  if (datePreset === "today") {
+    resolvedStart = todayKey;
+    resolvedEnd = todayKey;
+  } else if (datePreset === "yesterday") {
+    const yesterdayKey = shiftDateKey(todayKey, -1);
+    resolvedStart = yesterdayKey;
+    resolvedEnd = yesterdayKey;
+  } else if (datePreset === "last7") {
+    resolvedStart = shiftDateKey(todayKey, -6);
+    resolvedEnd = todayKey;
+  } else if (datePreset === "custom") {
+    resolvedStart = startDate;
+    resolvedEnd = endDate || startDate;
+  }
+
   const exceptions = await listPendingExceptions(scope, {
     branchId,
     flag,
     search,
+    startDate: resolvedStart,
+    endDate: resolvedEnd,
   });
 
   const missingPunchCount = exceptions.filter(
@@ -297,6 +382,9 @@ async function ExceptionsQueueView({
         branchId={branchId}
         flag={flag}
         search={search}
+        datePreset={datePreset}
+        startDate={startDate}
+        endDate={endDate}
       />
 
       {exceptions.length === 0 ? (

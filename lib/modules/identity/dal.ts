@@ -36,6 +36,7 @@ export const verifySession = cache(async (): Promise<Actor | null> => {
     status: session.user.status,
     assignments: session.user.assignments,
     customRole: session.user.customRole ?? null,
+    scopedBranchIds: session.user.scopedBranchIds ?? [],
   };
 });
 

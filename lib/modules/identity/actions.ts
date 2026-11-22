@@ -689,6 +689,7 @@ export async function getUserDetailAction(userId: string) {
         mfaEnabledAt: true,
         createdAt: true,
         customRoleId: true,
+        scopedBranchIds: true,
         customRole: { select: { id: true, name: true, description: true } },
         roleAssignments: {
           orderBy: { validFrom: "desc" },
@@ -744,6 +745,7 @@ export async function getUserDetailAction(userId: string) {
       createdAt: user.createdAt,
       mfaRecoveryCodesLeft: user._count.mfaRecoveryCodes,
       customRoleId: user.customRoleId,
+      scopedBranchIds: user.scopedBranchIds ?? [],
       customRole: user.customRole,
     },
     canWrite: can(actor, "user:write"),
@@ -1013,8 +1015,17 @@ export async function assignUserCustomRoleAction(
   const userId = String(formData.get("userId") ?? "");
   const customRoleIdRaw = formData.get("customRoleId");
   const customRoleId = typeof customRoleIdRaw === "string" && customRoleIdRaw.trim() ? customRoleIdRaw.trim() : null;
+  const scopeMode = String(formData.get("scopeMode") ?? "all");
+  const rawScopedBranchIds = formData
+    .getAll("scopedBranchIds")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+  const scopedBranchIds = scopeMode === "branches" ? rawScopedBranchIds : [];
 
   if (!userId) return { error: "User ID is required." };
+  if (scopeMode === "branches" && scopedBranchIds.length === 0) {
+    return { error: "Select at least one branch when using branch-scoped access." };
+  }
 
   // Anti-privilege-escalation: non-Super-Admins cannot assign a role containing permissions they do not hold
   if (customRoleId !== null && !isSuperAdmin(actor)) {
@@ -1034,7 +1045,12 @@ export async function assignUserCustomRoleAction(
     }
   }
 
-  const result = await assignCustomRoleToUser(userId, customRoleId, auditActorFrom(actor));
+  const result = await assignCustomRoleToUser(
+    userId,
+    customRoleId,
+    auditActorFrom(actor),
+    scopedBranchIds,
+  );
   if (!result.ok) {
     return { error: result.message };
   }

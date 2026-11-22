@@ -161,6 +161,11 @@ export type Actor = {
   status: UserStatus;
   assignments: ActorAssignment[];
   customRole?: ActorCustomRole | null;
+  /**
+   * When empty/omitted, customRole applies company-wide (all branches).
+   * When non-empty, customRole permissions are restricted strictly to these branch IDs.
+   */
+  scopedBranchIds?: readonly string[];
 };
 
 /**
@@ -461,23 +466,30 @@ export function can(actor: Actor, permission: Permission, resource?: ResourceSco
     return adminGrants.length > 0;
   }
 
-  // Custom role checks: strict deny-by-default, no implicit inferences
+  // Custom role checks: strict deny-by-default, honoring per-user branch scope when set
   if (actor.customRole?.permissions?.length) {
-    if (actor.customRole.permissions.includes(permission)) return true;
+    const holdsCustomPermission =
+      actor.customRole.permissions.includes(permission) ||
+      Boolean(
+        SYSTEM_TO_GRANULAR[permission]?.some((target) =>
+          actor.customRole!.permissions.includes(target),
+        ),
+      ) ||
+      Boolean(
+        GRANULAR_TO_SYSTEM[permission] &&
+          actor.customRole.permissions.includes(GRANULAR_TO_SYSTEM[permission]),
+      );
 
-    // Check if role holds any of the granular actions corresponding to a coarse permission
-    const granularTargets = SYSTEM_TO_GRANULAR[permission];
-    if (
-      granularTargets &&
-      granularTargets.some((target) => actor.customRole!.permissions.includes(target))
-    ) {
-      return true;
-    }
-
-    // Check if role holds the coarse permission corresponding to a granular permission
-    const coarseTarget = GRANULAR_TO_SYSTEM[permission];
-    if (coarseTarget && actor.customRole.permissions.includes(coarseTarget)) {
-      return true;
+    if (holdsCustomPermission) {
+      const scoped = actor.scopedBranchIds;
+      if (!scoped || scoped.length === 0) {
+        return true;
+      }
+      if (resource?.branchId !== undefined) {
+        if (scoped.includes(resource.branchId)) return true;
+      }
+      // Branch-scoped custom roles do NOT satisfy global (unscoped) checks;
+      // fall through so any explicit legacy GLOBAL grant can still apply.
     }
   }
 
@@ -568,12 +580,26 @@ export function branchScope(actor: Actor, permission: Permission): BranchScope {
   if (actor.status !== UserStatus.ACTIVE) return { kind: "none" };
   if (isSuperAdmin(actor)) return { kind: "all" };
 
-  // Custom roles hold company-wide (global) access by default
+  // Custom roles honor per-user scopedBranchIds when set, or company-wide when empty
   if (actor.customRole?.permissions?.length) {
-    if (actor.customRole.permissions.includes(permission)) return { kind: "all" };
-    const legacy = SYSTEM_TO_GRANULAR[permission];
-    if (legacy && legacy.some((target) => actor.customRole!.permissions.includes(target))) {
-      return { kind: "all" };
+    const holdsCustomPermission =
+      actor.customRole.permissions.includes(permission) ||
+      Boolean(
+        SYSTEM_TO_GRANULAR[permission]?.some((target) =>
+          actor.customRole!.permissions.includes(target),
+        ),
+      ) ||
+      Boolean(
+        GRANULAR_TO_SYSTEM[permission] &&
+          actor.customRole.permissions.includes(GRANULAR_TO_SYSTEM[permission]),
+      );
+
+    if (holdsCustomPermission) {
+      const scoped = actor.scopedBranchIds;
+      if (!scoped || scoped.length === 0) {
+        return { kind: "all" };
+      }
+      return { kind: "branches", branchIds: [...scoped] };
     }
   }
 

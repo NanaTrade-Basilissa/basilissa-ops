@@ -389,6 +389,7 @@ export async function assignCustomRoleToUser(
   userId: string,
   customRoleId: string | null,
   actor: AuditActor,
+  scopedBranchIds?: string[],
 ): Promise<RoleOperationOutcome> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -397,6 +398,7 @@ export async function assignCustomRoleToUser(
       email: true,
       name: true,
       customRoleId: true,
+      scopedBranchIds: true,
       customRole: { select: { id: true, name: true } },
     },
   });
@@ -417,7 +419,27 @@ export async function assignCustomRoleToUser(
     roleName = role.name;
   }
 
-  if (user.customRoleId === customRoleId) {
+  // Validate and deduplicate scopedBranchIds when provided
+  let nextScopedBranchIds: string[] = user.scopedBranchIds ?? [];
+  if (scopedBranchIds !== undefined) {
+    const unique = [...new Set(scopedBranchIds.filter(Boolean))];
+    if (unique.length > 0) {
+      const validBranches = await prisma.branch.findMany({
+        where: { id: { in: unique } },
+        select: { id: true },
+      });
+      nextScopedBranchIds = validBranches.map((b) => b.id).sort();
+    } else {
+      nextScopedBranchIds = [];
+    }
+  }
+
+  const prevSorted = [...(user.scopedBranchIds ?? [])].sort();
+  const sameScope =
+    prevSorted.length === nextScopedBranchIds.length &&
+    prevSorted.every((id, i) => id === nextScopedBranchIds[i]);
+
+  if (user.customRoleId === customRoleId && sameScope) {
     return { ok: true };
   }
 
@@ -426,6 +448,7 @@ export async function assignCustomRoleToUser(
       where: { id: userId },
       data: {
         customRoleId,
+        ...(scopedBranchIds !== undefined ? { scopedBranchIds: nextScopedBranchIds } : {}),
         sessionVersion: { increment: 1 },
       },
     });
@@ -439,10 +462,12 @@ export async function assignCustomRoleToUser(
         before: {
           customRoleId: user.customRoleId,
           customRoleName: user.customRole?.name ?? null,
+          scopedBranchIds: prevSorted,
         },
         after: {
           customRoleId,
           customRoleName: roleName,
+          scopedBranchIds: nextScopedBranchIds,
         },
         metadata: { targetEmail: user.email },
       },
