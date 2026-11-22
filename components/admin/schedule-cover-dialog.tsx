@@ -118,7 +118,7 @@ export function ScheduleCoverDialog({
           }
         />
       )}
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Cover shift at {branchName}</DialogTitle>
           <DialogDescription>

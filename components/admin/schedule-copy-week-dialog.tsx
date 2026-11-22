@@ -87,7 +87,7 @@ export function ScheduleCopyWeekDialog({
           }
         />
       )}
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Copy Weekly Rota</DialogTitle>
           <DialogDescription>

@@ -69,7 +69,7 @@ export function PatternDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{pattern ? "Edit pattern" : "New rota pattern"}</DialogTitle>
           <DialogDescription>

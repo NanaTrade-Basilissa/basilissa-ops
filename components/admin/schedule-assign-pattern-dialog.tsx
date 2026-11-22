@@ -116,7 +116,7 @@ export function ScheduleAssignPatternDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className={targetEmployee ? "sm:max-w-xl" : "sm:max-w-4xl"}>
         <DialogHeader>
           <DialogTitle>
             {targetEmployee
@@ -194,26 +194,41 @@ export function ScheduleAssignPatternDialog({
                 aria-label="Search staff"
               />
             </div>
-            <div className="rounded-lg border border-border bg-card p-1 max-h-48 overflow-y-auto">
+            <div className="rounded-lg border border-border bg-card p-2.5 max-h-64 overflow-y-auto">
               {visible.length === 0 ? (
                 <p className="p-3 text-center text-xs text-muted-foreground">No one matches.</p>
               ) : (
-                visible.map((e) => (
-                  <label key={e.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
-                    <Checkbox
-                      checked={selected.includes(e.id)}
-                      onCheckedChange={() =>
-                        setSelected((prev) => (prev.includes(e.id) ? prev.filter((x) => x !== e.id) : [...prev, e.id]))
-                      }
-                    />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{e.name}</span>
-                    {e.patternName && (
-                      <span className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-950 dark:text-violet-200">
-                        {e.patternName}
-                      </span>
-                    )}
-                  </label>
-                ))
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {visible.map((e) => {
+                    const isChecked = selected.includes(e.id);
+                    return (
+                      <label
+                        key={e.id}
+                        className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 transition-colors ${
+                          isChecked
+                            ? "border-primary/60 bg-primary/5"
+                            : "border-border/60 bg-background hover:bg-muted/50"
+                        }`}
+                      >
+                        <Checkbox
+                          className="mt-0.5 shrink-0"
+                          checked={isChecked}
+                          onCheckedChange={() =>
+                            setSelected((prev) => (prev.includes(e.id) ? prev.filter((x) => x !== e.id) : [...prev, e.id]))
+                          }
+                        />
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <div className="truncate text-xs font-medium text-foreground">{e.name}</div>
+                          {e.patternName && (
+                            <span className="inline-block max-w-full truncate rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-950 dark:text-violet-200">
+                              {e.patternName}
+                            </span>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>

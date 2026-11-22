@@ -165,7 +165,7 @@ export function ScheduleBulkAssignDialog({
           }
         />
       )}
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={targetEmployee ? "sm:max-w-xl" : "sm:max-w-3xl"}>
         <DialogHeader>
           <DialogTitle>
             {targetEmployee ? `Assign Shift — ${targetEmployee.name}` : "Bulk Assign Shift"}
@@ -264,7 +264,7 @@ export function ScheduleBulkAssignDialog({
                 aria-label="Search staff"
               />
             </div>
-            <div className="rounded-lg border border-border bg-card p-2 max-h-48 overflow-y-auto space-y-1">
+            <div className="rounded-lg border border-border bg-card p-2.5 max-h-72 overflow-y-auto">
               {employees.length === 0 ? (
                 <div className="p-2 text-center text-xs text-muted-foreground">
                   No active staff assigned to this branch.
@@ -272,28 +272,36 @@ export function ScheduleBulkAssignDialog({
               ) : visible.length === 0 ? (
                 <div className="p-2 text-center text-xs text-muted-foreground">No one matches.</div>
               ) : (
-                visible.map((emp) => {
-                  const isChecked = selectedEmpIds.includes(emp.id);
-                  return (
-                    <div
-                      key={emp.id}
-                      onClick={() => toggleEmployee(emp.id)}
-                      className="flex items-center gap-2.5 rounded-md p-1.5 text-xs hover:bg-muted/50 cursor-pointer select-none"
-                    >
-                      {isChecked ? (
-                        <CheckSquare className="size-4 text-primary shrink-0" />
-                      ) : (
-                        <Square className="size-4 text-muted-foreground shrink-0" />
-                      )}
-                      <span className="font-medium text-foreground">{emp.name}</span>
-                      {emp.employeeCode && (
-                        <span className="font-mono text-[11px] text-muted-foreground">
-                          ({emp.employeeCode})
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {visible.map((emp) => {
+                    const isChecked = selectedEmpIds.includes(emp.id);
+                    return (
+                      <div
+                        key={emp.id}
+                        onClick={() => toggleEmployee(emp.id)}
+                        className={`flex items-start gap-2 rounded-lg border p-2 text-xs transition-colors cursor-pointer select-none ${
+                          isChecked
+                            ? "border-primary/60 bg-primary/5 text-foreground"
+                            : "border-border/60 bg-background hover:bg-muted/50"
+                        }`}
+                      >
+                        {isChecked ? (
+                          <CheckSquare className="mt-0.5 size-4 text-primary shrink-0" />
+                        ) : (
+                          <Square className="mt-0.5 size-4 text-muted-foreground shrink-0" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium text-foreground">{emp.name}</div>
+                          {emp.employeeCode && (
+                            <div className="truncate font-mono text-[11px] text-muted-foreground">
+                              {emp.employeeCode}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
