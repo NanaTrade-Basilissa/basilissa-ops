@@ -161,8 +161,67 @@ describe("lateness and early departure", () => {
  * different hat. The architecture assessment originally wrote the deducting
  * formula; this is the corrected behaviour.
  */
-describe("overtime", () => {
-  it("ignores time under the threshold entirely", () => {
+describe("overtime and strict shift boundaries", () => {
+  it("clamps early arrival and unapproved late departure to shift hours minus break", () => {
+    const day = projectDay({
+      workDateKey: WORK_DATE,
+      events: [ev(AttendanceDirection.IN, TZ_UTC("06:00")), ev(AttendanceDirection.OUT, TZ_UTC("17:30"))],
+      schedule: { ...DAY_SHIFT, unpaidBreakMinutes: 60 },
+      policy: policy({ overtimeThresholdMinutes: 10 }),
+      asOf: AFTER,
+    });
+    expect(day.grossMinutes).toBe(540);
+    expect(day.breakMinutes).toBe(60);
+    expect(day.netWorkedMinutes).toBe(480);
+    expect(day.regularMinutes).toBe(480);
+    expect(day.overtimeMinutes).toBe(0);
+    expect(day.actualIn).toEqual(TZ_UTC("06:00"));
+    expect(day.actualOut).toEqual(TZ_UTC("17:30"));
+  });
+
+  it("never awards overtime when no overtime was pre-approved", () => {
+    const day = projectDay({
+      workDateKey: WORK_DATE,
+      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("18:00"))],
+      schedule: DAY_SHIFT,
+      policy: policy({ overtimeThresholdMinutes: 10 }),
+      asOf: AFTER,
+    });
+    expect(day.overtimeMinutes).toBe(0);
+    expect(day.regularMinutes).toBe(540);
+    expect(day.netWorkedMinutes).toBe(540);
+    expect(day.flags).not.toContain("OVERTIME_PENDING_APPROVAL");
+    expect(day.status).toBe("SETTLED");
+  });
+
+  it("credits approved overtime at the end of the shift up to what was actually worked", () => {
+    const full = projectDay({
+      workDateKey: WORK_DATE,
+      events: [ev(AttendanceDirection.IN, TZ_UTC("07:30")), ev(AttendanceDirection.OUT, TZ_UTC("18:30"))],
+      schedule: DAY_SHIFT,
+      policy: policy({ overtimeThresholdMinutes: 10 }),
+      asOf: AFTER,
+      approvedOvertimeMinutes: 60,
+    });
+    expect(full.netWorkedMinutes).toBe(600);
+    expect(full.regularMinutes).toBe(540);
+    expect(full.overtimeMinutes).toBe(60);
+    expect(full.status).toBe("SETTLED");
+
+    const partial = projectDay({
+      workDateKey: WORK_DATE,
+      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("17:30"))],
+      schedule: DAY_SHIFT,
+      policy: policy({ overtimeThresholdMinutes: 10 }),
+      asOf: AFTER,
+      approvedOvertimeMinutes: 60,
+    });
+    expect(partial.netWorkedMinutes).toBe(570);
+    expect(partial.regularMinutes).toBe(540);
+    expect(partial.overtimeMinutes).toBe(30);
+  });
+
+  it("ignores time under the threshold when unapproved", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,
       events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("17:08"))],
@@ -171,53 +230,6 @@ describe("overtime", () => {
       asOf: AFTER,
     });
     expect(day.overtimeMinutes).toBe(0);
-  });
-
-  it("counts all of it once the threshold is passed, not the excess over it", () => {
-    const day = projectDay({
-      workDateKey: WORK_DATE,
-      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("18:00"))],
-      schedule: DAY_SHIFT,
-      policy: policy({ overtimeThresholdMinutes: 10 }),
-      asOf: AFTER,
-    });
-    expect(day.overtimeMinutes).toBe(60);
-    expect(day.regularMinutes).toBe(540);
-  });
-
-  it("sends overtime nobody has approved to review", () => {
-    const day = projectDay({
-      workDateKey: WORK_DATE,
-      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("18:00"))],
-      schedule: DAY_SHIFT,
-      policy: policy({ overtimeThresholdMinutes: 10 }),
-      asOf: AFTER,
-    });
-    expect(day.flags).toContain("OVERTIME_PENDING_APPROVAL");
-    expect(day.status).toBe("NEEDS_REVIEW");
-  });
-
-  it("settles once overtime has been approved", () => {
-    const day = projectDay({
-      workDateKey: WORK_DATE,
-      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("18:00"))],
-      schedule: DAY_SHIFT,
-      policy: policy({ overtimeThresholdMinutes: 10 }),
-      asOf: AFTER,
-      approvedOvertimeMinutes: 60,
-    });
-    expect(day.flags).not.toContain("OVERTIME_PENDING_APPROVAL");
-    expect(day.status).toBe("SETTLED");
-  });
-
-  it("does not ask for approval when there is no overtime", () => {
-    const day = projectDay({
-      workDateKey: WORK_DATE,
-      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("17:08"))],
-      schedule: DAY_SHIFT,
-      policy: policy({ overtimeThresholdMinutes: 10 }),
-      asOf: AFTER,
-    });
     expect(day.flags).not.toContain("OVERTIME_PENDING_APPROVAL");
   });
 
@@ -337,8 +349,8 @@ describe("breaks", () => {
 });
 
 describe("split shifts", () => {
-  // First-in to last-out would pay for the three-hour gap.
-  it("sums worked segments rather than measuring end to end", () => {
+  // First-in to last-out would pay for the three-hour gap; segments outside the shift end are clamped.
+  it("sums worked segments within shift bounds rather than measuring end to end", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,
       events: [
@@ -351,7 +363,8 @@ describe("split shifts", () => {
       policy: policy(),
       asOf: AFTER,
     });
-    expect(day.grossMinutes).toBe(480);
+    // 08:00-12:00 (240m) + 15:00-17:00 clamped (120m) = 360m
+    expect(day.grossMinutes).toBe(360);
     expect(day.flags).toContain("MULTIPLE_SEGMENTS");
   });
 });
@@ -452,21 +465,20 @@ describe("broken days", () => {
  * primary fraud vector.
  */
 describe("auto-closed shifts", () => {
-  it("earns no overtime even when the clock-in was early", () => {
+  it("earns no overtime even when the clock-in was early or overtime was approved", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,
       events: [
-        // In an hour early, closed at the scheduled end: ten hours worked
-        // against a nine-hour shift.
         ev(AttendanceDirection.IN, TZ_UTC("07:00")),
         ev(AttendanceDirection.OUT, TZ_UTC("17:00"), ProviderType.SYSTEM_AUTO_CLOSE),
       ],
       schedule: DAY_SHIFT,
       policy: policy({ overtimeThresholdMinutes: 10 }),
       asOf: AFTER,
+      approvedOvertimeMinutes: 60,
     });
 
-    expect(day.netWorkedMinutes).toBe(600);
+    expect(day.netWorkedMinutes).toBe(540);
     expect(day.overtimeMinutes).toBe(0);
     expect(day.flags).toContain("AUTO_CLOSED");
     // Still needs a person: the end was assumed, not observed.
@@ -489,16 +501,17 @@ describe("auto-closed shifts", () => {
     expect(day.netWorkedMinutes).toBe(540);
   });
 
-  it("does not suppress overtime for an ordinary clock-out", () => {
+  it("does not suppress approved overtime for an ordinary clock-out", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,
       events: [
-        ev(AttendanceDirection.IN, TZ_UTC("07:00")),
-        ev(AttendanceDirection.OUT, TZ_UTC("17:00")),
+        ev(AttendanceDirection.IN, TZ_UTC("08:00")),
+        ev(AttendanceDirection.OUT, TZ_UTC("18:00")),
       ],
       schedule: DAY_SHIFT,
       policy: policy({ overtimeThresholdMinutes: 10 }),
       asOf: AFTER,
+      approvedOvertimeMinutes: 60,
     });
     expect(day.overtimeMinutes).toBe(60);
   });
@@ -540,12 +553,12 @@ describe("rounding", () => {
   it("does nothing when rounding is off, which is the default", () => {
     const day = projectDay({
       workDateKey: WORK_DATE,
-      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("17:07"))],
+      events: [ev(AttendanceDirection.IN, TZ_UTC("08:07")), ev(AttendanceDirection.OUT, TZ_UTC("17:00"))],
       schedule: DAY_SHIFT,
       policy: policy({ roundingMinutes: 0 }),
       asOf: AFTER,
     });
-    expect(day.netWorkedMinutes).toBe(547);
+    expect(day.netWorkedMinutes).toBe(533);
   });
 
   // Nearest, never down. Rounding down consistently shaves minutes off every
@@ -553,12 +566,12 @@ describe("rounding", () => {
   it("rounds to nearest, including upward", () => {
     const up = projectDay({
       workDateKey: WORK_DATE,
-      events: [ev(AttendanceDirection.IN, TZ_UTC("08:00")), ev(AttendanceDirection.OUT, TZ_UTC("17:08"))],
+      events: [ev(AttendanceDirection.IN, TZ_UTC("08:07")), ev(AttendanceDirection.OUT, TZ_UTC("17:00"))],
       schedule: DAY_SHIFT,
       policy: policy({ roundingMinutes: 15 }),
       asOf: AFTER,
     });
-    expect(up.netWorkedMinutes).toBe(555);
+    expect(up.netWorkedMinutes).toBe(540);
   });
 });
 

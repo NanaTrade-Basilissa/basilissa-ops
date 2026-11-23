@@ -217,10 +217,27 @@ export function projectDay(input: ProjectionInput): ProjectedDay {
   const actualIn = walk.segments[0]?.start ?? walk.openSince ?? null;
   const actualOut = walk.segments.at(-1)?.end ?? null;
 
-  const grossMinutes = walk.segments.reduce(
-    (total, segment) => total + minutesBetween(segment.start, segment.end),
-    0,
-  );
+  const isAutoClosed = flags.has("AUTO_CLOSED");
+  // Strict shift-window boundary:
+  // - Clocking in early BEFORE scheduledStart never counts as worked hours or overtime.
+  // - Clocking out late AFTER scheduledEnd only counts up to pre-approved overtime
+  //   (`approvedOvertimeMinutes`), and never when the shift was system auto-closed.
+  const approvedOt =
+    schedule && !isAutoClosed ? Math.max(0, input.approvedOvertimeMinutes ?? 0) : 0;
+  const allowedStartMs = schedule ? schedule.scheduledStart.getTime() : null;
+  const allowedEndMs = schedule
+    ? schedule.scheduledEnd.getTime() + approvedOt * MINUTE
+    : null;
+
+  const grossMinutes = walk.segments.reduce((total, segment) => {
+    if (allowedStartMs !== null && allowedEndMs !== null) {
+      const clampedStart = Math.max(segment.start.getTime(), allowedStartMs);
+      const clampedEnd = Math.min(segment.end.getTime(), allowedEndMs);
+      if (clampedEnd <= clampedStart) return total;
+      return total + Math.round((clampedEnd - clampedStart) / MINUTE);
+    }
+    return total + minutesBetween(segment.start, segment.end);
+  }, 0);
 
   // Break minutes: configured directly on the individual shift template (schedule.unpaidBreakMinutes).
   // If the employee punched explicit breaks (walk.breakMinutes), those are respected.
@@ -276,20 +293,14 @@ export function projectDay(input: ProjectionInput): ProjectedDay {
 
     regularMinutes = Math.min(netWorkedMinutes, scheduledMinutes);
 
-    // The threshold GATES overtime rather than being deducted from it: work
-    // less than it past your shift and none of it counts, work more and all of
-    // it does. Deducting instead would shave the threshold off every claim
-    // forever, which is the rounding-down problem wearing a different hat.
-    const beyondSchedule = netWorkedMinutes - scheduledMinutes;
-    overtimeMinutes = beyondSchedule > policy.overtimeThresholdMinutes ? beyondSchedule : 0;
-
-    // An auto-closed shift never earns overtime, even if the arithmetic says
-    // otherwise. Nobody recorded leaving, so the end is an assumption — and
-    // someone who clocked in early would otherwise be credited overtime purely
-    // because they forgot to clock out. Auto-awarding time for a missing punch
-    // is the primary fraud vector; the day stays flagged for a manager to
-    // correct with evidence.
-    if (flags.has("AUTO_CLOSED")) overtimeMinutes = 0;
+    // Overtime is strictly pre-approved overtime at the end of the shift,
+    // capped to what the employee actually worked beyond scheduledMinutes.
+    // Unapproved early arrivals and late departures never earn overtime, and
+    // auto-closed shifts never earn overtime.
+    overtimeMinutes =
+      approvedOt > 0 && !isAutoClosed
+        ? Math.min(Math.max(0, netWorkedMinutes - scheduledMinutes), approvedOt)
+        : 0;
   }
 
   // Unscheduled late clock-outs are recorded silently in `overtimeMinutes` for
