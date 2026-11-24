@@ -91,6 +91,7 @@ export function ExceptionsFilters({
             containerClassName="w-full sm:w-fit sm:min-w-[160px] sm:shrink-0"
           >
             <option value="">All exception types</option>
+            <option value="NO_PUNCHES">No Punches (Empty)</option>
             <option value="AUTO_CLOSED">Auto-Closed Shifts</option>
             <option value="MISSING_CLOCK_OUT">Missing Clock-Out</option>
             <option value="OUTSIDE_GEOFENCE">Outside Geofence</option>

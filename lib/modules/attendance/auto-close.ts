@@ -48,6 +48,7 @@ export async function autoCloseStaleDays(
       branchId: true,
       workDate: true,
       scheduledEnd: true,
+      actualIn: true,
       flags: true,
     },
     orderBy: { workDate: "asc" },
@@ -63,6 +64,15 @@ export async function autoCloseStaleDays(
     // Already closed on a previous sweep; the flag lingers because the day
     // still needs review.
     if (day.flags.includes("AUTO_CLOSED")) {
+      skipped += 1;
+      continue;
+    }
+
+    // Never stamp a synthetic OUT when there is no IN punch or when the IN
+    // punch occurred at/after scheduledEnd — otherwise OUT sorts before IN and
+    // creates an inverted ghost punch (e.g., forgetting morning IN and tapping
+    // OUT after shift end). Leave for HR review instead.
+    if (!day.actualIn || day.actualIn.getTime() >= day.scheduledEnd!.getTime()) {
       skipped += 1;
       continue;
     }

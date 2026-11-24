@@ -1251,7 +1251,11 @@ export async function listPendingExceptions(
     });
   }
 
-  if (filters.flag) {
+  if (filters.flag === "NO_PUNCHES") {
+    clauses.push({ actualIn: null, actualOut: null });
+  } else if (filters.flag === "LATE_ARRIVAL") {
+    clauses.push({ lateMinutes: { gt: 0 } });
+  } else if (filters.flag) {
     clauses.push({ flags: { has: filters.flag } });
   }
 
