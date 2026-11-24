@@ -608,7 +608,7 @@ export async function getTimesheetSummary(
   ]);
 
   const branchNameMap = new Map(branchRows.map((b) => [b.id, b.name]));
-  const searchLower = filters.search?.trim().toLowerCase();
+  const searchTokens = filters.search?.trim().toLowerCase().split(/\s+/).filter(Boolean) ?? [];
 
   const rows: EmployeeTimesheetRow[] = [];
 
@@ -616,8 +616,9 @@ export async function getTimesheetSummary(
     const fullName = `${emp.firstName} ${emp.lastName}`.trim();
     const code = emp.employeeCode ?? "";
 
-    if (searchLower) {
-      if (!fullName.toLowerCase().includes(searchLower) && !code.toLowerCase().includes(searchLower)) {
+    if (searchTokens.length > 0) {
+      const haystack = `${fullName} ${code}`.toLowerCase();
+      if (!searchTokens.every((token) => haystack.includes(token))) {
         continue;
       }
     }
@@ -1134,7 +1135,7 @@ export async function getTimesheetDetailedLogs(
 
   const empMap = new Map(employees.map((e) => [e.id, e]));
   const branchMap = new Map(branches.map((b) => [b.id, b.name]));
-  const searchLower = filters.search?.trim().toLowerCase();
+  const searchTokens = filters.search?.trim().toLowerCase().split(/\s+/).filter(Boolean) ?? [];
 
   const logs: TimesheetDetailedLog[] = [];
 
@@ -1143,8 +1144,9 @@ export async function getTimesheetDetailedLogs(
     const fullName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : "Unknown Employee";
     const code = emp?.employeeCode ?? null;
 
-    if (searchLower) {
-      if (!fullName.toLowerCase().includes(searchLower) && !code?.toLowerCase().includes(searchLower)) {
+    if (searchTokens.length > 0) {
+      const haystack = `${fullName} ${code ?? ""}`.toLowerCase();
+      if (!searchTokens.every((token) => haystack.includes(token))) {
         continue;
       }
     }
@@ -1294,7 +1296,7 @@ export async function listPendingExceptions(
 
   const empMap = new Map(employees.map((e) => [e.id, e]));
   const branchMap = new Map(branches.map((b) => [b.id, b.name]));
-  const searchLower = filters.search?.trim().toLowerCase();
+  const searchTokens = filters.search?.trim().toLowerCase().split(/\s+/).filter(Boolean) ?? [];
 
   const items: AttendanceExceptionItem[] = [];
 
@@ -1303,8 +1305,9 @@ export async function listPendingExceptions(
     const fullName = emp ? `${emp.firstName} ${emp.lastName}`.trim() : "Unknown Employee";
     const code = emp?.employeeCode ?? null;
 
-    if (searchLower) {
-      if (!fullName.toLowerCase().includes(searchLower) && !code?.toLowerCase().includes(searchLower)) {
+    if (searchTokens.length > 0) {
+      const haystack = `${fullName} ${code ?? ""}`.toLowerCase();
+      if (!searchTokens.every((token) => haystack.includes(token))) {
         continue;
       }
     }

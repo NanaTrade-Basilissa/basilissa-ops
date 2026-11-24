@@ -207,7 +207,7 @@ export function AttendanceTable({
   );
 
   const filteredDays = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return days.filter((d) => {
       if (statusFilter === "clocked_in" && !(d.actualInLabel !== "-" && d.actualOutLabel === "-")) {
         return false;
@@ -224,11 +224,9 @@ export function AttendanceTable({
       if (statusFilter === "needs_attention" && d.status !== "NEEDS_REVIEW") {
         return false;
       }
-      if (!q) return true;
-      const name = (d.employeeName ?? "").toLowerCase();
-      const code = (d.employeeCode ?? "").toLowerCase();
-      const branch = d.branchName.toLowerCase();
-      return name.includes(q) || code.includes(q) || branch.includes(q);
+      if (tokens.length === 0) return true;
+      const haystack = `${d.employeeName ?? ""} ${d.employeeCode ?? ""} ${d.branchName}`.toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
     });
   }, [days, search, statusFilter]);
 

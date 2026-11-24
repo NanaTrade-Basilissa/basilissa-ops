@@ -49,6 +49,7 @@ function employeeListWhere(scope: BranchScope, filters: EmployeeListFilters): Pr
   }
   if (filters.search?.trim()) {
     const q = filters.search.trim();
+    const tokens = q.split(/\s+/).filter(Boolean);
     const digitsOnly = q.replace(/[\s()-]/g, "");
     const phoneOrClauses: Prisma.EmployeeWhereInput[] = [
       { phone: { contains: q, mode: "insensitive" } },
@@ -57,15 +58,34 @@ function employeeListWhere(scope: BranchScope, filters: EmployeeListFilters): Pr
     if (/^0\d{6,9}$/.test(digitsOnly)) {
       phoneOrClauses.push({ phone: { contains: digitsOnly.slice(1), mode: "insensitive" } });
     }
-    clauses.push({
-      OR: [
-        { firstName: { contains: q, mode: "insensitive" } },
-        { lastName: { contains: q, mode: "insensitive" } },
-        { employeeCode: { contains: q, mode: "insensitive" } },
-        { email: { contains: q, mode: "insensitive" } },
-        ...phoneOrClauses,
-      ],
-    });
+    if (tokens.length > 1) {
+      clauses.push({
+        OR: [
+          {
+            AND: tokens.map((token) => ({
+              OR: [
+                { firstName: { contains: token, mode: "insensitive" } },
+                { lastName: { contains: token, mode: "insensitive" } },
+                { employeeCode: { contains: token, mode: "insensitive" } },
+                { email: { contains: token, mode: "insensitive" } },
+                { phone: { contains: token, mode: "insensitive" } },
+              ],
+            })),
+          },
+          ...phoneOrClauses,
+        ],
+      });
+    } else {
+      clauses.push({
+        OR: [
+          { firstName: { contains: q, mode: "insensitive" } },
+          { lastName: { contains: q, mode: "insensitive" } },
+          { employeeCode: { contains: q, mode: "insensitive" } },
+          { email: { contains: q, mode: "insensitive" } },
+          ...phoneOrClauses,
+        ],
+      });
+    }
   }
 
   return clauses.length > 0 ? { AND: clauses } : {};

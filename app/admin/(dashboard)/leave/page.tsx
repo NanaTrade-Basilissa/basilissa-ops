@@ -45,14 +45,20 @@ export default async function LeavePage({ searchParams }: { searchParams: Search
   const requests = await prisma.leaveRequest.findMany({
     where: {
       ...branchFilter,
-      ...(search
+      ...(search?.trim()
         ? {
             employee: {
-              OR: [
-                { firstName: { contains: search, mode: "insensitive" } },
-                { lastName: { contains: search, mode: "insensitive" } },
-                { employeeCode: { contains: search, mode: "insensitive" } },
-              ],
+              AND: search
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean)
+                .map((token) => ({
+                  OR: [
+                    { firstName: { contains: token, mode: "insensitive" } },
+                    { lastName: { contains: token, mode: "insensitive" } },
+                    { employeeCode: { contains: token, mode: "insensitive" } },
+                  ],
+                })),
             },
           }
         : {}),
