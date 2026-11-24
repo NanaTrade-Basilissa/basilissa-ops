@@ -104,6 +104,222 @@ export async function listAttendanceDays(scope: BranchScope, filters: DayFilters
   });
 }
 
+/**
+ * Full daily attendance roster: merges recorded `AttendanceDay` rows with all
+ * active employees who are scheduled to be on duty for `filters.date` (via
+ * Fixed Schedule, Shift Assignment, Rota Pattern, or Schedule Override) so
+ * staff who haven't clocked in yet appear alongside clocked-in and settled
+ * staff — without writing placeholder rows to the database.
+ */
+export async function listDailyAttendanceRoster(scope: BranchScope, filters: DayFilters) {
+  const recordedDays = await listAttendanceDays(scope, filters);
+  if (filters.exceptionsOnly) return recordedDays;
+
+  const scoped = scopeWhere(scope);
+  if (scoped === null) return [];
+
+  const workDate = new Date(`${filters.date}T00:00:00.000Z`);
+
+  const branchAssignmentWhere: Prisma.EmployeeBranchAssignmentWhereInput = {
+    isPrimary: true,
+    validTo: null,
+    ...(scope.kind === "branches"
+      ? { branchId: { in: scope.branchIds } }
+      : {}),
+    ...(filters.branchId ? { branchId: filters.branchId } : {}),
+  };
+
+  // Load active employees in scope + shifts + holidays in parallel
+  const [activeEmployees, shifts, holidays] = await Promise.all([
+    prisma.employee.findMany({
+      where: {
+        status: "ACTIVE",
+        branchAssignments: { some: branchAssignmentWhere },
+      },
+      select: {
+        id: true,
+        branchAssignments: {
+          where: branchAssignmentWhere,
+          take: 1,
+          select: {
+            branchId: true,
+            branch: {
+              select: {
+                id: true,
+                timezone: true,
+                schedulingMode: true,
+                fixedShiftStartMinute: true,
+                fixedShiftEndMinute: true,
+                fixedUnpaidBreakMinutes: true,
+                fixedWorkDays: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.shift.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        startMinute: true,
+        endMinute: true,
+        unpaidBreakMinutes: true,
+        offOnPublicHolidays: true,
+      },
+    }),
+    loadHolidayKeys(),
+  ]);
+
+  if (activeEmployees.length === 0) return recordedDays;
+
+  const empIds = activeEmployees.map((e) => e.id);
+  const [assignments, exceptions, livePatterns] = await Promise.all([
+    prisma.employeeShiftAssignment.findMany({
+      where: {
+        employeeId: { in: empIds },
+        validFrom: { lte: workDate },
+        OR: [{ validTo: null }, { validTo: { gte: workDate } }],
+      },
+      select: {
+        employeeId: true,
+        shiftId: true,
+        daysOfWeek: true,
+        remoteDaysOfWeek: true,
+        validFrom: true,
+        validTo: true,
+      },
+    }),
+    prisma.scheduleException.findMany({
+      where: {
+        employeeId: { in: empIds },
+        date: workDate,
+      },
+      select: {
+        employeeId: true,
+        type: true,
+        shiftId: true,
+        branchId: true,
+        overtimeMinutes: true,
+      },
+    }),
+    loadLivePatterns(empIds),
+  ]);
+
+  const assignmentsByEmp = new Map<string, typeof assignments>();
+  for (const a of assignments) {
+    const list = assignmentsByEmp.get(a.employeeId) ?? [];
+    list.push(a);
+    assignmentsByEmp.set(a.employeeId, list);
+  }
+
+  const exceptionsByEmp = new Map<string, typeof exceptions>();
+  for (const ex of exceptions) {
+    const list = exceptionsByEmp.get(ex.employeeId) ?? [];
+    list.push(ex);
+    exceptionsByEmp.set(ex.employeeId, list);
+  }
+
+  const recordedByEmp = new Map(recordedDays.map((d) => [d.employeeId, d]));
+  const result: typeof recordedDays = [];
+  const handledEmpIds = new Set<string>();
+
+  for (const emp of activeEmployees) {
+    const primary = emp.branchAssignments[0];
+    if (!primary) continue;
+    const branch = primary.branch;
+
+    const branchFixedSchedule =
+      branch.schedulingMode === "FIXED_SCHEDULE" &&
+      branch.fixedShiftStartMinute != null &&
+      branch.fixedShiftEndMinute != null
+        ? {
+            startMinute: branch.fixedShiftStartMinute,
+            endMinute: branch.fixedShiftEndMinute,
+            unpaidBreakMinutes: branch.fixedUnpaidBreakMinutes ?? 0,
+            workDays: branch.fixedWorkDays,
+            offOnPublicHolidays: true,
+          }
+        : null;
+
+    const empExceptions = (exceptionsByEmp.get(emp.id) ?? []).map((ex) => ({
+      dateKey: filters.date,
+      type: ex.type,
+      shiftId: ex.shiftId,
+      branchId: ex.branchId,
+      overtimeMinutes: ex.overtimeMinutes,
+    }));
+
+    const resolved = resolveScheduleForDate(filters.date, {
+      timeZone: branch.timezone || DISPLAY_TIMEZONE,
+      shifts,
+      assignments: assignmentsByEmp.get(emp.id) ?? [],
+      exceptions: empExceptions,
+      holidays,
+      patterns: livePatterns.get(emp.id) ?? [],
+      branchFixedSchedule,
+    });
+
+    const recorded = recordedByEmp.get(emp.id);
+    handledEmpIds.add(emp.id);
+
+    if (recorded) {
+      const hasPunch = recorded.actualIn != null || recorded.actualOut != null;
+      // Hide empty non-review placeholder rows for staff who are NOT scheduled today (e.g. DAY_OFF)
+      if (!hasPunch && !resolved && recorded.status !== "NEEDS_REVIEW") {
+        continue;
+      }
+      result.push(recorded);
+    } else if (resolved) {
+      const effectiveBranchId = resolved.coverBranchId ?? primary.branchId;
+      if (filters.branchId && effectiveBranchId !== filters.branchId) continue;
+
+      result.push({
+        id: `scheduled-${emp.id}-${filters.date}`,
+        employeeId: emp.id,
+        branchId: effectiveBranchId,
+        workDate,
+        status: "PENDING",
+        scheduledStart: resolved.scheduledStart,
+        scheduledEnd: resolved.scheduledEnd,
+        actualIn: null,
+        actualOut: null,
+        netWorkedMinutes: 0,
+        overtimeMinutes: 0,
+        payableOvertimeMinutes: 0,
+        lateMinutes: 0,
+        earlyDepartureMinutes: 0,
+        lowestIdentityAssurance: null,
+        flags: [],
+      });
+    }
+  }
+
+  // Keep any recorded AttendanceDays for staff outside the active list (e.g. recently terminated who punched)
+  for (const day of recordedDays) {
+    if (!handledEmpIds.has(day.employeeId)) {
+      result.push(day);
+    }
+  }
+
+  // Sort: clocked in (on duty) first, then clocked out, then scheduled not yet clocked in
+  result.sort((a, b) => {
+    const rank = (d: (typeof result)[number]) => {
+      if (d.actualIn != null && d.actualOut == null) return 0; // On duty
+      if (d.actualIn != null && d.actualOut != null) return 1; // Completed
+      return 2; // Not clocked in
+    };
+    const rDiff = rank(a) - rank(b);
+    if (rDiff !== 0) return rDiff;
+    const aTime = a.actualIn?.getTime() ?? a.scheduledStart?.getTime() ?? 0;
+    const bTime = b.actualIn?.getTime() ?? b.scheduledStart?.getTime() ?? 0;
+    return aTime - bTime;
+  });
+
+  return result;
+}
+
 /** Employee names for a set of days, so the list can show people not ids. */
 export async function employeeLookup(employeeIds: string[]) {
   const rows = await prisma.employee.findMany({

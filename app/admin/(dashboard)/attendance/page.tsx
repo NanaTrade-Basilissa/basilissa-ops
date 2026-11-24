@@ -5,6 +5,7 @@ import { can, requireAnyBranchPermission } from "@/lib/modules/identity/server";
 import {
   employeeLookup,
   listAttendanceDays,
+  listDailyAttendanceRoster,
   listPendingExceptions,
 } from "@/lib/modules/attendance/server";
 import { listEmployees } from "@/lib/modules/employees/server";
@@ -204,7 +205,7 @@ async function DailyRosterView({
   branches: { id: string; name: string }[];
   canWrite?: boolean;
 }) {
-  const days = await listAttendanceDays(scope, { date, branchId, exceptionsOnly });
+  const days = await listDailyAttendanceRoster(scope, { date, branchId, exceptionsOnly });
 
   const empIds = days.map((day) => day.employeeId);
   const dayStartMs = new Date(`${date}T00:00:00.000Z`).getTime();
